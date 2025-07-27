@@ -23,7 +23,7 @@ class VideoToGifApp:
     def setup_window(self):
         """设置主窗口"""
         self.root.title("视频转GIF工具 v2.0")
-        self.root.geometry("900x750")
+        self.root.geometry("900x850")
         self.root.configure(bg='#f0f0f0')
         
         # 设置窗口图标（如果有的话）
@@ -36,13 +36,16 @@ class VideoToGifApp:
         """初始化变量"""
         self.input_file = tk.StringVar()
         self.output_file = tk.StringVar()
-        self.max_width = tk.IntVar(value=480)
         self.fps = tk.DoubleVar(value=15.0)
         self.quality = tk.StringVar(value="high")
         self.keep_colors = tk.BooleanVar(value=True)
         self.start_time = tk.DoubleVar(value=0.0)
         self.duration = tk.DoubleVar(value=0.0)
         self.progress = tk.DoubleVar(value=0.0)
+        # 新增：自定义宽高设置
+        self.custom_width = tk.IntVar(value=0)  # 0表示使用原始宽度
+        self.custom_height = tk.IntVar(value=0)  # 0表示使用原始高度
+        self.use_custom_size = tk.BooleanVar(value=False)  # 是否使用自定义尺寸
         self.video_info = None
         self.is_converting = False
         
@@ -66,11 +69,8 @@ class VideoToGifApp:
                                  bg='#f0f0f0')
         subtitle_label.pack()
         
-        # 文件选择区域
-        self.create_file_section()
-        
-        # 视频信息区域
-        self.create_info_section()
+        # 文件选择和视频信息区域（并排显示）
+        self.create_file_and_info_section()
         
         # 参数设置区域
         self.create_settings_section()
@@ -81,15 +81,20 @@ class VideoToGifApp:
         # 进度显示区域
         self.create_progress_section()
         
-    def create_file_section(self):
-        """创建文件选择区域"""
-        file_frame = tk.LabelFrame(self.root, text="📁 文件选择", 
+    def create_file_and_info_section(self):
+        """创建文件选择和视频信息区域（并排显示）"""
+        # 主容器
+        main_frame = tk.Frame(self.root, bg='#f0f0f0')
+        main_frame.pack(fill='x', padx=20, pady=10)
+        
+        # 文件选择区域（左侧）
+        file_frame = tk.LabelFrame(main_frame, text="📁 文件选择", 
                                   font=('Arial', 12, 'bold'),
                                   fg='#2c3e50',
                                   bg='#f0f0f0',
                                   relief='groove',
                                   bd=2)
-        file_frame.pack(fill='x', padx=20, pady=10)
+        file_frame.pack(side='left', fill='both', expand=True, padx=(0, 10))
         
         # 输入文件
         input_frame = tk.Frame(file_frame, bg='#f0f0f0')
@@ -159,18 +164,17 @@ class VideoToGifApp:
                             cursor='hand2')
         save_btn.pack(side='right')
         
-    def create_info_section(self):
-        """创建视频信息显示区域"""
-        info_frame = tk.LabelFrame(self.root, text="📊 视频信息", 
+        # 视频信息区域（右侧）
+        info_frame = tk.LabelFrame(main_frame, text="📊 视频信息", 
                                   font=('Arial', 12, 'bold'),
                                   fg='#2c3e50',
                                   bg='#f0f0f0',
                                   relief='groove',
                                   bd=2)
-        info_frame.pack(fill='x', padx=20, pady=10)
+        info_frame.pack(side='right', fill='both', expand=True, padx=(10, 0))
         
         self.info_text = tk.Text(info_frame,
-                                height=6,
+                                height=5,
                                 font=('Consolas', 10),
                                 bg='white',
                                 fg='#2c3e50',
@@ -178,6 +182,8 @@ class VideoToGifApp:
                                 bd=1,
                                 state='disabled')
         self.info_text.pack(fill='both', expand=True, padx=15, pady=10)
+        
+
         
     def create_settings_section(self):
         """创建参数设置区域"""
@@ -197,29 +203,75 @@ class VideoToGifApp:
         right_frame.pack(side='right', fill='both', expand=True, padx=15, pady=10)
         
         # 左列：基本参数
-        # 最大宽度
-        tk.Label(left_frame, text="最大宽度:", 
-                font=('Arial', 10, 'bold'),
-                fg='#2c3e50',
-                bg='#f0f0f0').pack(anchor='w', pady=2)
+        # 尺寸设置
+        size_label = tk.Label(left_frame, text="尺寸设置:", 
+                             font=('Arial', 10, 'bold'),
+                             fg='#2c3e50',
+                             bg='#f0f0f0')
+        size_label.pack(anchor='w', pady=2)
         
-        width_frame = tk.Frame(left_frame, bg='#f0f0f0')
-        width_frame.pack(fill='x', pady=2)
+        # 自定义尺寸选项
+        custom_size_check = tk.Checkbutton(left_frame,
+                                          text="使用自定义尺寸",
+                                          variable=self.use_custom_size,
+                                          font=('Arial', 9),
+                                          fg='#2c3e50',
+                                          bg='#f0f0f0',
+                                          selectcolor='white',
+                                          activebackground='#f0f0f0',
+                                          activeforeground='#2c3e50',
+                                          command=self.toggle_size_options)
+        custom_size_check.pack(anchor='w', pady=2)
         
-        width_entry = tk.Entry(width_frame,
-                              textvariable=self.max_width,
-                              font=('Arial', 10),
-                              bg='white',
+        # 自定义宽高输入框
+        size_frame = tk.Frame(left_frame, bg='#f0f0f0')
+        size_frame.pack(fill='x', pady=2)
+        
+        # 宽度输入
+        width_label = tk.Label(size_frame, text="宽度:",
+                              font=('Arial', 9),
                               fg='#2c3e50',
-                              relief='solid',
-                              bd=1,
-                              width=10)
-        width_entry.pack(side='left')
+                              bg='#f0f0f0')
+        width_label.pack(side='left')
         
-        tk.Label(width_frame, text="像素 (保持比例)",
-                font=('Arial', 9),
-                fg='#7f8c8d',
-                bg='#f0f0f0').pack(side='left', padx=(5, 0))
+        self.width_entry = tk.Entry(size_frame,
+                                   textvariable=self.custom_width,
+                                   font=('Arial', 9),
+                                   bg='white',
+                                   fg='#2c3e50',
+                                   relief='solid',
+                                   bd=1,
+                                   width=8,
+                                   state='disabled')
+        self.width_entry.pack(side='left', padx=(5, 10))
+        
+        # 高度输入
+        height_label = tk.Label(size_frame, text="高度:",
+                               font=('Arial', 9),
+                               fg='#2c3e50',
+                               bg='#f0f0f0')
+        height_label.pack(side='left')
+        
+        self.height_entry = tk.Entry(size_frame,
+                                    textvariable=self.custom_height,
+                                    font=('Arial', 9),
+                                    bg='white',
+                                    fg='#2c3e50',
+                                    relief='solid',
+                                    bd=1,
+                                    width=8,
+                                    state='disabled')
+        self.height_entry.pack(side='left', padx=(5, 0))
+        
+        # 原始尺寸显示
+        self.original_size_label = tk.Label(left_frame,
+                                           text="原始尺寸: 未加载",
+                                           font=('Arial', 9),
+                                           fg='#7f8c8d',
+                                           bg='#f0f0f0')
+        self.original_size_label.pack(anchor='w', pady=2)
+        
+
         
         # 帧率
         tk.Label(left_frame, text="目标帧率:", 
@@ -331,15 +383,24 @@ class VideoToGifApp:
                                     selectcolor='white',
                                     activebackground='#f0f0f0',
                                     activeforeground='#2c3e50')
-        color_check.pack(pady=10)
+        color_check.pack(pady=5)
         
     def create_control_section(self):
         """创建转换控制区域"""
-        control_frame = tk.Frame(self.root, bg='#f0f0f0')
-        control_frame.pack(fill='x', padx=20, pady=20)
+        control_frame = tk.LabelFrame(self.root, text="🎯 转换控制", 
+                                     font=('Arial', 12, 'bold'),
+                                     fg='#2c3e50',
+                                     bg='#f0f0f0',
+                                     relief='groove',
+                                     bd=2)
+        control_frame.pack(fill='x', padx=20, pady=15)
         
-        # 转换按钮 - 大按钮居中
-        self.convert_btn = tk.Button(control_frame,
+        # 按钮容器
+        button_frame = tk.Frame(control_frame, bg='#f0f0f0')
+        button_frame.pack(pady=15)
+        
+        # 转换按钮 - 左侧
+        self.convert_btn = tk.Button(button_frame,
                                     text="🚀 开始转换",
                                     command=self.start_conversion,
                                     font=('Arial', 16, 'bold'),
@@ -350,21 +411,21 @@ class VideoToGifApp:
                                     padx=40,
                                     pady=15,
                                     cursor='hand2')
-        self.convert_btn.pack()
+        self.convert_btn.pack(side='left', padx=(0, 20))
         
-        # 清空按钮
-        clear_btn = tk.Button(control_frame,
+        # 清空按钮 - 右侧
+        clear_btn = tk.Button(button_frame,
                              text="🗑️ 清空设置",
                              command=self.clear_all,
-                             font=('Arial', 12),
+                             font=('Arial', 16, 'bold'),
                              bg='#e74c3c',
                              fg='white',
                              relief='raised',
-                             bd=2,
-                             padx=20,
-                             pady=10,
+                             bd=3,
+                             padx=40,
+                             pady=15,
                              cursor='hand2')
-        clear_btn.pack(pady=(10, 0))
+        clear_btn.pack(side='left')
         
     def create_progress_section(self):
         """创建进度显示区域"""
@@ -374,7 +435,7 @@ class VideoToGifApp:
                                       bg='#f0f0f0',
                                       relief='groove',
                                       bd=2)
-        progress_frame.pack(fill='x', padx=20, pady=10)
+        progress_frame.pack(fill='x', padx=20, pady=(10, 20))
         
         # 进度条
         self.progress_bar = ttk.Progressbar(progress_frame,
@@ -445,6 +506,15 @@ class VideoToGifApp:
         except Exception as e:
             self.status_label.config(text=f"读取视频信息失败: {str(e)}", fg='#e74c3c')
             
+    def toggle_size_options(self):
+        """切换尺寸选项的启用状态"""
+        if self.use_custom_size.get():
+            self.width_entry.config(state='normal')
+            self.height_entry.config(state='normal')
+        else:
+            self.width_entry.config(state='disabled')
+            self.height_entry.config(state='disabled')
+            
     def display_video_info(self):
         """显示视频信息"""
         if not self.video_info:
@@ -460,6 +530,14 @@ class VideoToGifApp:
         self.info_text.delete(1.0, tk.END)
         self.info_text.insert(1.0, info_text)
         self.info_text.config(state='disabled')
+        
+        # 更新原始尺寸显示
+        self.original_size_label.config(text=f"原始尺寸: {self.video_info['width']} x {self.video_info['height']}")
+        
+        # 设置默认的自定义尺寸为原始尺寸
+        if not self.use_custom_size.get():
+            self.custom_width.set(self.video_info['width'])
+            self.custom_height.set(self.video_info['height'])
         
     def update_progress(self, value, text):
         """更新进度"""
@@ -508,15 +586,25 @@ class VideoToGifApp:
             time.sleep(0.3)
             
             # 实际转换
+            # 确定使用的宽高参数
+            width = None
+            height = None
+            
+            if self.use_custom_size.get():
+                # 使用自定义尺寸
+                width = self.custom_width.get() if self.custom_width.get() > 0 else None
+                height = self.custom_height.get() if self.custom_height.get() > 0 else None
+            
             output_path = convert_video_to_gif(
                 input_path=self.input_file.get(),
                 output_path=self.output_file.get(),
-                max_dimension=self.max_width.get(),
                 target_fps=self.fps.get(),
                 preserve_colors=self.keep_colors.get(),
                 quality=self.quality.get(),
                 start_time=self.start_time.get(),
-                duration=self.duration.get() if self.duration.get() > 0 else None
+                duration=self.duration.get() if self.duration.get() > 0 else None,
+                width=width,
+                height=height
             )
             
             self.update_progress(100, "转换完成！")
@@ -544,13 +632,16 @@ class VideoToGifApp:
         """清空所有设置"""
         self.input_file.set("")
         self.output_file.set("")
-        self.max_width.set(480)
         self.fps.set(15.0)
         self.quality.set("high")
         self.keep_colors.set(True)
         self.start_time.set(0.0)
         self.duration.set(0.0)
         self.progress.set(0)
+        # 清空自定义尺寸设置
+        self.custom_width.set(0)
+        self.custom_height.set(0)
+        self.use_custom_size.set(False)
         self.video_info = None
         
         self.info_text.config(state='normal')
@@ -558,7 +649,12 @@ class VideoToGifApp:
         self.info_text.config(state='disabled')
         
         self.duration_label.config(text="0.00 秒")
+        self.original_size_label.config(text="原始尺寸: 未加载")
         self.status_label.config(text="就绪", fg='#27ae60')
+        
+        # 禁用自定义尺寸输入框
+        self.width_entry.config(state='disabled')
+        self.height_entry.config(state='disabled')
         
     def run(self):
         """运行应用程序"""

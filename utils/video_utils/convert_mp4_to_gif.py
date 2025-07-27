@@ -32,7 +32,7 @@ def get_video_info(video_path):
 
 def convert_video_to_gif(input_path, output_path=None, max_dimension=None, 
                         target_fps=None, preserve_colors=True, quality='high',
-                        start_time=0.0, duration=None):
+                        start_time=0.0, duration=None, width=None, height=None):
     """
     将视频转换为GIF，优化颜色保持和画质
 
@@ -45,6 +45,8 @@ def convert_video_to_gif(input_path, output_path=None, max_dimension=None,
     quality (str): 质量设置 ('low', 'medium', 'high')
     start_time (float): 开始时间（秒）
     duration (float, 可选): 持续时间（秒，None表示到视频结束）
+    width (int, 可选): 自定义宽度
+    height (int, 可选): 自定义高度
     """
     # 支持的视频格式
     supported_formats = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v']
@@ -83,8 +85,13 @@ def convert_video_to_gif(input_path, output_path=None, max_dimension=None,
             clip = clip.subclip(start_time, end_time)
             print(f"裁剪视频片段: {start_time:.2f}s - {end_time:.2f}s")
         
-        # 可选缩放
-        if max_dimension:
+        # 尺寸调整优先级：自定义宽高 > max_dimension > 原始尺寸
+        if width is not None and height is not None:
+            # 使用自定义宽高
+            clip = clip.resize((width, height))
+            print(f"自定义尺寸: {width} x {height}")
+        elif max_dimension:
+            # 使用最大尺寸限制（保持宽高比）
             if original_width > original_height:
                 new_width = min(max_dimension, original_width)
                 new_height = int(original_height * (new_width / original_width))
@@ -94,6 +101,9 @@ def convert_video_to_gif(input_path, output_path=None, max_dimension=None,
             
             clip = clip.resize((new_width, new_height))
             print(f"调整尺寸: {new_width} x {new_height}")
+        else:
+            # 保持原始尺寸
+            print(f"保持原始尺寸: {original_width} x {original_height}")
         
         # 设置帧率
         if target_fps is None:
