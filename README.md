@@ -1,154 +1,331 @@
-太棒了！从零开始学习人工智能，并按照历史发展和经典论文的时间线来梳理，是一个非常扎实且能深刻理解领域演变的方式。这条路虽然充满挑战，但能帮你打下最坚实的基础。
+# Enhanced Object Detection System v2.0 🚀
 
-以下是一个结合**学习路线**和**经典模型/论文时间线**的规划，强调关键里程碑和它们的**历史意义与核心思想**：
+一个全面优化的通用目标检测系统，基于YOLOv8，具有现代化渐变UI和强大功能。
 
-## 阶段一：筑基 - 数学、编程与机器学习基础 (1-3个月)
+![Enhanced Detection System](https://img.shields.io/badge/Version-2.0-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-*   **目标：** 掌握必要的工具和基础概念。
-*   **核心内容：**
-    *   **数学基础：**
-        *   **线性代数：** 向量、矩阵、张量、运算、特征值/特征向量、奇异值分解。**至关重要！** (几乎所有模型的核心)
-        *   **微积分：** 导数、偏导数、梯度、链式法则。**优化算法的基础。**
-        *   **概率论与统计学：** 概率分布、贝叶斯定理、期望、方差、最大似然估计、假设检验。**理解不确定性、生成模型、评估的基础。**
-    *   **编程基础：**
-        *   **Python:** 首选语言，掌握基础语法、数据结构、面向对象编程。
-        *   **关键库：** `NumPy` (数值计算), `Pandas` (数据处理), `Matplotlib`/`Seaborn` (数据可视化)。
-    *   **机器学习基础：**
-        *   **核心概念：** 监督学习、无监督学习、强化学习、过拟合/欠拟合、偏差/方差、交叉验证、评估指标。
-        *   **经典算法 (理解原理和实现)：**
-            *   线性回归、逻辑回归
-            *   支持向量机
-            *   决策树、随机森林、梯度提升树
-            *   K-Means聚类
-            *   主成分分析
+## ✨ 主要特性
 
-## 阶段二：神经网络与深度学习崛起 (3-6个月)
+### 🎨 现代化UI设计
+- **渐变样式效果**: 采用现代化渐变背景和按钮设计
+- **响应式布局**: 智能适应不同分辨率和屏幕尺寸
+- **优化图标**: 重新设计的应用程序图标，支持多种尺寸
+- **流畅动画**: 按钮悬停和点击动画效果
 
-*   **目标：** 理解神经网络的基本原理、训练过程，掌握深度学习框架，学习早期关键突破。
-*   **核心内容：**
-    *   **神经网络基础：**
-        *   神经元模型 (McCulloch-Pitts, 1943) - **概念起源**。
-        *   感知机 (Rosenblatt, 1957) - **第一个可学习模型**，但只能解决线性可分问题。Minsky & Papert (1969) 指出其局限性，导致第一次AI寒冬。
-        *   **反向传播算法 (Backpropagation):** 现代深度学习的基石。
-            *   概念雏形 (Linnainmaa, 1970) - **自动微分的反向模式**。
-            *   **应用于神经网络训练 (Rumelhart, Hinton, Williams, 1986)** - **里程碑论文** `[Learning representations by back-propagating errors]`。解决了多层网络训练问题，开启了新的可能性。
-        *   激活函数 (Sigmoid, Tanh, ReLU)
-        *   损失函数 (MSE, Cross-Entropy)
-        *   优化算法 (SGD, Momentum, Adam)
-    *   **深度学习框架：** 选择其一深入学习：`TensorFlow` / `Keras` 或 `PyTorch`。**动手实践至关重要！**
-    *   **关键早期模型与挑战：**
-        *   **梯度消失/爆炸问题：** 阻碍了深层网络训练。
-        *   **长短期记忆网络 (LSTM) (Hochreiter & Schmidhuber, 1997)** - `[Long Short-Term Memory]`。**解决RNN梯度消失的经典方案**，极大提升了序列建模能力，在NLP、语音等领域广泛应用多年。
-        *   **卷积神经网络 (CNN) 的复兴：**
-            *   早期工作 (Fukushima, Neocognitron, 1980)。
-            *   **LeNet-5 (LeCun et al., 1998)** - `[Gradient-Based Learning Applied to Document Recognition]`。**成功应用于手写数字识别，证明了CNN的有效性** (但受限于数据和算力，未引起广泛关注)。
-            *   **AlexNet (Krizhevsky, Sutskever, Hinton, 2012)** - `[ImageNet Classification with Deep Convolutional Neural Networks]`。**引爆深度学习革命的标志性事件！**
-                *   在ImageNet竞赛上以巨大优势夺冠。
-                *   关键点：使用ReLU、Dropout、GPU训练、大数据(ImageNet)。
-                *   **证明了深度CNN在视觉任务上的巨大威力**。
+### 📊 增强的功能体验
+- **详细日志显示**: 实时显示检测类别、置信度、数量统计
+- **结果详情面板**: 表格化显示目标坐标、尺寸、置信度
+- **颜色编码**: 根据置信度高低使用不同颜色标识
+- **智能统计**: 自动统计各类别检测数量和平均置信度
 
-## 阶段三：深度学习的蓬勃发展与大模型前夜 (6-12个月)
+### 📁 灵活的模型管理
+- **多路径扫描**: 支持多个预设目录自动扫描模型文件
+- **自定义路径**: 允许用户指定任意目录加载模型
+- **模型信息**: 显示文件大小、修改时间等详细信息
+- **高级选择器**: 提供专业的模型选择对话框
 
-*   **目标：** 掌握CNN、RNN/LSTM的经典架构，理解注意力机制的萌芽，接触生成模型和强化学习基础。
-*   **核心内容与模型：**
-    *   **CNN架构的演进：**
-        *   **VGGNet (Simonyan & Zisserman, 2014)** - `[Very Deep Convolutional Networks for Large-Scale Image Recognition]`。**探索深度的重要性** (16/19层)，简洁的3x3卷积堆叠。
-        *   **GoogLeNet / Inception v1 (Szegedy et al., 2014)** - `[Going Deeper with Convolutions]`。**引入Inception模块，在增加深度和宽度的同时控制计算量**。
-        *   **ResNet (He et al., 2015)** - `[Deep Residual Learning for Image Recognition]`。**革命性的残差连接 (Skip Connection)**，解决了极深度网络(152层+)的训练退化问题，成为几乎所有深度模型的标配。
-    *   **序列建模 (RNN/LSTM) 的巅峰与局限：**
-        *   GRU (Cho et al., 2014) - LSTM的简化变种。
-        *   **注意力机制 (Attention Mechanism) 的诞生：**
-            *   **Bahdanau Attention (Bahdanau, Cho, Bengio, 2014)** - `[Neural Machine Translation by Jointly Learning to Align and Translate]`。**首次将注意力机制应用于机器翻译(基于RNN)**，显著提升长序列处理能力，是Transformer的前身。
-    *   **生成模型的兴起：**
-        *   **生成对抗网络 (GAN) (Goodfellow et al., 2014)** - `[Generative Adversarial Networks]`。**开创性的框架**，通过生成器和判别器的对抗训练学习数据分布，在图像生成等领域产生巨大影响。
-        *   **变分自编码器 (VAE) (Kingma & Welling, 2013)** - `[Auto-Encoding Variational Bayes]`。**另一种重要的生成模型框架**，基于变分推断。
-    *   **深度强化学习 (DRL) 的突破：**
-        *   **Deep Q-Network (DQN) (Mnih et al., 2015)** - `[Human-level control through deep reinforcement learning]`。**首次将深度学习与Q-Learning结合**，在Atari游戏上达到超越人类水平，展示了DRL的巨大潜力。
+### 📹 强大的多摄像头支持
+- **自动检测**: 智能扫描系统中所有可用摄像头
+- **设备信息**: 显示分辨率、帧率等摄像头参数
+- **多选支持**: 可同时选择多个摄像头进行监控
+- **状态监控**: 实时显示每个摄像头的连接状态
 
-## 阶段四：Transformer 时代与大模型浪潮 (当前核心，持续学习)
+### 🖥️ 专业监控系统
+- **多路监控**: 同时监控多个摄像头的实时画面
+- **网格布局**: 自动排列多个视频流的显示界面
+- **独立控制**: 每个摄像头可独立开始/停止监控
+- **状态反馈**: 实时显示检测结果和系统状态
 
-*   **目标：** 深入理解Transformer架构及其带来的革命，掌握现代大模型的基础。
-*   **核心模型与范式转变：**
-    *   **Transformer (Vaswani et al., 2017)** - `[Attention Is All You Need]`。**划时代的论文，彻底改变了NLP乃至AI的格局！**
-        *   **核心创新：** 完全基于自注意力机制，摒弃RNN/CNN。
-        *   **优势：** 极强的并行性、长距离依赖建模能力。
-        *   **关键组件：** 自注意力、多头注意力、位置编码、前馈网络、层归一化、残差连接。
-        *   **应用：** 最初用于机器翻译，效果显著超越RNN+Attention。
-    *   **预训练语言模型的崛起 (基于Transformer)：**
-        *   **GPT (Generative Pre-training) (Radford et al., OpenAI, 2018)** - `[Improving Language Understanding by Generative Pre-Training]`。**开创性的单向语言模型预训练+任务微调范式** (Decoder-only)。
-        *   **BERT (Bidirectional Encoder Representations from Transformers) (Devlin et al., Google, 2018)** - `[BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding]`。**开创性的双向语言模型预训练+任务微调范式** (Encoder-only)，在多项NLP任务上取得SOTA。
-        *   **GPT-2 (Radford et al., OpenAI, 2019)** - `[Language Models are Unsupervised Multitask Learners]`。更大的规模，展示**零样本/少样本学习能力**。
-        *   **GPT-3 (Brown et al., OpenAI, 2020)** - `[Language Models are Few-Shot Learners]`。**超大模型 (1750亿参数)**，**极其强大的上下文学习能力**，引发大模型狂潮。
-        *   **BERT的各种变体：** RoBERTa, ALBERT, DistilBERT等，优化训练或效率。
-    *   **视觉Transformer (ViT) (Dosovitskiy et al., 2020)** - `[An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale]`。**将Transformer成功应用于计算机视觉**，将图像切块视为序列，在足够数据下效果超越CNN。
-    *   **多模态模型的兴起：**
-        *   **CLIP (Radford et al., OpenAI, 2021)** - `[Learning Transferable Visual Models From Natural Language Supervision]`。**图文对比学习**，学习图像和文本的联合嵌入空间，实现强大的零样本图像分类和图文检索。
-        *   **DALL·E 2 (Ramesh et al., OpenAI, 2022)** / **Imagen (Saharia et al., Google, 2022)** - **文本到图像的生成模型**，基于扩散模型(Diffusion Model) + CLIP等引导，生成效果惊人。
-    *   **大语言模型 与 ChatGPT 时代：**
-        *   **指令微调 (Instruction Tuning):** 如 `InstructGPT (Ouyang et al., OpenAI, 2022)` - `[Training language models to follow instructions with human feedback]`。
-        *   **ChatGPT (OpenAI, 2022年底):** 基于GPT-3.5/GPT-4，结合指令微调和RLHF，引爆全球AI应用热潮。
-        *   **GPT-4 (OpenAI, 2023):** 更强大、更通用、多模态。
-        *   **开源模型爆发：** LLaMA (Meta), BLOOM, Falcon, Mistral, Gemma (Google) 等，推动社区发展。
-        *   **检索增强生成 (RAG)**: 解决大模型事实性和时效性问题的重要范式。
-        *   **智能体 (Agent):** 大模型作为核心控制器，调用工具/环境完成任务的新范式。
+### ⚡ 性能与稳定性优化
+- **多线程架构**: 优化的线程管理，避免界面卡顿
+- **内存优化**: 智能的内存使用和释放机制
+- **异常处理**: 完善的错误处理和用户提示系统
+- **资源管理**: 自动管理摄像头等硬件资源
 
-## 阶段五：探索前沿与深化 (持续进行)
+## 🛠️ 系统要求
 
-*   **目标：** 根据兴趣方向深入钻研，关注最新进展。
-*   **可能方向：**
-    *   **大模型高效化：** 模型压缩、量化、蒸馏、稀疏化、MoE。
-    *   **推理与可信赖AI：** 提升模型逻辑推理、数学能力、可解释性、鲁棒性、公平性。
-    *   **多模态深入：** 视频理解、具身智能、更强大的图文/音视频生成。
-    *   **AI for Science：** 应用AI加速科学发现 (生物、材料、物理等)。
-    *   **强化学习进阶：** 更复杂的任务、多智能体系统、离线强化学习等。
-    *   **神经渲染与3D生成：** NeRF, 3D Gaussian Splatting, 文本/图像到3D生成。
+### 基础环境
+- **Python**: 3.8 或更高版本
+- **操作系统**: Windows 10+, macOS 10.15+, Ubuntu 18.04+
+- **内存**: 建议 4GB 以上
+- **显卡**: 支持CUDA的NVIDIA显卡（可选，用于GPU加速）
 
-## 学习建议与资源
+### 依赖包
+```bash
+# 核心依赖
+ultralytics>=8.0.0    # YOLO模型库
+PySide6>=6.0.0       # Qt6界面框架
+opencv-python>=4.5.0  # 图像处理
+numpy>=1.21.0        # 数值计算
 
-1.  **动手实践是王道：**
-    *   学完理论后，**务必用代码实现**（哪怕是最简单的版本）。
-    *   在 **Kaggle**、**天池** 等平台参加比赛。
-    *   复现经典论文的核心思想或结果。
-    *   使用 `Hugging Face Transformers` 库玩转预训练模型。
-2.  **善用优质资源：**
-    *   **在线课程：** Coursera (Andrew Ng ML/DL specialization), DeepLearning.ai, Fast.ai, Stanford CS229/CS231n/CS224n (网上有资源)。
-    *   **经典书籍：** 《Pattern Recognition and Machine Learning》(PRML), 《Deep Learning》(花书), 《Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow》。
-    *   **论文阅读：**
-        *   从里程碑论文开始 (上面提到的)。
-        *   **arXiv.org** 是获取最新论文的宝库。
-        *   **Papers With Code** 将论文与代码实现链接起来。
-        *   **关注顶尖会议:** NeurIPS, ICML, ICLR, CVPR, ACL, EMNLP 等。
-3.  **注重基础：** 不要被眼花缭乱的新模型迷惑。**线性代数、概率论、微积分、优化、基础算法**的理解深度决定了你能走多远。
-4.  **保持好奇与批判：** 理解模型为什么有效（而不仅仅是有效），思考其局限性。
-5.  **加入社区：** GitHub, Reddit (r/MachineLearning), Stack Overflow, 相关领域的论坛/社群。
+# 可选依赖
+torch>=1.12.0        # PyTorch（如果需要GPU加速）
+torchvision>=0.13.0  # 计算机视觉工具
+```
 
-## 关键时间线与模型总结表
+## 📦 安装指南
 
-| 大致时期      | 代表性模型/论文 (按时间顺序)                          | 核心贡献/意义                                                                                                |
-| :------------ | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
-| **奠基**      | McCulloch-Pitts Neuron (1943)                         | 形式化神经元数学模型                                                                                         |
-| **早期探索**  | Perceptron (Rosenblatt, 1957)                        | 首个可学习的神经元模型 (线性分类器)                                                                           |
-| **寒冬与曙光**| Backpropagation (Rumelhart et al., 1986)              | 为训练多层神经网络提供了有效算法                                                                             |
-| **CNN奠基**   | LeNet-5 (LeCun et al., 1998)                         | 成功应用于手写数字识别的经典CNN                                                                              |
-| **序列建模**  | LSTM (Hochreiter & Schmidhuber, 1997)                | 解决RNN梯度消失问题，长序列建模利器                                                                         |
-| **深度学习革命** | **AlexNet** (Krizhevsky et al., 2012)               | 引爆深度学习热潮 (ImageNet 夺冠，GPU+大数据+ReLU+Dropout)                                                  |
-| **CNN进化**   | VGGNet (2014), GoogLeNet (2014), **ResNet** (2015)    | VGG: 探索深度； GoogLeNet: Inception模块； **ResNet: 残差连接解决深度退化，成为标配**                        |
-| **注意力萌芽**| Bahdanau Attention (2014)                            | 首次将注意力机制应用于机器翻译 (RNN-based)                                                                  |
-| **生成模型**  | **VAE** (2013), **GAN** (Goodfellow et al., 2014)     | 两大主流生成模型框架                                                                                         |
-| **强化学习**  | **DQN** (2015)                                       | 深度强化学习里程碑 (Atari游戏)                                                                              |
-| **范式转变**  | **Transformer** (Vaswani et al., 2017)              | **"Attention is All You Need"**, 彻底改变NLP，奠定大模型基础                                               |
-| **预训练时代**| **BERT** (2018), **GPT/GPT-2** (2018, 2019)          | BERT: 双向Transformer Encoder预训练； GPT: 单向Transformer Decoder预训练，开启LLM之路                     |
-| **大模型浪潮**| **GPT-3** (2020), **ViT** (2020)                     | GPT-3: 超大模型展示少样本/零样本能力； ViT: Transformer进军视觉领域成功                                    |
-| **多模态**    | **CLIP** (2021), **DALL·E 2/Imagen** (2022)         | CLIP: 图文对比学习； DALL·E 2/Imagen: 文本到图像生成的飞跃 (基于扩散模型)                                  |
-| **Chat时代**  | **ChatGPT** (2022), **GPT-4** (2023)                 | 基于指令微调+RLHF的对话大模型，引发AI应用海啸； GPT-4: 更强大、多模态                                      |
-| **开源与前沿**| LLaMA, Mistral, Gemma (2023-至今)                   | 高质量开源大模型推动社区发展； MoE, RAG, Agent, 推理优化等成为热点                                         |
+### 方法一：使用 pip 安装
+```bash
+# 创建虚拟环境（推荐）
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# 或
+venv\Scripts\activate     # Windows
 
-**重要提示：**
+# 安装依赖
+pip install ultralytics PySide6 opencv-python numpy
+```
 
-*   **这个路线图是理想化的。** 每个人的学习速度和背景不同，灵活调整。
-*   **不要试图一口吃成胖子。** 深入理解基础模型比泛泛了解一堆新模型更重要。
-*   **论文精读：** 对于里程碑论文，花时间精读原文，理解其动机、方法、实验和贡献。
-*   **关注代码：** 很多经典模型的开源实现可以在GitHub上找到，结合论文看代码是极好的学习方式。
-*   **持续学习：** AI领域日新月异，保持学习的热情和习惯至关重要。
+### 方法二：使用 conda 安装
+```bash
+# 创建conda环境
+conda create -n detection python=3.9
+conda activate detection
 
-祝你学习顺利，在人工智能的探索之旅中收获满满！这条按时间线梳理的路径，能让你深刻体会到AI发展的脉络和先辈们的智慧结晶。加油！
+# 安装依赖
+conda install pytorch torchvision -c pytorch
+pip install ultralytics PySide6 opencv-python
+```
+
+### 方法三：从源码安装
+```bash
+# 克隆项目
+git clone <repository-url>
+cd enhanced-detection-system
+
+# 安装依赖
+pip install -r requirements.txt
+```
+
+## 🚀 快速开始
+
+### 1. 准备模型文件
+将YOLO模型文件（.pt格式）放置在以下任一目录：
+```
+pt_models/          # 项目根目录下
+models/             # 通用模型目录
+weights/            # 权重文件目录
+~/yolo_models/      # 用户主目录
+```
+
+### 2. 启动应用程序
+```bash
+# 运行主程序
+python enhanced_ui_main.py
+
+# 或者运行其他版本
+python enhanced_detection_main.py  # 基础版本
+```
+
+### 3. 基本使用流程
+1. **选择模型**: 在"模型配置"中选择要使用的YOLO模型
+2. **设置置信度**: 调整置信度阈值（默认0.25）
+3. **选择检测源**: 
+   - 📷 单张图片：选择图片文件进行检测
+   - 🎬 视频文件：选择视频文件逐帧检测
+   - 📹 摄像头：实时摄像头检测
+   - 📂 文件夹批量：批量处理文件夹中的图片
+4. **开始检测**: 点击"开始检测"按钮
+5. **查看结果**: 在相应标签页查看检测结果
+
+## 📖 详细功能说明
+
+### 🎯 实时检测页面
+- **原图显示**: 显示原始图像或视频帧
+- **结果展示**: 显示带有检测框和标签的结果图像
+- **详情面板**: 表格形式显示每个检测目标的详细信息
+- **实时统计**: 显示检测数量、平均置信度等统计信息
+
+### 📊 批量结果页面
+- **结果导航**: 使用前进/后退按钮浏览批量检测结果
+- **信息显示**: 显示当前图片的文件名、检测数量等信息
+- **批量保存**: 一键保存所有检测结果图片和报告
+- **进度跟踪**: 实时显示批量处理的进度
+
+### 🖥️ 实时监控页面
+- **多摄像头**: 同时连接和监控多个摄像头设备
+- **网格显示**: 自动排列多个视频流的显示区域
+- **独立控制**: 每个摄像头可以独立控制开始/停止
+- **状态监控**: 显示连接状态、检测数量、处理速度等
+
+### 📋 运行日志
+- **时间戳**: 每条日志都带有精确的时间戳
+- **分类标识**: 使用emoji图标区分不同类型的消息
+- **详细信息**: 记录检测类别、数量、耗时等详细信息
+- **自动清理**: 自动限制日志数量，避免内存溢出
+
+## ⚙️ 高级配置
+
+### 模型配置
+```python
+# 支持的模型路径
+MODELS_PATHS = [
+    "pt_models",                    # 项目目录
+    "models",                       # 通用目录
+    "weights",                      # 权重目录
+    "~/yolo_models",               # 用户目录
+    "/usr/local/share/yolo_models", # 系统目录 (Linux)
+    "C:/yolo_models",              # 系统目录 (Windows)
+]
+```
+
+### 摄像头配置
+```python
+# 摄像头参数设置
+CAMERA_SETTINGS = {
+    'width': 640,        # 图像宽度
+    'height': 480,       # 图像高度
+    'fps': 30,          # 帧率
+    'detection_fps': 10, # 检测频率
+}
+```
+
+### UI样式配置
+```python
+# 渐变颜色配置
+UI_COLORS = {
+    'primary_start': '#3498db',     # 主要渐变起始色
+    'primary_end': '#2980b9',       # 主要渐变结束色
+    'background_start': '#f8f9fa',   # 背景渐变起始色
+    'background_end': '#e9ecef',     # 背景渐变结束色
+}
+```
+
+## 🔧 自定义开发
+
+### 添加新的检测源
+```python
+class CustomDetectionThread(QThread):
+    def __init__(self, model, custom_source):
+        super().__init__()
+        self.model = model
+        self.custom_source = custom_source
+    
+    def run(self):
+        # 实现自定义检测逻辑
+        pass
+```
+
+### 扩展UI组件
+```python
+class CustomWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+    
+    def init_ui(self):
+        # 自定义UI布局和样式
+        pass
+```
+
+### 添加新的模型格式支持
+```python
+class ModelManager:
+    def scan_models(self, custom_path=None):
+        # 扩展支持的模型格式
+        supported_formats = ['.pt', '.onnx', '.engine']
+        # 实现扫描逻辑
+```
+
+## 🐛 故障排除
+
+### 常见问题及解决方案
+
+#### 1. 模型加载失败
+```bash
+错误: 模型加载失败
+解决: 
+- 确认模型文件完整且格式正确
+- 检查文件路径是否存在
+- 确认ultralytics版本兼容性
+```
+
+#### 2. 摄像头无法打开
+```bash
+错误: 无法打开摄像头
+解决:
+- 检查摄像头是否被其他程序占用
+- 确认摄像头驱动程序正常
+- 尝试更换摄像头索引号
+```
+
+#### 3. 界面显示异常
+```bash
+错误: UI渲染问题
+解决:
+- 更新PySide6到最新版本
+- 检查系统显卡驱动
+- 调整系统DPI设置
+```
+
+#### 4. 内存使用过高
+```bash
+错误: 内存占用持续增长
+解决:
+- 降低检测频率
+- 减小图像处理尺寸
+- 定期重启长时间运行的检测
+```
+
+## 📊 性能优化建议
+
+### 1. 硬件优化
+- **GPU加速**: 使用NVIDIA显卡配合CUDA加速推理
+- **内存配置**: 推荐8GB以上内存用于批量处理
+- **存储空间**: 确保足够空间保存检测结果
+
+### 2. 软件优化
+- **模型选择**: 根据需求选择合适大小的模型（nano/small/medium/large/x）
+- **置信度设置**: 适当提高置信度阈值减少误检
+- **检测频率**: 实时检测时适当降低处理频率
+
+### 3. 系统配置
+- **虚拟环境**: 使用独立的Python环境避免依赖冲突
+- **定期清理**: 定期清理临时文件和日志文件
+- **系统监控**: 监控CPU、内存、GPU使用情况
+
+## 🤝 贡献指南
+
+### 提交代码
+1. Fork项目到个人仓库
+2. 创建功能分支：`git checkout -b feature/new-feature`
+3. 提交代码：`git commit -m "Add new feature"`
+4. 推送分支：`git push origin feature/new-feature`
+5. 提交Pull Request
+
+### 报告问题
+- 使用Issue模板提交问题报告
+- 提供详细的错误信息和复现步骤
+- 包含系统环境和依赖版本信息
+
+### 功能建议
+- 在Issue中详细描述新功能需求
+- 说明功能的应用场景和预期效果
+- 提供设计思路和实现建议
+
+## 📄 许可证
+
+本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
+
+## 🙏 致谢
+
+- [Ultralytics](https://github.com/ultralytics/ultralytics) - 提供优秀的YOLO实现
+- [Qt Project](https://www.qt.io/) - 提供强大的UI框架
+- [OpenCV](https://opencv.org/) - 提供图像处理功能
+- 所有贡献者和用户的支持
+
+## 📞 联系我们
+
+- **项目主页**: [GitHub Repository]
+- **问题反馈**: [GitHub Issues]
+- **功能建议**: [GitHub Discussions]
+- **邮箱**: developer@example.com
+
+---
+
+**Enhanced Object Detection System v2.0** - 让目标检测更加简单、高效、美观！
+
+🌟 如果这个项目对您有帮助，请给我们一个Star！
