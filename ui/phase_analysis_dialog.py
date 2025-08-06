@@ -191,15 +191,32 @@ class PhaseAnalysisDialog(QDialog):
         splitter = QSplitter(Qt.Vertical)
         
         # 支撑相比例图表
-        self.phase_ratio_plot = pg.PlotWidget(title="支撑相和摆动相比例对比")
+        self.phase_ratio_plot = pg.PlotWidget()
+        try:
+            self.phase_ratio_plot.setTitle("支撑相和摆动相比例对比")
+        except Exception:
+            try:
+                self.phase_ratio_plot.setLabel('top', "支撑相和摆动相比例对比")
+            except Exception:
+                pass
         self.phase_ratio_plot.setBackground('#2b2b2b')
         self.phase_ratio_plot.setLabel('left', '比例 (%)', color='#cccccc')
         self.phase_ratio_plot.setLabel('bottom', '步态周期', color='#cccccc')
-        self.phase_ratio_plot.addLegend()
+        try:
+            self.phase_ratio_plot.addLegend()
+        except Exception:
+            pass
         splitter.addWidget(self.phase_ratio_plot)
         
         # 时序分析图表
-        self.timeline_plot = pg.PlotWidget(title="支撑相和摆动相时序分析")
+        self.timeline_plot = pg.PlotWidget()
+        try:
+            self.timeline_plot.setTitle("支撑相和摆动相时序分析")
+        except Exception:
+            try:
+                self.timeline_plot.setLabel('top', "支撑相和摆动相时序分析")
+            except Exception:
+                pass
         self.timeline_plot.setBackground('#2b2b2b')
         self.timeline_plot.setLabel('left', '侧别', color='#cccccc')
         self.timeline_plot.setLabel('bottom', '帧数', color='#cccccc')

@@ -6,8 +6,23 @@
 """
 
 import numpy as np
-import pyqtgraph as pg
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QSplitter
+try:
+    import pyqtgraph as pg
+    # 配置 pyqtgraph 使用 PySide6
+    import os
+    os.environ['PYQTGRAPH_QT_LIB'] = 'PySide6'
+    
+    # 设置基本配置
+    pg.setConfigOptions(antialias=True)
+    PYQTGRAPH_AVAILABLE = True
+except ImportError:
+    PYQTGRAPH_AVAILABLE = False
+    print("警告: PyQtGraph 未安装，图表功能将被禁用")
+except Exception as e:
+    PYQTGRAPH_AVAILABLE = False
+    print(f"警告: PyQtGraph 配置失败: {e}，图表功能将被禁用")
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QSplitter, QLabel
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
@@ -193,32 +208,86 @@ class ChartDisplayWidget(QWidget):
     
     def create_plot_widget(self, title, y_label):
         """创建单个图表组件"""
-        plot_widget = pg.PlotWidget(title=title)
+        if not PYQTGRAPH_AVAILABLE:
+            # 如果 PyQtGraph 不可用，返回占位标签
+            placeholder = QLabel(f"{title}\n(图表功能不可用)")
+            placeholder.setAlignment(Qt.AlignCenter)
+            placeholder.setStyleSheet("""
+                QLabel {
+                    border: 2px solid #5a5a5a;
+                    border-radius: 8px;
+                    background: #2a2a2a;
+                    color: #888888;
+                    font-size: 12pt;
+                    min-height: 200px;
+                }
+            """)
+            return placeholder
         
-        # 设置样式
-        plot_widget.setBackground('#2b2b2b')
-        plot_widget.getAxis('left').setPen(pg.mkPen(color='#cccccc', width=1))
-        plot_widget.getAxis('bottom').setPen(pg.mkPen(color='#cccccc', width=1))
-        plot_widget.getAxis('left').setTextPen(pg.mkPen(color='#cccccc'))
-        plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color='#cccccc'))
-        
-        # 设置标签
-        plot_widget.setLabel('left', y_label, color='#cccccc', size='10pt')
-        plot_widget.setLabel('bottom', '帧数', color='#cccccc', size='10pt')
-        
-        # 设置网格
-        plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        
-        # 设置标题样式
-        plot_widget.setTitle(title, color='#ffffff', size='12pt')
-        
-        # 添加图例
-        plot_widget.addLegend(offset=(10, 10))
-        
-        return plot_widget
+        try:
+            plot_widget = pg.PlotWidget()
+            
+            # 设置样式
+            plot_widget.setBackground('#2b2b2b')
+            
+            # 安全地设置轴样式
+            try:
+                plot_widget.getAxis('left').setPen(pg.mkPen(color='#cccccc', width=1))
+                plot_widget.getAxis('bottom').setPen(pg.mkPen(color='#cccccc', width=1))
+                plot_widget.getAxis('left').setTextPen(pg.mkPen(color='#cccccc'))
+                plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color='#cccccc'))
+            except Exception as e:
+                print(f"设置轴样式时出错: {e}")
+            
+            # 设置标签
+            try:
+                plot_widget.setLabel('left', y_label, color='#cccccc', size='10pt')
+                plot_widget.setLabel('bottom', '帧数', color='#cccccc', size='10pt')
+            except Exception as e:
+                print(f"设置标签时出错: {e}")
+            
+            # 设置网格
+            try:
+                plot_widget.showGrid(x=True, y=True, alpha=0.3)
+            except Exception as e:
+                print(f"设置网格时出错: {e}")
+            
+            # 设置标题
+            try:
+                plot_widget.setLabel('top', title, color='#ffffff', size='12pt')
+            except Exception as e:
+                print(f"设置标题时出错: {e}")
+            
+            # 添加图例
+            try:
+                plot_widget.addLegend(offset=(10, 10))
+            except Exception as e:
+                print(f"添加图例时出错: {e}")
+            
+            return plot_widget
+            
+        except Exception as e:
+            print(f"创建图表组件时出错: {e}")
+            # 如果创建失败，返回占位标签
+            placeholder = QLabel(f"{title}\n(图表创建失败)")
+            placeholder.setAlignment(Qt.AlignCenter)
+            placeholder.setStyleSheet("""
+                QLabel {
+                    border: 2px solid #5a5a5a;
+                    border-radius: 8px;
+                    background: #2a2a2a;
+                    color: #888888;
+                    font-size: 12pt;
+                    min-height: 200px;
+                }
+            """)
+            return placeholder
     
     def setup_plots(self):
         """设置图表"""
+        if not PYQTGRAPH_AVAILABLE:
+            return
+            
         # 存储图表引用
         self.plots = {
             'hip': self.hip_plot,
@@ -233,9 +302,13 @@ class ChartDisplayWidget(QWidget):
         
         # 为每个图表添加当前帧指示线
         for plot_name, plot_widget in self.plots.items():
-            line = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color='yellow', width=2, style=Qt.DashLine))
-            plot_widget.addItem(line)
-            self.current_frame_lines[plot_name] = line
+            try:
+                if hasattr(plot_widget, 'addItem'):  # 确保是真正的 PlotWidget
+                    line = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color='yellow', width=2, style=Qt.DashLine))
+                    plot_widget.addItem(line)
+                    self.current_frame_lines[plot_name] = line
+            except Exception as e:
+                print(f"为 {plot_name} 添加当前帧线时出错: {e}")
     
     def update_data(self, analysis_results):
         """更新图表数据"""
@@ -259,16 +332,27 @@ class ChartDisplayWidget(QWidget):
     
     def update_angle_plots(self, raw_angles, smoothed_angles):
         """更新关节角度图表"""
+        if not PYQTGRAPH_AVAILABLE or not hasattr(self, 'plots'):
+            return
+            
         # 清除现有曲线
         for plot_widget in self.plots.values():
-            plot_widget.clear()
+            try:
+                if hasattr(plot_widget, 'clear'):
+                    plot_widget.clear()
+            except Exception as e:
+                print(f"清除图表时出错: {e}")
             
         # 重新添加当前帧线
         for plot_name, plot_widget in self.plots.items():
-            line = pg.InfiniteLine(pos=self.current_frame, angle=90, 
-                                 pen=pg.mkPen(color='yellow', width=2, style=Qt.DashLine))
-            plot_widget.addItem(line)
-            self.current_frame_lines[plot_name] = line
+            try:
+                if hasattr(plot_widget, 'addItem'):
+                    line = pg.InfiniteLine(pos=self.current_frame, angle=90, 
+                                         pen=pg.mkPen(color='yellow', width=2, style=Qt.DashLine))
+                    plot_widget.addItem(line)
+                    self.current_frame_lines[plot_name] = line
+            except Exception as e:
+                print(f"添加当前帧线时出错: {e}")
         
         # 选择数据源
         angles_data = smoothed_angles if self.data_type == 'smoothed' else raw_angles
@@ -281,13 +365,21 @@ class ChartDisplayWidget(QWidget):
         # 髋关节
         if self.joint_visibility.get('hip', True):
             if 'left_hip' in angles_data:
-                self.hip_plot.plot(frames, angles_data['left_hip'], 
-                                 pen=pg.mkPen(color=self.colors['left_hip'], width=2),
-                                 name='左髋关节')
+                try:
+                    if hasattr(self.hip_plot, 'plot'):
+                        self.hip_plot.plot(frames, angles_data['left_hip'], 
+                                         pen=pg.mkPen(color=self.colors['left_hip'], width=2),
+                                         name='左髋关节')
+                except Exception as e:
+                    print(f"绘制左髋关节数据时出错: {e}")
             if 'right_hip' in angles_data:
-                self.hip_plot.plot(frames, angles_data['right_hip'], 
-                                 pen=pg.mkPen(color=self.colors['right_hip'], width=2),
-                                 name='右髋关节')
+                try:
+                    if hasattr(self.hip_plot, 'plot'):
+                        self.hip_plot.plot(frames, angles_data['right_hip'], 
+                                         pen=pg.mkPen(color=self.colors['right_hip'], width=2),
+                                         name='右髋关节')
+                except Exception as e:
+                    print(f"绘制右髋关节数据时出错: {e}")
         
         # 膝关节
         if self.joint_visibility.get('knee', True):
