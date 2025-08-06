@@ -1,0 +1,23 @@
+# Enhanced Object Detection System v2.0 - Dependencies
+
+# Core Dependencies
+ultralytics>=8.0.0
+PySide6>=6.4.0
+opencv-python>=4.7.0
+numpy>=1.21.0
+Pillow>=9.0.0
+pathlib2>=2.3.7
+
+# Optional Dependencies for GPU acceleration
+torch>=1.12.0
+torchvision>=0.13.0
+
+# Additional utilities
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Development Dependencies (optional)
+pytest>=7.0.0
+pytest-qt>=4.0.0
+black>=22.0.0
+flake8>=4.0.0
