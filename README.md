@@ -1,154 +1,311 @@
-太棒了！从零开始学习人工智能，并按照历史发展和经典论文的时间线来梳理，是一个非常扎实且能深刻理解领域演变的方式。这条路虽然充满挑战，但能帮你打下最坚实的基础。
+# 步态分析可视化GUI应用
 
-以下是一个结合**学习路线**和**经典模型/论文时间线**的规划，强调关键里程碑和它们的**历史意义与核心思想**：
+基于PySide6和深度学习的现代化步态分析工具，支持实时视频播放、骨骼点显示、关节角度分析和步态参数计算。
 
-## 阶段一：筑基 - 数学、编程与机器学习基础 (1-3个月)
+![App Screenshot](screenshots/main_interface.png)
 
-*   **目标：** 掌握必要的工具和基础概念。
-*   **核心内容：**
-    *   **数学基础：**
-        *   **线性代数：** 向量、矩阵、张量、运算、特征值/特征向量、奇异值分解。**至关重要！** (几乎所有模型的核心)
-        *   **微积分：** 导数、偏导数、梯度、链式法则。**优化算法的基础。**
-        *   **概率论与统计学：** 概率分布、贝叶斯定理、期望、方差、最大似然估计、假设检验。**理解不确定性、生成模型、评估的基础。**
-    *   **编程基础：**
-        *   **Python:** 首选语言，掌握基础语法、数据结构、面向对象编程。
-        *   **关键库：** `NumPy` (数值计算), `Pandas` (数据处理), `Matplotlib`/`Seaborn` (数据可视化)。
-    *   **机器学习基础：**
-        *   **核心概念：** 监督学习、无监督学习、强化学习、过拟合/欠拟合、偏差/方差、交叉验证、评估指标。
-        *   **经典算法 (理解原理和实现)：**
-            *   线性回归、逻辑回归
-            *   支持向量机
-            *   决策树、随机森林、梯度提升树
-            *   K-Means聚类
-            *   主成分分析
+## 主要功能
 
-## 阶段二：神经网络与深度学习崛起 (3-6个月)
+### 📹 视频播放与控制
+- **实时视频播放**: 支持多种视频格式 (MP4, AVI, MOV, MKV, WMV)
+- **骨骼点叠加显示**: 实时显示17个COCO格式关键点
+- **播放控制**: 播放、暂停、停止、帧跳转
+- **速度控制**: 0.25x - 3.0x 可调节播放速度
+- **帧精确控制**: 支持单帧前进/后退
 
-*   **目标：** 理解神经网络的基本原理、训练过程，掌握深度学习框架，学习早期关键突破。
-*   **核心内容：**
-    *   **神经网络基础：**
-        *   神经元模型 (McCulloch-Pitts, 1943) - **概念起源**。
-        *   感知机 (Rosenblatt, 1957) - **第一个可学习模型**，但只能解决线性可分问题。Minsky & Papert (1969) 指出其局限性，导致第一次AI寒冬。
-        *   **反向传播算法 (Backpropagation):** 现代深度学习的基石。
-            *   概念雏形 (Linnainmaa, 1970) - **自动微分的反向模式**。
-            *   **应用于神经网络训练 (Rumelhart, Hinton, Williams, 1986)** - **里程碑论文** `[Learning representations by back-propagating errors]`。解决了多层网络训练问题，开启了新的可能性。
-        *   激活函数 (Sigmoid, Tanh, ReLU)
-        *   损失函数 (MSE, Cross-Entropy)
-        *   优化算法 (SGD, Momentum, Adam)
-    *   **深度学习框架：** 选择其一深入学习：`TensorFlow` / `Keras` 或 `PyTorch`。**动手实践至关重要！**
-    *   **关键早期模型与挑战：**
-        *   **梯度消失/爆炸问题：** 阻碍了深层网络训练。
-        *   **长短期记忆网络 (LSTM) (Hochreiter & Schmidhuber, 1997)** - `[Long Short-Term Memory]`。**解决RNN梯度消失的经典方案**，极大提升了序列建模能力，在NLP、语音等领域广泛应用多年。
-        *   **卷积神经网络 (CNN) 的复兴：**
-            *   早期工作 (Fukushima, Neocognitron, 1980)。
-            *   **LeNet-5 (LeCun et al., 1998)** - `[Gradient-Based Learning Applied to Document Recognition]`。**成功应用于手写数字识别，证明了CNN的有效性** (但受限于数据和算力，未引起广泛关注)。
-            *   **AlexNet (Krizhevsky, Sutskever, Hinton, 2012)** - `[ImageNet Classification with Deep Convolutional Neural Networks]`。**引爆深度学习革命的标志性事件！**
-                *   在ImageNet竞赛上以巨大优势夺冠。
-                *   关键点：使用ReLU、Dropout、GPU训练、大数据(ImageNet)。
-                *   **证明了深度CNN在视觉任务上的巨大威力**。
+### 📊 特征曲线分析
+- **关节角度曲线**: 实时显示髋、膝、踝关节角度变化
+- **躯干摆动分析**: 分析躯干相对垂直线的摆动角度
+- **数据类型切换**: 原始数据与平滑数据对比
+- **多标签页显示**: 关节角度、步态周期、支撑相分析
+- **当前帧指示**: 图表中显示当前播放帧位置
 
-## 阶段三：深度学习的蓬勃发展与大模型前夜 (6-12个月)
+### 🦵 步态参数计算
+- **步态周期检测**: 自动识别左右脚步态周期
+- **支撑相分析**: 计算支撑相和摆动相比例
+- **对称性评估**: 左右脚对称性分析
+- **时间参数**: 步频、周期时长、相位时间
+- **空间参数**: 步长、步宽估算
 
-*   **目标：** 掌握CNN、RNN/LSTM的经典架构，理解注意力机制的萌芽，接触生成模型和强化学习基础。
-*   **核心内容与模型：**
-    *   **CNN架构的演进：**
-        *   **VGGNet (Simonyan & Zisserman, 2014)** - `[Very Deep Convolutional Networks for Large-Scale Image Recognition]`。**探索深度的重要性** (16/19层)，简洁的3x3卷积堆叠。
-        *   **GoogLeNet / Inception v1 (Szegedy et al., 2014)** - `[Going Deeper with Convolutions]`。**引入Inception模块，在增加深度和宽度的同时控制计算量**。
-        *   **ResNet (He et al., 2015)** - `[Deep Residual Learning for Image Recognition]`。**革命性的残差连接 (Skip Connection)**，解决了极深度网络(152层+)的训练退化问题，成为几乎所有深度模型的标配。
-    *   **序列建模 (RNN/LSTM) 的巅峰与局限：**
-        *   GRU (Cho et al., 2014) - LSTM的简化变种。
-        *   **注意力机制 (Attention Mechanism) 的诞生：**
-            *   **Bahdanau Attention (Bahdanau, Cho, Bengio, 2014)** - `[Neural Machine Translation by Jointly Learning to Align and Translate]`。**首次将注意力机制应用于机器翻译(基于RNN)**，显著提升长序列处理能力，是Transformer的前身。
-    *   **生成模型的兴起：**
-        *   **生成对抗网络 (GAN) (Goodfellow et al., 2014)** - `[Generative Adversarial Networks]`。**开创性的框架**，通过生成器和判别器的对抗训练学习数据分布，在图像生成等领域产生巨大影响。
-        *   **变分自编码器 (VAE) (Kingma & Welling, 2013)** - `[Auto-Encoding Variational Bayes]`。**另一种重要的生成模型框架**，基于变分推断。
-    *   **深度强化学习 (DRL) 的突破：**
-        *   **Deep Q-Network (DQN) (Mnih et al., 2015)** - `[Human-level control through deep reinforcement learning]`。**首次将深度学习与Q-Learning结合**，在Atari游戏上达到超越人类水平，展示了DRL的巨大潜力。
+### 🔧 参数控制面板
+- **关节显示控制**: 可选择显示/隐藏特定关节数据
+- **平滑参数调节**: 可调节数据平滑强度
+- **检测阈值设置**: 自定义关键点检测置信度阈值
+- **显示选项**: 支撑相标记、步态周期显示
 
-## 阶段四：Transformer 时代与大模型浪潮 (当前核心，持续学习)
+### 🤖 YOLO模型集成
+- **自动关键点生成**: 使用YOLO11/YOLOv8姿态估计模型
+- **多模型支持**: 支持不同精度的YOLO模型
+- **批量处理**: 支持批量视频处理
+- **进度显示**: 实时显示处理进度
 
-*   **目标：** 深入理解Transformer架构及其带来的革命，掌握现代大模型的基础。
-*   **核心模型与范式转变：**
-    *   **Transformer (Vaswani et al., 2017)** - `[Attention Is All You Need]`。**划时代的论文，彻底改变了NLP乃至AI的格局！**
-        *   **核心创新：** 完全基于自注意力机制，摒弃RNN/CNN。
-        *   **优势：** 极强的并行性、长距离依赖建模能力。
-        *   **关键组件：** 自注意力、多头注意力、位置编码、前馈网络、层归一化、残差连接。
-        *   **应用：** 最初用于机器翻译，效果显著超越RNN+Attention。
-    *   **预训练语言模型的崛起 (基于Transformer)：**
-        *   **GPT (Generative Pre-training) (Radford et al., OpenAI, 2018)** - `[Improving Language Understanding by Generative Pre-Training]`。**开创性的单向语言模型预训练+任务微调范式** (Decoder-only)。
-        *   **BERT (Bidirectional Encoder Representations from Transformers) (Devlin et al., Google, 2018)** - `[BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding]`。**开创性的双向语言模型预训练+任务微调范式** (Encoder-only)，在多项NLP任务上取得SOTA。
-        *   **GPT-2 (Radford et al., OpenAI, 2019)** - `[Language Models are Unsupervised Multitask Learners]`。更大的规模，展示**零样本/少样本学习能力**。
-        *   **GPT-3 (Brown et al., OpenAI, 2020)** - `[Language Models are Few-Shot Learners]`。**超大模型 (1750亿参数)**，**极其强大的上下文学习能力**，引发大模型狂潮。
-        *   **BERT的各种变体：** RoBERTa, ALBERT, DistilBERT等，优化训练或效率。
-    *   **视觉Transformer (ViT) (Dosovitskiy et al., 2020)** - `[An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale]`。**将Transformer成功应用于计算机视觉**，将图像切块视为序列，在足够数据下效果超越CNN。
-    *   **多模态模型的兴起：**
-        *   **CLIP (Radford et al., OpenAI, 2021)** - `[Learning Transferable Visual Models From Natural Language Supervision]`。**图文对比学习**，学习图像和文本的联合嵌入空间，实现强大的零样本图像分类和图文检索。
-        *   **DALL·E 2 (Ramesh et al., OpenAI, 2022)** / **Imagen (Saharia et al., Google, 2022)** - **文本到图像的生成模型**，基于扩散模型(Diffusion Model) + CLIP等引导，生成效果惊人。
-    *   **大语言模型 与 ChatGPT 时代：**
-        *   **指令微调 (Instruction Tuning):** 如 `InstructGPT (Ouyang et al., OpenAI, 2022)` - `[Training language models to follow instructions with human feedback]`。
-        *   **ChatGPT (OpenAI, 2022年底):** 基于GPT-3.5/GPT-4，结合指令微调和RLHF，引爆全球AI应用热潮。
-        *   **GPT-4 (OpenAI, 2023):** 更强大、更通用、多模态。
-        *   **开源模型爆发：** LLaMA (Meta), BLOOM, Falcon, Mistral, Gemma (Google) 等，推动社区发展。
-        *   **检索增强生成 (RAG)**: 解决大模型事实性和时效性问题的重要范式。
-        *   **智能体 (Agent):** 大模型作为核心控制器，调用工具/环境完成任务的新范式。
+### 💾 数据保存与导出
+- **多格式支持**: JSON、Excel格式保存
+- **图表导出**: PNG、PDF格式图表导出
+- **分析报告**: 详细的步态分析报告
+- **支撑相报告**: 专门的支撑相和摆动相分析报告
 
-## 阶段五：探索前沿与深化 (持续进行)
+## 安装指南
 
-*   **目标：** 根据兴趣方向深入钻研，关注最新进展。
-*   **可能方向：**
-    *   **大模型高效化：** 模型压缩、量化、蒸馏、稀疏化、MoE。
-    *   **推理与可信赖AI：** 提升模型逻辑推理、数学能力、可解释性、鲁棒性、公平性。
-    *   **多模态深入：** 视频理解、具身智能、更强大的图文/音视频生成。
-    *   **AI for Science：** 应用AI加速科学发现 (生物、材料、物理等)。
-    *   **强化学习进阶：** 更复杂的任务、多智能体系统、离线强化学习等。
-    *   **神经渲染与3D生成：** NeRF, 3D Gaussian Splatting, 文本/图像到3D生成。
+### 系统要求
+- Python 3.8 或更高版本
+- Windows 10/11, macOS 10.14+, 或 Linux
+- 8GB+ RAM (推荐)
+- 支持CUDA的显卡 (可选，用于加速YOLO模型)
 
-## 学习建议与资源
+### 安装步骤
 
-1.  **动手实践是王道：**
-    *   学完理论后，**务必用代码实现**（哪怕是最简单的版本）。
-    *   在 **Kaggle**、**天池** 等平台参加比赛。
-    *   复现经典论文的核心思想或结果。
-    *   使用 `Hugging Face Transformers` 库玩转预训练模型。
-2.  **善用优质资源：**
-    *   **在线课程：** Coursera (Andrew Ng ML/DL specialization), DeepLearning.ai, Fast.ai, Stanford CS229/CS231n/CS224n (网上有资源)。
-    *   **经典书籍：** 《Pattern Recognition and Machine Learning》(PRML), 《Deep Learning》(花书), 《Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow》。
-    *   **论文阅读：**
-        *   从里程碑论文开始 (上面提到的)。
-        *   **arXiv.org** 是获取最新论文的宝库。
-        *   **Papers With Code** 将论文与代码实现链接起来。
-        *   **关注顶尖会议:** NeurIPS, ICML, ICLR, CVPR, ACL, EMNLP 等。
-3.  **注重基础：** 不要被眼花缭乱的新模型迷惑。**线性代数、概率论、微积分、优化、基础算法**的理解深度决定了你能走多远。
-4.  **保持好奇与批判：** 理解模型为什么有效（而不仅仅是有效），思考其局限性。
-5.  **加入社区：** GitHub, Reddit (r/MachineLearning), Stack Overflow, 相关领域的论坛/社群。
+1. **克隆项目**
+   ```bash
+   git clone https://github.com/your-repo/gait-analysis-gui.git
+   cd gait-analysis-gui
+   ```
 
-## 关键时间线与模型总结表
+2. **创建虚拟环境**
+   ```bash
+   python -m venv venv
+   # Windows
+   venv\Scripts\activate
+   # macOS/Linux
+   source venv/bin/activate
+   ```
 
-| 大致时期      | 代表性模型/论文 (按时间顺序)                          | 核心贡献/意义                                                                                                |
-| :------------ | :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
-| **奠基**      | McCulloch-Pitts Neuron (1943)                         | 形式化神经元数学模型                                                                                         |
-| **早期探索**  | Perceptron (Rosenblatt, 1957)                        | 首个可学习的神经元模型 (线性分类器)                                                                           |
-| **寒冬与曙光**| Backpropagation (Rumelhart et al., 1986)              | 为训练多层神经网络提供了有效算法                                                                             |
-| **CNN奠基**   | LeNet-5 (LeCun et al., 1998)                         | 成功应用于手写数字识别的经典CNN                                                                              |
-| **序列建模**  | LSTM (Hochreiter & Schmidhuber, 1997)                | 解决RNN梯度消失问题，长序列建模利器                                                                         |
-| **深度学习革命** | **AlexNet** (Krizhevsky et al., 2012)               | 引爆深度学习热潮 (ImageNet 夺冠，GPU+大数据+ReLU+Dropout)                                                  |
-| **CNN进化**   | VGGNet (2014), GoogLeNet (2014), **ResNet** (2015)    | VGG: 探索深度； GoogLeNet: Inception模块； **ResNet: 残差连接解决深度退化，成为标配**                        |
-| **注意力萌芽**| Bahdanau Attention (2014)                            | 首次将注意力机制应用于机器翻译 (RNN-based)                                                                  |
-| **生成模型**  | **VAE** (2013), **GAN** (Goodfellow et al., 2014)     | 两大主流生成模型框架                                                                                         |
-| **强化学习**  | **DQN** (2015)                                       | 深度强化学习里程碑 (Atari游戏)                                                                              |
-| **范式转变**  | **Transformer** (Vaswani et al., 2017)              | **"Attention is All You Need"**, 彻底改变NLP，奠定大模型基础                                               |
-| **预训练时代**| **BERT** (2018), **GPT/GPT-2** (2018, 2019)          | BERT: 双向Transformer Encoder预训练； GPT: 单向Transformer Decoder预训练，开启LLM之路                     |
-| **大模型浪潮**| **GPT-3** (2020), **ViT** (2020)                     | GPT-3: 超大模型展示少样本/零样本能力； ViT: Transformer进军视觉领域成功                                    |
-| **多模态**    | **CLIP** (2021), **DALL·E 2/Imagen** (2022)         | CLIP: 图文对比学习； DALL·E 2/Imagen: 文本到图像生成的飞跃 (基于扩散模型)                                  |
-| **Chat时代**  | **ChatGPT** (2022), **GPT-4** (2023)                 | 基于指令微调+RLHF的对话大模型，引发AI应用海啸； GPT-4: 更强大、多模态                                      |
-| **开源与前沿**| LLaMA, Mistral, Gemma (2023-至今)                   | 高质量开源大模型推动社区发展； MoE, RAG, Agent, 推理优化等成为热点                                         |
+3. **安装依赖**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-**重要提示：**
+4. **下载YOLO模型** (可选)
+   ```bash
+   # 创建模型目录
+   mkdir models
+   cd models
+   
+   # 下载YOLO模型文件 (选择其中一个)
+   wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo11n-pose.pt  # 轻量级
+   wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo11s-pose.pt  # 小型
+   wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo11m-pose.pt  # 中型
+   wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo11l-pose.pt  # 大型
+   wget https://github.com/ultralytics/assets/releases/download/v0.0.0/yolo11x-pose.pt  # 超大型
+   ```
 
-*   **这个路线图是理想化的。** 每个人的学习速度和背景不同，灵活调整。
-*   **不要试图一口吃成胖子。** 深入理解基础模型比泛泛了解一堆新模型更重要。
-*   **论文精读：** 对于里程碑论文，花时间精读原文，理解其动机、方法、实验和贡献。
-*   **关注代码：** 很多经典模型的开源实现可以在GitHub上找到，结合论文看代码是极好的学习方式。
-*   **持续学习：** AI领域日新月异，保持学习的热情和习惯至关重要。
+## 使用指南
 
-祝你学习顺利，在人工智能的探索之旅中收获满满！这条按时间线梳理的路径，能让你深刻体会到AI发展的脉络和先辈们的智慧结晶。加油！
+### 启动应用
+
+推荐使用启动脚本（会自动检查依赖）：
+```bash
+python run_app.py
+```
+
+或者直接启动：
+```bash
+python main.py
+```
+
+如果遇到问题，可以尝试简化版本：
+```bash
+python test_app.py
+```
+
+### 基本工作流程
+
+1. **加载视频文件**
+   - 点击菜单 "文件" → "打开视频文件"
+   - 选择要分析的步态视频
+
+2. **生成关键点数据** (如果没有现有数据)
+   - 点击菜单 "分析" → "生成关键点数据" 
+   - 等待YOLO模型处理完成
+
+3. **开始步态分析**
+   - 点击菜单 "分析" → "开始分析"
+   - 等待分析完成
+
+4. **查看分析结果**
+   - 在右侧图表区域查看关节角度曲线
+   - 在下方参数面板查看步态参数
+   - 切换不同标签页查看详细分析
+
+5. **保存结果**
+   - 点击菜单 "文件" → "保存分析结果"
+   - 选择保存格式 (JSON/Excel)
+
+### 界面说明
+
+#### 主界面布局
+```
+┌─────────────────────┬─────────────────────┐
+│                     │                     │
+│    视频播放区域     │    特征曲线显示     │
+│   (骨骼点叠加)      │   (关节角度分析)    │
+│                     │                     │
+├─────────────────────┼─────────────────────┤
+│                     │                     │
+│    控制面板         │    参数显示面板     │
+│   (播放控制等)      │   (步态参数等)      │
+│                     │                     │
+└─────────────────────┴─────────────────────┘
+```
+
+#### 控制面板功能
+- **播放控制**: 播放/暂停、停止、速度调节
+- **帧控制**: 帧滑块、精确帧跳转
+- **显示选项**: 关节显示开关、数据类型选择
+- **分析选项**: 平滑强度、检测阈值调节
+
+#### 图表显示
+- **关节角度**: 显示各关节的角度变化曲线
+- **步态周期**: 显示归一化的步态周期对比
+- **支撑相分析**: 显示支撑相和摆动相的时序分析
+
+### 高级功能
+
+#### 批量处理
+使用命令行工具进行批量处理：
+```bash
+python -m core.keypoint_generator --video path/to/video.mp4 --output path/to/output/
+```
+
+#### 自定义模型
+如果有自己训练的YOLO模型，可以：
+1. 将模型文件放在 `models/` 目录下
+2. 在生成关键点时选择自定义模型路径
+
+#### 数据格式
+支持的关键点数据格式为COCO 17点格式：
+```json
+{
+  "metadata": {
+    "format": "COCO",
+    "keypoint_names": ["nose", "left_eye", "right_eye", ...]
+  },
+  "keypoints": [
+    [[x1, y1, conf1], [x2, y2, conf2], ...],  // 第1帧
+    [[x1, y1, conf1], [x2, y2, conf2], ...],  // 第2帧
+    ...
+  ]
+}
+```
+
+## 技术架构
+
+### 核心组件
+- **UI层**: PySide6 现代化界面
+- **显示层**: OpenCV视频处理 + PyQtGraph图表
+- **分析层**: SciPy信号处理 + NumPy数值计算
+- **AI层**: Ultralytics YOLO模型
+
+### 关键算法
+- **关节角度计算**: 基于向量夹角的几何计算
+- **数据平滑**: Savitzky-Golay滤波器
+- **步态周期检测**: 基于峰值检测的周期识别
+- **支撑相分析**: 基于关节角度变化率的相位分割
+
+### 文件结构
+```
+gait-analysis-gui/
+├── main.py                 # 应用程序入口
+├── requirements.txt        # 依赖包列表
+├── README.md              # 项目说明
+├── ui/                    # 用户界面模块
+│   ├── __init__.py
+│   ├── main_window.py     # 主窗口
+│   ├── video_player.py    # 视频播放器
+│   ├── chart_display.py   # 图表显示
+│   ├── control_panel.py   # 控制面板
+│   ├── parameter_display.py # 参数显示
+│   └── phase_analysis_dialog.py # 支撑相分析对话框
+├── core/                  # 核心分析模块
+│   ├── __init__.py
+│   ├── gait_analyzer.py   # 步态分析器
+│   └── keypoint_generator.py # 关键点生成器
+└── models/                # YOLO模型文件目录
+    └── (YOLO model files)
+```
+
+## 故障排除
+
+### 常见问题
+
+1. **无法启动应用程序**
+   - 检查Python版本是否为3.8+
+   - 确认所有依赖包已正确安装
+   - 使用 `python run_app.py` 检查依赖状态
+   - 检查是否有权限问题
+
+2. **PyQtGraph 相关错误**
+   - 确认PyQtGraph版本兼容性：`pip install pyqtgraph>=0.13.0`
+   - 设置环境变量：`export PYQTGRAPH_QT_LIB=PySide6`
+   - 如果仍有问题，应用会自动禁用图表功能并显示占位符
+
+3. **YOLO模型加载失败**
+   - 确认模型文件存在于 `models/` 目录
+   - 检查网络连接（首次使用会自动下载）
+   - 尝试手动下载模型文件
+
+4. **视频无法播放**
+   - 检查视频文件格式是否支持
+   - 确认OpenCV正确安装
+   - 尝试转换视频格式
+
+5. **分析结果不准确**
+   - 检查关键点检测质量
+   - 调整检测置信度阈值
+   - 确认视频中人物清晰可见
+
+6. **界面显示异常**
+   - 检查显示器分辨率和缩放设置
+   - 尝试重启应用程序
+   - 更新显卡驱动程序
+
+### 性能优化
+
+1. **提高处理速度**
+   - 使用GPU加速 (安装CUDA版本的PyTorch)
+   - 选择较小的YOLO模型 (yolo11n-pose.pt)
+   - 降低视频分辨率
+
+2. **减少内存使用**
+   - 处理较短的视频片段
+   - 关闭不需要的图表显示
+   - 定期清理临时文件
+
+## 开发说明
+
+### 代码风格
+- 遵循PEP 8规范
+- 使用类型提示
+- 添加详细的文档字符串
+
+### 测试
+```bash
+# 运行单元测试
+python -m pytest tests/
+
+# 生成测试覆盖率报告
+python -m pytest --cov=core tests/
+```
+
+### 贡献指南
+1. Fork项目
+2. 创建功能分支
+3. 提交代码
+4. 创建Pull Request
+
+## 许可证
+
+本项目采用MIT许可证，详见 [LICENSE](LICENSE) 文件。
+
+## 联系方式
+
+- 项目主页: https://github.com/your-repo/gait-analysis-gui
+- 问题反馈: https://github.com/your-repo/gait-analysis-gui/issues
+- 邮箱: your-email@example.com
+
+## 致谢
+
+- [Ultralytics](https://github.com/ultralytics/ultralytics) - YOLO模型
+- [PySide6](https://doc.qt.io/qtforpython/) - GUI框架
+- [PyQtGraph](https://pyqtgraph.readthedocs.io/) - 图表显示
+- [OpenCV](https://opencv.org/) - 计算机视觉库
