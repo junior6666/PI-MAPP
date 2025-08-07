@@ -52,7 +52,7 @@ class EnhancedDetectionUI(QMainWindow):
     def init_ui(self):
         """初始化UI"""
         self.setWindowTitle("🚀 Enhanced Object Detection System v2.0")
-        self.setGeometry(100, 100, 1700, 900)
+        self.setGeometry(100, 100, 1400, 750)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -63,7 +63,7 @@ class EnhancedDetectionUI(QMainWindow):
 
         # 左侧控制面板
         left_widget = self.create_control_panel()
-        left_widget.setMaximumWidth(450)
+        left_widget.setMaximumWidth(500)
         left_widget.setMinimumWidth(400)
 
         # 右侧显示区域
@@ -273,7 +273,7 @@ class EnhancedDetectionUI(QMainWindow):
         original_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 5px;")
         original_layout.addWidget(original_title)
 
-        self.original_label = QLabel("等待加载图片...")
+        self.original_label = QLabel("等待加载源...")
         self.original_label.setAlignment(Qt.AlignCenter)
         self.original_label.setMinimumSize(500, 400)
         self.original_label.setStyleSheet(StyleManager.get_image_label_style())
@@ -810,7 +810,7 @@ class EnhancedDetectionUI(QMainWindow):
     def clear_display_windows(self):
         """清空显示窗口"""
         self.original_label.clear()
-        self.original_label.setText("等待加载图片...")
+        self.original_label.setText("等待加载源...")
         self.result_label.clear()
         self.result_label.setText("等待检测结果...")
 

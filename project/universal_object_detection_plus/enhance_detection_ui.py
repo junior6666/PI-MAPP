@@ -25,7 +25,9 @@ except ImportError:
     print("错误: 请安装ultralytics库: pip install ultralytics")
     sys.exit(1)
 
-
+# 检测摄像头（通常前4个索引）
+MAX_PROBE = 10  # 最多探测到 /dev/video9
+MISS_TOLERANCE = 2  # 连续打不开 2 个就停
 class CameraManager:
     """摄像头管理器"""
 
@@ -37,26 +39,29 @@ class CameraManager:
         """扫描可用摄像头"""
         self.cameras = []
 
-        # 检测摄像头（通常前4个索引）
-        for i in range(4):
-            cap = cv2.VideoCapture(i)
+        miss = 0
+        for idx in range(MAX_PROBE):
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)  # Windows 可加 cv2.CAP_DSHOW 加速
             if cap.isOpened():
                 ret, frame = cap.read()
                 if ret:
-                    # 获取摄像头信息
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     fps = cap.get(cv2.CAP_PROP_FPS)
 
-                    camera_info = {
-                        'id': i,
-                        'name': f"摄像头 {i}",
-                        'resolution': f"{width}x{height}",
+                    self.cameras.append({
+                        'id': idx,
+                        'name': f'摄像头 {idx}',
+                        'resolution': f'{w}x{h}',
                         'fps': fps,
                         'available': True
-                    }
-                    self.cameras.append(camera_info)
+                    })
+                    miss = 0  # 只要成功一次就重置 miss
                 cap.release()
+            else:
+                miss += 1
+                if miss >= MISS_TOLERANCE:
+                    break
 
         # 如果没有摄像头，添加虚拟摄像头用于测试
         if not self.cameras:
@@ -224,7 +229,7 @@ class ModelSelectionDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("选择模型")
         self.setModal(True)
-        self.resize(600, 400)
+        self.resize(800, 300)
 
         layout = QVBoxLayout(self)
 
@@ -250,6 +255,8 @@ class ModelSelectionDialog(QDialog):
         self.model_table.setColumnCount(4)
         self.model_table.setHorizontalHeaderLabels(["模型名称", "大小", "修改时间", "路径"])
         self.model_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+
         self.model_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.model_table.doubleClicked.connect(self.accept)
 
@@ -311,7 +318,7 @@ class DetectionResultWidget(QWidget):
         self.result_table.setColumnCount(4)
         self.result_table.setHorizontalHeaderLabels(["类别", "置信度", "坐标", "大小"])
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.result_table.setMaximumHeight(150)
+        self.result_table.setMaximumHeight(100)
 
         layout.addWidget(self.result_table)
 

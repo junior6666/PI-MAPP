@@ -50,7 +50,7 @@ class StyleManager:
             QGroupBox {
                 font-weight: bold;
                 font-size: 12px;
-                border: 2px solid rgba(52, 152, 219, 0.3);
+                border: 2px solid rgba(52, 152, 219, 0.7);
                 border-radius: 8px;
                 margin-top: 1ex;
                 padding-top: 15px;

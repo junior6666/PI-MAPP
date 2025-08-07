@@ -178,7 +178,8 @@ class StyleManager:
 
             QHeaderView::section {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #34495e, stop:1 #2c3e50);
+                stop:0 #3498db,   /* 亮蓝（Flat UI Blue） */
+                stop:1 #1a5276);  /* 深蓝（接近 Midnight Blue） */
                 color: white;
                 padding: 8px;
                 border: none;

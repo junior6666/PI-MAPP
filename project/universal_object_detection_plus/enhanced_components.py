@@ -393,29 +393,31 @@ class MonitoringWidget(QWidget):
 
         # 控制面板
         control_group = QGroupBox("🖥️ 监控控制")
-        control_layout = QVBoxLayout(control_group)
-
+        control_group.setMaximumHeight(80)  # 单位像素
+        control_layout = QHBoxLayout(control_group)
+        model_layout = QHBoxLayout()
         # 模型选择
-        model_layout = QVBoxLayout()
+        model_camera_layout = QHBoxLayout()
         model_layout.addWidget(QLabel("模型:"))
 
         self.model_combo = QComboBox()
         self.model_combo.addItem("请先加载模型")
-        self.model_combo.setMinimumWidth(80)
+        # self.model_combo.setMinimumWidth(80)
         model_layout.addWidget(self.model_combo)
 
         select_model_btn = QPushButton("🔧 选择模型")
         select_model_btn.clicked.connect(self.select_model)
         model_layout.addWidget(select_model_btn)
-
-        control_layout.addLayout(model_layout)
+        model_camera_layout.addLayout(model_layout)
+        # control_layout.addLayout(model_layout)
 
         # 摄像头选择
-        camera_layout = QVBoxLayout()
+        camera_layout = QHBoxLayout()
         camera_layout.addWidget(QLabel("摄像头:"))
 
         self.camera_list = QListWidget()
-        # self.camera_list.setMaximumHeight(50)
+        # self.camera_list.setMaximumHeight(20)
+        self.camera_list.setMaximumWidth(300)
         self.camera_list.setSelectionMode(QListWidget.MultiSelection)
         self.refresh_cameras()
         camera_layout.addWidget(self.camera_list)
@@ -423,8 +425,10 @@ class MonitoringWidget(QWidget):
         refresh_camera_btn = QPushButton("🔄 刷新")
         refresh_camera_btn.clicked.connect(self.refresh_cameras)
         camera_layout.addWidget(refresh_camera_btn)
+        camera_layout.addStretch()
 
-        control_layout.addLayout(camera_layout)
+        model_camera_layout.addLayout(camera_layout)
+        control_layout.addLayout(model_camera_layout)
 
         # 控制按钮
         btn_layout = QHBoxLayout()
@@ -438,6 +442,11 @@ class MonitoringWidget(QWidget):
         self.stop_monitor_btn.clicked.connect(self.stop_monitoring)
         self.stop_monitor_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_monitor_btn)
+
+        self.clear_monitor_btn = QPushButton("🗑️ 清除监控")
+        self.clear_monitor_btn.clicked.connect(self.clear_monitoring)
+        self.clear_monitor_btn.setEnabled(False)
+        btn_layout.addWidget(self.clear_monitor_btn)
 
         control_layout.addLayout(btn_layout)
 
@@ -494,6 +503,7 @@ class MonitoringWidget(QWidget):
 
         # 清空之前的显示
         self.clear_monitor_display()
+        self.clear_monitor_btn.setEnabled(True)
 
         # 创建显示标签
         self.create_camera_labels(camera_ids)
@@ -514,6 +524,14 @@ class MonitoringWidget(QWidget):
         if self.monitoring_thread and self.monitoring_thread.is_running:
             self.monitoring_thread.stop()
             self.monitoring_thread.wait()
+            self.clear_monitor_btn.setEnabled(True)
+
+
+
+    def clear_monitoring(self):
+        """停止监控"""
+        self.clear_monitor_display()
+        self.clear_monitor_btn.setEnabled(False)
 
     def create_camera_labels(self, camera_ids):
         """创建摄像头显示标签"""
