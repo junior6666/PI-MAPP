@@ -149,37 +149,123 @@ class PoseDetector:
     def draw_pose(self, image, poses, draw_keypoints=True, draw_skeleton=True, draw_bbox=True):
         """
         在图像上绘制检测到的姿势（假定输入坐标已与图像分辨率一致）
+        优化版本：使用不同颜色的圆点美化关节点和线条
         """
         image_copy = image.copy()
+        
+        # 定义关键点颜色映射 - 按身体部位分组
+        keypoint_colors = {
+            # 头部关键点 - 蓝色系
+            'nose': (255, 100, 100),      # 浅蓝色
+            'left_eye': (255, 150, 150),  # 蓝色
+            'right_eye': (255, 150, 150), # 蓝色
+            'left_ear': (255, 200, 200),  # 浅蓝色
+            'right_ear': (255, 200, 200), # 浅蓝色
+            
+            # 上肢关键点 - 绿色系
+            'left_shoulder': (100, 255, 100),  # 浅绿色
+            'right_shoulder': (100, 255, 100), # 浅绿色
+            'left_elbow': (150, 255, 150),     # 绿色
+            'right_elbow': (150, 255, 150),    # 绿色
+            'left_wrist': (200, 255, 200),     # 浅绿色
+            'right_wrist': (200, 255, 200),    # 浅绿色
+            
+            # 躯干关键点 - 红色系
+            'left_hip': (100, 100, 255),   # 浅红色
+            'right_hip': (100, 100, 255),  # 浅红色
+            
+            # 下肢关键点 - 黄色系
+            'left_knee': (100, 255, 255),  # 浅黄色
+            'right_knee': (100, 255, 255), # 浅黄色
+            'left_ankle': (150, 255, 255), # 黄色
+            'right_ankle': (150, 255, 255) # 黄色
+        }
+        
+        # 定义骨架连接和对应的线条颜色
         skeleton_connections = [
+            # 头部连接 - 蓝色线条
+            ('left_eye', 'right_eye'),
+            ('left_eye', 'left_ear'),
+            ('right_eye', 'right_ear'),
+            ('nose', 'left_eye'),
+            ('nose', 'right_eye'),
+            
+            # 躯干连接 - 红色线条
             ('left_shoulder', 'right_shoulder'),
+            ('left_shoulder', 'left_hip'),
+            ('right_shoulder', 'right_hip'),
+            ('left_hip', 'right_hip'),
+            
+            # 上肢连接 - 绿色线条
             ('left_shoulder', 'left_elbow'),
             ('right_shoulder', 'right_elbow'),
             ('left_elbow', 'left_wrist'),
             ('right_elbow', 'right_wrist'),
-            ('left_shoulder', 'left_hip'),
-            ('right_shoulder', 'right_hip'),
-            ('left_hip', 'right_hip'),
+            
+            # 下肢连接 - 黄色线条
             ('left_hip', 'left_knee'),
             ('right_hip', 'right_knee'),
             ('left_knee', 'left_ankle'),
             ('right_knee', 'right_ankle')
         ]
+        
+        # 线条颜色映射
+        line_colors = {
+            # 头部线条 - 蓝色
+            ('left_eye', 'right_eye'): (255, 100, 100),
+            ('left_eye', 'left_ear'): (255, 100, 100),
+            ('right_eye', 'right_ear'): (255, 100, 100),
+            ('nose', 'left_eye'): (255, 100, 100),
+            ('nose', 'right_eye'): (255, 100, 100),
+            
+            # 躯干线条 - 红色
+            ('left_shoulder', 'right_shoulder'): (100, 100, 255),
+            ('left_shoulder', 'left_hip'): (100, 100, 255),
+            ('right_shoulder', 'right_hip'): (100, 100, 255),
+            ('left_hip', 'right_hip'): (100, 100, 255),
+            
+            # 上肢线条 - 绿色
+            ('left_shoulder', 'left_elbow'): (100, 255, 100),
+            ('right_shoulder', 'right_elbow'): (100, 255, 100),
+            ('left_elbow', 'left_wrist'): (100, 255, 100),
+            ('right_elbow', 'right_wrist'): (100, 255, 100),
+            
+            # 下肢线条 - 黄色
+            ('left_hip', 'left_knee'): (100, 255, 255),
+            ('right_hip', 'right_knee'): (100, 255, 255),
+            ('left_knee', 'left_ankle'): (100, 255, 255),
+            ('right_knee', 'right_ankle'): (100, 255, 255)
+        }
+        
         for pose in poses:
             keypoints = pose['keypoints']
+            
             # 绘制人物边框
             if draw_bbox and pose.get('bbox') is not None:
                 bbox = pose['bbox']
                 if len(bbox) == 4:
                     x1, y1, x2, y2 = map(int, bbox)
-                    cv2.rectangle(image_copy, (x1, y1), (x2, y2), (0, 255, 255), 2)
-            # 绘制关键点
+                    # 使用白色边框，更清晰
+                    cv2.rectangle(image_copy, (x1, y1), (x2, y2), (255, 255, 255), 2)
+            
+            # 绘制关键点 - 使用不同颜色和大小的圆点
             if draw_keypoints:
                 for name, kp in keypoints.items():
                     if kp['confidence'] > 0.5:
                         x, y = int(kp['x']), int(kp['y'])
-                        cv2.circle(image_copy, (x, y), 3, (0, 255, 0), -1)
-            # 绘制骨架
+                        color = keypoint_colors.get(name, (0, 255, 0))  # 默认绿色
+                        
+                        # 根据关键点重要性调整圆点大小
+                        radius = 4 if name in ['nose', 'left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'] else 3
+                        
+                        # 绘制外圈（白色边框）
+                        cv2.circle(image_copy, (x, y), radius + 1, (255, 255, 255), -1)
+                        # 绘制内圈（彩色填充）
+                        cv2.circle(image_copy, (x, y), radius, color, -1)
+                        # 绘制中心点（黑色）
+                        cv2.circle(image_copy, (x, y), 1, (0, 0, 0), -1)
+            
+            # 绘制骨架线条 - 使用不同颜色和粗细
             if draw_skeleton:
                 for connection in skeleton_connections:
                     kp1_name, kp2_name = connection
@@ -189,7 +275,13 @@ class PoseDetector:
                         if kp1['confidence'] > 0.5 and kp2['confidence'] > 0.5:
                             pt1 = (int(kp1['x']), int(kp1['y']))
                             pt2 = (int(kp2['x']), int(kp2['y']))
-                            cv2.line(image_copy, pt1, pt2, (255, 0, 0), 2)
+                            
+                            # 获取线条颜色
+                            line_color = line_colors.get(connection, (255, 0, 0))
+                            
+                            # 绘制线条（稍微粗一些，更清晰）
+                            cv2.line(image_copy, pt1, pt2, line_color, 3)
+        
         return image_copy
     
     def extract_features(self, poses: List[Dict[str, Any]]) -> np.ndarray:

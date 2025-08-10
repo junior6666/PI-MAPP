@@ -4,6 +4,7 @@
 Enhanced Components - 增强组件模块
 包含批量检测、结果显示、监控等组件
 """
+import threading
 
 import cv2
 import time
@@ -42,7 +43,7 @@ class BatchDetectionThread(QThread):
             image_files = []
             for fmt in self.supported_formats:
                 image_files.extend(Path(self.folder_path).rglob(f'*{fmt}'))
-                image_files.extend(Path(self.folder_path).rglob(f'*{fmt.upper()}'))
+                # image_files.extend(Path(self.folder_path).rglob(f'*{fmt.upper()}'))
 
             total_files = len(image_files)
             if total_files == 0:
@@ -97,104 +98,149 @@ class BatchDetectionThread(QThread):
             self.error_occurred.emit(f"批量处理发生错误: {str(e)}")
         finally:
             self.is_running = False
-            self.finished.emit()
+            # self.finished.emit()
 
     def stop(self):
         """停止批量检测"""
         self.is_running = False
 
 
+
 class MultiCameraMonitorThread(QThread):
-    """多摄像头监控线程"""
-    camera_result_ready = Signal(int, object, object, float, object, list)  # 摄像头ID, 原图, 结果图, 耗时, 检测结果, 类别名称
-    camera_error = Signal(int, str)  # 摄像头ID, 错误信息
-    camera_status_changed = Signal(int, str)  # 摄像头ID, 状态信息
-    finished = Signal()
+    camera_result_ready = Signal(int, object, object, float, object, list)
+    camera_error        = Signal(int, str)
+    camera_status       = Signal(int, str)
+    finished            = Signal()
 
-    def __init__(self, model, camera_ids, confidence_threshold=0.25):
+    def __init__(self, model, camera_ids, conf=0.25, fps=10):
         super().__init__()
-        self.model = model
-        self.camera_ids = camera_ids
-        self.confidence_threshold = confidence_threshold
-        self.is_running = False
-        self.cameras = {}
-        self.last_frame_times = {}
+        self.model   = model
+        self.cam_ids = camera_ids
+        self.conf    = conf
+        self.period  = 1.0 / fps                # 帧间隔
+        self.caps    = {}                       # {id: cv2.VideoCapture}
+        self.active  = {}                       # {id: bool} 是否在线
+        self.last_t  = {}                       # {id: float}
 
+        # 线程同步
+        self._run_flag   = True
+        self._pause_cond = QWaitCondition()
+        self._pause_mutex = QMutex()
+        self._paused_flag = False
+
+    # ----------------- 生命周期 -----------------
     def run(self):
-        self.is_running = True
+        self._open_all()
+        if not self.caps:
+            self.finished.emit()
+            return
 
-        # 初始化所有摄像头
-        for camera_id in self.camera_ids:
-            cap = cv2.VideoCapture(camera_id)
+        cls_names = list(self.model.names.values())
+
+        while self._run_flag:
+            self._pause_mutex.lock()
+            if self._paused_flag:
+                self._pause_cond.wait(self._pause_mutex)
+            self._pause_mutex.unlock()
+
+            for cid in list(self.caps.keys()):
+                if not self._run_flag:
+                    break
+                if not self._grab_and_infer(cid, cls_names):
+                    self._reconnect_later(cid)      # 断线后异步重连
+            self.msleep(10)
+
+        self._close_all()
+        self.finished.emit()
+
+    def stop(self):
+        self._run_flag = False
+        self.resume()               # 确保等待线程被唤醒
+        self.wait()
+
+    def pause(self):
+        self._pause_mutex.lock()
+        self._paused_flag = True
+        self._pause_mutex.unlock()
+
+    def resume(self):
+        self._pause_mutex.lock()
+        self._paused_flag = False
+        self._pause_mutex.unlock()
+        self._pause_cond.wakeAll()
+
+    # ----------------- 私有工具 -----------------
+    def _open_all(self):
+        for cid in self.cam_ids:
+            cap = cv2.VideoCapture(cid, cv2.CAP_DSHOW)
             if cap.isOpened():
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 cap.set(cv2.CAP_PROP_FPS, 30)
-                self.cameras[camera_id] = cap
-                self.last_frame_times[camera_id] = time.time()
-                self.camera_status_changed.emit(camera_id, "已连接")
+                self.caps[cid] = cap
+                self.active[cid] = True
+                self.last_t[cid] = 0.0
+                self.camera_status.emit(cid, "已连接")
             else:
-                self.camera_error.emit(camera_id, "无法打开摄像头")
+                self.camera_error.emit(cid, "无法打开")
+                cap.release()
 
-        if not self.cameras:
-            self.finished.emit()
-            return
+    def _close_all(self):
+        for cap in self.caps.values():
+            cap.release()
+        self.caps.clear()
 
-        # 获取类别名称
-        class_names = list(self.model.names.values())
+    def _grab_and_infer(self, cid, cls_names):
+        cap = self.caps.get(cid)
+        if not cap or not cap.isOpened():
+            return False
+
+        # 读帧非阻塞：先 grab 再 retrieve
+        if not cap.grab():
+            return False
+
+        now = time.time()
+        if now - self.last_t[cid] < self.period:
+            return True   # 未超时，但帧已 grab，避免堆积
+        self.last_t[cid] = now
+
+        ret, frame = cap.retrieve()
+        if not ret:
+            return False
 
         try:
-            while self.is_running:
-                for camera_id, cap in self.cameras.items():
-                    if not self.is_running:
-                        break
-
-                    ret, frame = cap.read()
-                    if not ret:
-                        self.camera_error.emit(camera_id, "读取帧失败")
-                        continue
-
-                    # 控制检测频率（每个摄像头约10fps）
-                    current_time = time.time()
-                    if current_time - self.last_frame_times[camera_id] < 0.1:
-                        continue
-
-                    self.last_frame_times[camera_id] = current_time
-
-                    try:
-                        start_time = time.time()
-                        results = self.model(frame, conf=self.confidence_threshold, verbose=False)
-                        end_time = time.time()
-
-                        # 获取原图和结果图
-                        original_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        result_img = results[0].plot()
-                        result_img = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
-
-                        self.camera_result_ready.emit(camera_id, original_img, result_img,
-                                                      end_time - start_time, results, class_names)
-
-                    except Exception as e:
-                        self.camera_error.emit(camera_id, f"检测错误: {str(e)}")
-
-                time.sleep(0.01)  # 小延迟避免CPU占用过高
-
+            t0 = time.time()
+            results = self.model(frame, conf=self.conf, verbose=False)
+            infer_ms = (time.time() - t0) * 1000
+            out_img = results[0].plot()
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgb_out   = cv2.cvtColor(out_img, cv2.COLOR_BGR2RGB)
+            self.camera_result_ready.emit(cid, rgb_frame, rgb_out,
+                                          infer_ms/1000.0, results, cls_names)
+            return True
         except Exception as e:
-            for camera_id in self.cameras:
-                self.camera_error.emit(camera_id, f"线程错误: {str(e)}")
-        finally:
-            # 释放所有摄像头
-            for cap in self.cameras.values():
-                cap.release()
-            self.cameras.clear()
-            self.is_running = False
-            self.finished.emit()
+            self.camera_error.emit(cid, f"推理异常: {e}")
+            return False
 
-    def stop(self):
-        """停止多摄像头检测"""
-        self.is_running = False
+    def _reconnect_later(self, cid):
+        # 简单策略：5 秒后重试
+        if self.active.get(cid) is False:
+            return
+        self.active[cid] = False
+        self.camera_status.emit(cid, "重连中…")
+        threading.Timer(5.0, lambda: self._try_reopen(cid)).start()
 
-
+    def _try_reopen(self, cid):
+        if cid in self.caps:
+            self.caps[cid].release()
+        cap = cv2.VideoCapture(cid)
+        if cap.isOpened():
+            self.caps[cid] = cap
+            self.active[cid] = True
+            self.camera_status.emit(cid, "已重连")
+        else:
+            cap.release()
+            self._reconnect_later(cid)
 class ModelSelectionDialog(QDialog):
     """模型选择对话框"""
 
@@ -299,8 +345,9 @@ class DetectionResultWidget(QWidget):
         layout = QVBoxLayout(self)
 
         # 标题
-        title = QLabel("🎯 检测结果详情")
+        title = QLabel("🎯 检测结果详情表")
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; margin-bottom: 10px;")
+        # title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
         # 结果表格
@@ -308,6 +355,13 @@ class DetectionResultWidget(QWidget):
         self.result_table.setColumnCount(5)
         self.result_table.setHorizontalHeaderLabels(["序号", "类别", "置信度", "坐标 (x,y)", "尺寸 (w×h)"])
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.result_table.horizontalHeader().setStyleSheet("""
+            QHeaderView::section {
+                font-size: 10pt;
+                font-weight: bold;
+                height: 12px;     /* 在 QSS 里 height 对表头 section 生效 */
+            }
+        """)
         self.result_table.setMaximumHeight(200)
         self.result_table.setAlternatingRowColors(True)
 
@@ -386,7 +440,9 @@ class MonitoringWidget(QWidget):
         self.monitoring_thread = None
         self.camera_labels = {}
         self.current_model = None
+        self.start_monitor_btn = QPushButton("🚀 开始监控")
         self.init_ui()
+
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -401,15 +457,15 @@ class MonitoringWidget(QWidget):
         model_layout.addWidget(QLabel("模型:"))
 
         self.model_combo = QComboBox()
-        self.model_combo.addItem("请先加载模型")
-        # self.model_combo.setMinimumWidth(80)
+        self.model_combo.currentTextChanged.connect(self.on_model_changed)
+        self.init_model_combo()
         model_layout.addWidget(self.model_combo)
 
         select_model_btn = QPushButton("🔧 选择模型")
         select_model_btn.clicked.connect(self.select_model)
         model_layout.addWidget(select_model_btn)
         model_camera_layout.addLayout(model_layout)
-        # control_layout.addLayout(model_layout)
+
 
         # 摄像头选择
         camera_layout = QHBoxLayout()
@@ -433,19 +489,18 @@ class MonitoringWidget(QWidget):
         # 控制按钮
         btn_layout = QHBoxLayout()
 
-        self.start_monitor_btn = QPushButton("🚀 开始监控")
         self.start_monitor_btn.clicked.connect(self.start_monitoring)
-        self.start_monitor_btn.setEnabled(False)
+        self.start_monitor_btn.setEnabled(True)
         btn_layout.addWidget(self.start_monitor_btn)
 
-        self.stop_monitor_btn = QPushButton("⏹️ 停止监控")
+        self.stop_monitor_btn = QPushButton("⏸️ 暂停")
         self.stop_monitor_btn.clicked.connect(self.stop_monitoring)
-        self.stop_monitor_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_monitor_btn)
 
         self.clear_monitor_btn = QPushButton("🗑️ 清除监控")
         self.clear_monitor_btn.clicked.connect(self.clear_monitoring)
         self.clear_monitor_btn.setEnabled(False)
+        self.stop_monitor_btn.setEnabled(False)
         btn_layout.addWidget(self.clear_monitor_btn)
 
         control_layout.addLayout(btn_layout)
@@ -455,13 +510,65 @@ class MonitoringWidget(QWidget):
 
         # 监控显示区域
         self.monitor_scroll = QScrollArea()
+        self.monitor_scroll.setStyleSheet("""
+            QScrollArea {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(236, 240, 241, 0.9),
+                    stop:1 rgba(189, 195, 199, 0.9));
+                border-radius: 8px;
+            }
+            QScrollArea > QWidget > QWidget {   /* viewport */
+                background: transparent;
+            }
+            QScrollArea::corner {               /* 右下角空白三角 */
+                background: transparent;
+            }
+        """)
         self.monitor_widget = QWidget()
         self.monitor_layout = QGridLayout(self.monitor_widget)
         self.monitor_scroll.setWidget(self.monitor_widget)
         self.monitor_scroll.setWidgetResizable(True)
 
         layout.addWidget(self.monitor_scroll)
+    def init_model_combo(self):
+        """初始化模型下拉框"""
+        self.model_combo.clear()
+        models = self.model_manager.scan_models()
 
+        if not models:
+            self.model_combo.addItem("无可用模型")
+            self.model_combo.setEnabled(False)
+        else:
+            self.model_combo.addItems([model['name'] for model in models])
+            self.model_combo.setEnabled(True)
+            self.try_load_default_model()
+    def try_load_default_model(self):
+        """尝试加载默认模型"""
+        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "无可用模型":
+            first_model = self.model_combo.itemText(0)
+            self.load_model_by_name(first_model)
+    def load_model_by_name(self, model_name):
+        """根据名称加载模型"""
+        models = self.model_manager.scan_models()
+        for model in models:
+            if model['name'] == model_name:
+                self.load_model(model['path'])
+                break
+    def on_model_changed(self, model_text):
+        """模型选择改变"""
+        if model_text != "无可用模型":
+            self.load_model_by_name(model_text)
+    def load_model(self, model_path):
+        from enhanced_detection_main import YOLO
+        """加载模型"""
+        try:
+            self.current_model = YOLO(model_path)
+            self.start_monitor_btn.setEnabled(True)
+            return True
+        except Exception as e:
+            pass
+
+            return False
     def select_model(self):
         """选择模型"""
         from enhanced_detection_main import YOLO
@@ -507,7 +614,8 @@ class MonitoringWidget(QWidget):
 
         # 创建显示标签
         self.create_camera_labels(camera_ids)
-
+        # 设置等高宽
+        self.set_equal_column_stretch()
         # 启动监控线程
         self.monitoring_thread = MultiCameraMonitorThread(self.current_model, camera_ids)
         self.monitoring_thread.camera_result_ready.connect(self.update_camera_display)
@@ -520,16 +628,20 @@ class MonitoringWidget(QWidget):
         self.stop_monitor_btn.setEnabled(True)
 
     def stop_monitoring(self):
-        """停止监控"""
-        if self.monitoring_thread and self.monitoring_thread.is_running:
-            self.monitoring_thread.stop()
-            self.monitoring_thread.wait()
-            self.clear_monitor_btn.setEnabled(True)
+        """暂停/继续监控"""
+        if self.monitoring_thread and self.monitoring_thread._run_flag:
+            if self.monitoring_thread._paused_flag:  # 监测是否已暂停
+                self.monitoring_thread.resume()  # 恢复
+                self.stop_monitor_btn.setText("⏸️ 暂停")  # 按钮文字：暂停
+            else:
+                self.monitoring_thread.pause()  # 暂停
+                self.stop_monitor_btn.setText("▶️ 继续")  # 按钮文字：继续
 
 
 
     def clear_monitoring(self):
         """停止监控"""
+        self.monitoring_thread.stop()
         self.clear_monitor_display()
         self.clear_monitor_btn.setEnabled(False)
 
@@ -544,20 +656,30 @@ class MonitoringWidget(QWidget):
 
             # 创建摄像头组
             camera_group = QGroupBox(f"📹 摄像头 {camera_id}")
-            camera_layout = QVBoxLayout(camera_group)
-
-            # 图像显示标签
-            image_label = QLabel("等待连接...")
-            image_label.setMinimumSize(320, 240)
-            image_label.setStyleSheet("""
-                border: 3px solid rgba(52, 152, 219, 0.3);
+            camera_group.setStyleSheet("""
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(248, 249, 250, 0.9), stop:1 rgba(233, 236, 239, 0.9));
                 color: #7f8c8d;
                 font-weight: bold;
                 font-size: 14px;
                 border-radius: 10px;
-                padding: 15px;
+        
+            """)
+            # camera_group.setMaximumHeight(350)
+            camera_layout = QVBoxLayout(camera_group)
+
+            # 图像显示标签
+            image_label = QLabel("等待连接...")
+            image_label.setMinimumSize(300, 240)
+            image_label.setMaximumHeight(350)
+            image_label.setStyleSheet("""
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(248, 249, 250, 0.9), stop:1 rgba(233, 236, 239, 0.9));
+                color: #7f8c8d;
+                font-weight: bold;
+                font-size: 14px;
+                border-radius: 10px;
+    
             """)
             image_label.setAlignment(Qt.AlignCenter)
             image_label.setScaledContents(True)
@@ -568,6 +690,7 @@ class MonitoringWidget(QWidget):
             status_label = QLabel("状态: 初始化中...")
             status_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
             camera_layout.addWidget(status_label)
+            camera_layout.addStretch()
 
             self.camera_labels[camera_id] = {
                 'image': image_label,
@@ -577,6 +700,12 @@ class MonitoringWidget(QWidget):
 
             self.monitor_layout.addWidget(camera_group, row, col)
 
+
+    def set_equal_column_stretch(self):
+        for c in range(self.monitor_layout.columnCount()):
+            self.monitor_layout.setColumnStretch(c, 1)
+        for r in range(self.monitor_layout.rowCount()):
+            self.monitor_layout.setRowStretch(r, 1)
     def clear_monitor_display(self):
         """清空监控显示"""
         for camera_id in list(self.camera_labels.keys()):

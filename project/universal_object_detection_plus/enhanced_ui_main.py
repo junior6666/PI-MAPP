@@ -255,7 +255,6 @@ class EnhancedDetectionUI(QMainWindow):
         # 监控页面标签页
         monitor_tab = MonitoringWidget(self.model_manager, self.camera_manager)
         self.tab_widget.addTab(monitor_tab, "🖥️ 实时监控")
-
         layout.addWidget(self.tab_widget)
         return widget
 
@@ -269,8 +268,8 @@ class EnhancedDetectionUI(QMainWindow):
         original_container = QWidget()
         original_layout = QVBoxLayout(original_container)
 
-        original_title = QLabel("📷 原图")
-        original_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 5px;")
+        original_title = QLabel("📷 源")
+        original_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 0px;")
         original_layout.addWidget(original_title)
 
         self.original_label = QLabel("等待加载源...")
@@ -284,7 +283,7 @@ class EnhancedDetectionUI(QMainWindow):
         result_layout = QVBoxLayout(result_container)
 
         result_title = QLabel("🎯 检测结果")
-        result_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 5px;")
+        result_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 0px;")
         result_layout.addWidget(result_title)
 
         self.result_label = QLabel("等待检测结果...")
@@ -333,6 +332,12 @@ class EnhancedDetectionUI(QMainWindow):
         self.save_results_btn.setEnabled(False)
         control_bar.addWidget(self.save_results_btn)
 
+        # 清空按钮
+        self.clear_results_btn = QPushButton("🗑️ 清空结果")
+        self.clear_results_btn.clicked.connect(self.clear_batch_results)
+        self.clear_results_btn.setEnabled(False)
+        control_bar.addWidget(self.clear_results_btn)
+
         layout.addLayout(control_bar)
 
         # 图像显示
@@ -353,7 +358,7 @@ class EnhancedDetectionUI(QMainWindow):
         layout.addLayout(image_layout)
 
         # 结果信息
-        self.batch_info_label = QLabel("选择文件夹开始批量检测")
+        self.batch_info_label = QLabel("📁 选择文件夹开始批量检测...")
         self.batch_info_label.setWordWrap(True)
         self.batch_info_label.setStyleSheet("""
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -677,6 +682,8 @@ class EnhancedDetectionUI(QMainWindow):
         self.statusBar().showMessage(f"批量检测完成 - {total_count} 张图片，{total_objects} 个目标")
 
         self.save_results_btn.setEnabled(True)
+        self.clear_results_btn.setEnabled(True)
+        self.result_index_label.setText(f"1/{len(self.batch_results)}")
         self.on_detection_finished()
 
     def on_detection_finished(self):
@@ -737,6 +744,18 @@ class EnhancedDetectionUI(QMainWindow):
         has_results = len(self.batch_results) > 0
         self.prev_result_btn.setEnabled(has_results and self.current_batch_index > 0)
         self.next_result_btn.setEnabled(has_results and self.current_batch_index < len(self.batch_results) - 1)
+
+    def clear_batch_results(self):
+        self.batch_results.clear()
+        self.batch_result_label.setText('🎯 批量检测: 结果图')
+        self.batch_original_label.setText('📷 批量检测: 原图')
+        self.batch_info_label.setText('📁 选择文件夹开始批量检测...')
+        self.result_index_label.setText("0/0")
+        self.save_results_btn.setEnabled(False)
+        self.next_result_btn.setEnabled(False)
+        self.prev_result_btn.setEnabled(False)
+        self.clear_results_btn.setEnabled(False)
+
 
     def save_batch_results(self):
         """保存批量检测结果"""
@@ -825,6 +844,8 @@ class EnhancedDetectionUI(QMainWindow):
         pixmap = QPixmap.fromImage(q_image)
         scaled_pixmap = pixmap.scaled(label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         label.setPixmap(scaled_pixmap)
+    def clear_display(self,lable):
+        pass
 
     def log_message(self, message):
         """添加日志消息"""

@@ -363,4 +363,228 @@ class DetectionResultWidget(QWidget):
 
         self.stats_label.setText(stats_text)
 
-# 继续下一部分...
+import sys
+from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QGridLayout, QGroupBox,
+    QLabel, QVBoxLayout, QSizePolicy
+)
+
+# ---------- 仅用于演示的虚拟摄像头 ----------
+class DummyCamera:
+    """假装每 50 ms 生成一张 640×360 的彩色噪声图片"""
+    def __init__(self, cid):
+        self.cid = cid
+        self.w = 640
+        self.h = 360
+
+    def read(self):
+        import numpy as np
+        img = np.random.randint(0, 255, (self.h, self.w, 3), dtype=np.uint8)
+        return True, img
+# ------------------------------------------
+
+
+class CameraGrid(QWidget):
+    def __init__(self, camera_ids):
+        super().__init__()
+        self.camera_ids = camera_ids
+        self.cameras = {cid: DummyCamera(cid) for cid in camera_ids}
+        self.labels = {}  # 保存每个摄像头的 QLabel
+
+        self.setWindowTitle("摄像头监控网格")
+        self.resize(900, 600)
+
+        # ---------- 主布局 ----------
+        self.grid = QGridLayout(self)
+        self.grid.setSpacing(10)        # 卡片间隙
+        self.grid.setContentsMargins(10, 10, 10, 10)
+
+        self.create_camera_cards()
+        self.start_timers()
+
+    # ---------- 创建卡片 ----------
+    def create_camera_cards(self):
+        cols = 2
+        for idx, cid in enumerate(self.camera_ids):
+            row, col = divmod(idx, cols)
+
+            # 1. 外壳 GroupBox：固定大小，不可被布局拉伸
+            card = QGroupBox(f"📹 摄像头 {cid}")
+            card.setFixedSize(420, 290)          # 宽 420，高 290（包含标题栏）
+
+            # 2. 内部垂直布局
+            vbox = QVBoxLayout(card)
+            vbox.setContentsMargins(8, 8, 8, 8)  # 内边距
+            vbox.setSpacing(4)
+
+            # 3. 图像标签：按比例缩放、居中
+            img_lbl = QLabel("等待连接…")
+            img_lbl.setMinimumSize(1, 1)
+            img_lbl.setAlignment(Qt.AlignCenter)
+            img_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            img_lbl.setScaledContents(False)     # 关键：不拉伸
+            img_lbl.setStyleSheet("""
+                QLabel{
+                    border: 2px solid #3498db;
+                    border-radius: 6px;
+                    background: #f8f9fa;
+                }
+            """)
+            vbox.addWidget(img_lbl)
+
+            # 4. 状态标签
+            st_lbl = QLabel("状态：正常")
+            st_lbl.setMaximumHeight(20)
+            st_lbl.setStyleSheet("color:#7f8c8d; font-size:11px;")
+            vbox.addWidget(st_lbl)
+
+            # 5. 保存引用
+            self.labels[cid] = img_lbl
+
+            # 6. 放进网格
+            self.grid.addWidget(card, row, col)
+
+    # ---------- 定时刷新 ----------
+    def start_timers(self):
+        for cid in self.camera_ids:
+            timer = QTimer(self)
+            timer.timeout.connect(lambda c=cid: self.update_frame(c))
+            timer.start(50)
+
+    def update_frame(self, cid):
+        ok, frame = self.cameras[cid].read()
+        if ok:
+            h, w, ch = frame.shape
+            bytes_per_line = ch * w
+            qimg = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
+            pixmap = QPixmap.fromImage(qimg)
+
+            lbl = self.labels[cid]
+            # 按 QLabel 当前尺寸保持比例缩放
+            scaled = pixmap.scaled(
+                lbl.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            lbl.setPixmap(scaled)
+
+
+import sys
+import cv2
+import numpy as np
+from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QGridLayout, QGroupBox,
+    QLabel, QVBoxLayout, QSizePolicy
+)
+
+# ---------- 仅用于演示：虚拟摄像头 ----------
+class DummyCam:
+    def __init__(self, cid):
+        self.cid = cid
+
+    def read(self):
+        # 生成一张 640×360 的彩色噪声
+        img = np.random.randint(0, 255, (360, 640, 3), dtype=np.uint8)
+        return True, img
+# ------------------------------------------
+
+
+class AspectLabel(QLabel):
+    """
+    一个始终保持 16:9 的 QLabel，可被布局拉伸，
+    但自身高度 = 宽度 * 9 / 16
+    """
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("""
+            border: 2px solid #3498db;
+            border-radius: 6px;
+            background: #f8f9fa;
+        """)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setMinimumHeight(1)
+
+    def heightForWidth(self, w):
+        # 布局器询问：给定宽度 w，需要多高？
+        return int(w * 9 / 16)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def sizeHint(self):
+        w = self.width()
+        return QSize(w, self.heightForWidth(w))
+
+
+class CameraGrid(QWidget):
+    def __init__(self, camera_ids):
+        super().__init__()
+        self.setWindowTitle("等宽高两列摄像头")
+        self.resize(900, 600)
+
+        self.camera_ids = camera_ids
+        self.cams = {cid: DummyCam(cid) for cid in camera_ids}
+        self.labels = {}           # cid -> AspectLabel
+
+        # ---------- 主布局 ----------
+        self.grid = QGridLayout(self)
+        self.grid.setSpacing(10)
+        self.grid.setContentsMargins(10, 10, 10, 10)
+
+        self.create_cards()
+        self.start_timers()
+
+    def create_cards(self):
+        cols = 2
+        for idx, cid in enumerate(self.camera_ids):
+            row, col = divmod(idx, cols)
+
+            # 1. GroupBox 不固定大小，可被拉伸
+            card = QGroupBox(f"📹 摄像头 {cid}")
+            vbox = QVBoxLayout(card)
+            vbox.setContentsMargins(6, 6, 6, 6)
+            vbox.setSpacing(4)
+
+            # 2. 图像区域：始终 16:9
+            img = AspectLabel("等待连接…")
+            vbox.addWidget(img)
+
+            # 3. 状态栏
+            status = QLabel("状态：正常")
+            status.setStyleSheet("color:#7f8c8d; font-size:11px;")
+            vbox.addWidget(status)
+
+            # 4. 记录
+            self.labels[cid] = img
+
+            # 5. 放进网格
+            self.grid.addWidget(card, row, col)
+
+    def start_timers(self):
+        for cid in self.camera_ids:
+            t = QTimer(self)
+            t.timeout.connect(lambda c=cid: self.update_frame(c))
+            t.start(50)
+
+    def update_frame(self, cid):
+        ok, frame = self.cams[cid].read()
+        if ok:
+            h, w, ch = frame.shape
+            qimg = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888).rgbSwapped()
+            px = QPixmap.fromImage(qimg)
+            lbl = self.labels[cid]
+            # 按 label 当前尺寸保持比例
+            px = px.scaled(lbl.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            lbl.setPixmap(px)
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    w = CameraGrid([1, 2, 3, 4, 5])   # 5 个摄像头，最后一行 1 个
+    w.show()
+    sys.exit(app.exec_())

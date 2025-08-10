@@ -44,7 +44,7 @@ def main():
     try:
         subprocess.run(cmd, check=True)
         print("✅ 打包成功！")
-        print(f"📁 EXE文件位置: dist/视频转GIF工具.exe")
+        print(f"📁 EXE文件位置: dist/视频转GIF工具2.0.exe")
     except subprocess.CalledProcessError:
         print("❌ 打包失败")
     

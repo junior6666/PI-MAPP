@@ -296,7 +296,7 @@ class CameraManager:
         self.cameras = []
 
         # 检测摄像头（检测前8个索引）
-        for i in range(8):
+        for i in range(4):
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
                 ret, frame = cap.read()
@@ -346,10 +346,6 @@ class ModelManager:
             Path("pt_models"),
             Path("models"),
             Path("weights"),
-            Path("yolo_models"),
-            Path.home() / "yolo_models",
-            Path("/usr/local/share/yolo_models"),  # Linux系统路径
-            Path("C:/yolo_models"),  # Windows系统路径
         ]
         self.current_model = None
         self.class_names = []
@@ -595,11 +591,14 @@ class DetectionThread(QThread):
 
     def pause(self):
         self.is_paused = True
+        self.status_changed.emit(f"暂停中...")
 
     def resume(self):
         self.is_paused = False
+        self.status_changed.emit(f"恢复检测")
+
 
     def stop(self):
         self.is_running = False
+        self.status_changed.emit(f"检测结束!")
 
-# 继续下一部分...
