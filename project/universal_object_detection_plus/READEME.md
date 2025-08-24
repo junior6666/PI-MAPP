@@ -6,7 +6,8 @@
 ![Enhanced Detection System](https://img.shields.io/badge/Version-2.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
-
+## 👿 界面预览
+![UI初始化界面.png](ui_predict_results/UI%E5%88%9D%E5%A7%8B%E5%8C%96%E7%95%8C%E9%9D%A2.png)
 ## ✨ 主要特性
 
 ### 🎨 现代化UI设计
@@ -324,7 +325,18 @@ class ModelManager:
 - **问题反馈**: [GitHub Issues]
 - **功能建议**: [GitHub Discussions]
 - **邮箱**: 2642144249@qq.com
+## 😄 预测效果
 
+* 垃圾检测
+![垃圾检测.png](ui_predict_results/%E5%9E%83%E5%9C%BE%E6%A3%80%E6%B5%8B.png)
+* 头盔检测
+![头盔检测.png](ui_predict_results/%E5%A4%B4%E7%9B%94%E6%A3%80%E6%B5%8B.png)
+* 息肉诊断
+![息肉诊断.png](ui_predict_results/%E6%81%AF%E8%82%89%E8%AF%8A%E6%96%AD.png)
+* 文档分析
+![文档分析.png](ui_predict_results/%E6%96%87%E6%A1%A3%E5%88%86%E6%9E%90.png)
+* 火情诊断
+![火情检测.png](ui_predict_results/%E7%81%AB%E6%83%85%E6%A3%80%E6%B5%8B.png)
 ---
 
 **Enhanced Object Detection System v2.0** - 让目标检测更加简单、高效、美观！

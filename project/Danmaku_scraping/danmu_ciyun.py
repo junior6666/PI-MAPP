@@ -520,7 +520,7 @@ class MainWindow(QMainWindow):
             return
 
         filename, _ = QFileDialog.getSaveFileName(
-            self, "保存弹幕", "danmu.txt", "Text Files (*.txt)")
+            self, "保存弹幕", "output/danmu.txt", "Text Files (*.txt)")
 
         if filename:
             try:
@@ -534,7 +534,7 @@ class MainWindow(QMainWindow):
             return
 
         filename, _ = QFileDialog.getSaveFileName(
-            self, "保存弹幕", "danmu.ass", "Text Files (*.ass)")
+            self, "保存弹幕", "output/danmu.ass", "Text Files (*.ass)")
 
         if filename:
             try:
