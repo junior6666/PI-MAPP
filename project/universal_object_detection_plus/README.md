@@ -328,16 +328,35 @@ class ModelManager:
 ## 😄 预测效果
 
 * 垃圾检测
+* 类别信息： {0: 'Aluminium foil', 1: 'Bottle cap', 2: 'Bottle', 3: 'Broken glass', 4: 'Can', 5: 'Carton', 6: 'Cigarette', 7: 'Cup', 8: 'Lid', 9: 'Other litter', 10: 'Other plastic', 11: 'Paper', 12: 'Plastic bag - wrapper', 13: 'Plastic container', 14: 'Pop tab', 15: 'Straw', 16: 'Styrofoam piece', 17: 'Unlabeled litter'}
 ![垃圾检测.png](ui_predict_results/%E5%9E%83%E5%9C%BE%E6%A3%80%E6%B5%8B.png)
 * 头盔检测
+* 类别信息： {0: 'Helmet', 1: 'Face'}
 ![头盔检测.png](ui_predict_results/%E5%A4%B4%E7%9B%94%E6%A3%80%E6%B5%8B.png)
 * 息肉诊断
+* 类别信息： {0: 'O_Hyperplastic', 1: '1_Adenomatic'}
 ![息肉诊断.png](ui_predict_results/%E6%81%AF%E8%82%89%E8%AF%8A%E6%96%AD.png)
 * 文档分析
+* 类别信息： {0: 'Caption', 1: 'Footnote', 2: 'Formula', 3: 'List-item', 4: 'Page-footer', 5: 'Page-header', 6: 'Picture', 7: 'Section-header', 8: 'Table', 9: 'Text', 10: 'Title'}
 ![文档分析.png](ui_predict_results/%E6%96%87%E6%A1%A3%E5%88%86%E6%9E%90.png)
 * 火情诊断
+* 类别信息： {0: 'fire', 1: 'smoke'}
 ![火情检测.png](ui_predict_results/%E7%81%AB%E6%83%85%E6%A3%80%E6%B5%8B.png)
+* 摔倒检测
+* 类别信息： {0: 'Fall Detected', 1: 'Walking', 2: 'Sitting'}
+![摔倒检测.png](ui_predict_results/%E6%91%94%E5%80%92%E6%A3%80%E6%B5%8B.png)
+* 动物检测
+* 类别信息： {0: 'tit', 1: 'bullfinch', 2: 'squirrel', 3: 'jay'}
+![动物检测.png](ui_predict_results/%E5%8A%A8%E7%89%A9%E6%A3%80%E6%B5%8B.png)
+* 无人机检测
+* 类别信息：{0: 'drone'}
+![无人机检测.png](ui_predict_results/%E6%97%A0%E4%BA%BA%E6%9C%BA%E6%A3%80%E6%B5%8B.png)
+* vis_drone2019_数据集目标检测
+* 类别信息： {0: 'pedestrian', 1: 'people', 2: 'bicycle', 3: 'car', 4: 'van', 5: 'truck', 6: 'tricycle', 7: 'awning-tricycle', 8: 'bus', 9: 'motor'}
+![vis_drone2019数据集目标检测.png](ui_predict_results/vis_drone2019%E6%95%B0%E6%8D%AE%E9%9B%86%E7%9B%AE%E6%A0%87%E6%A3%80%E6%B5%8B.png)
+
 ---
+
 
 **Enhanced Object Detection System v2.0** - 让目标检测更加简单、高效、美观！
 
