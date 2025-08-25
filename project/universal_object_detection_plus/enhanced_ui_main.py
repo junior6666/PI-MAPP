@@ -42,12 +42,13 @@ class EnhancedDetectionUI(QMainWindow):
         # 管理器
         self.camera_manager = CameraManager()
         self.model_manager = ModelManager()
-
+        self.log_text = QTextEdit()
         self.init_ui()
         self.setWindowIcon(self.create_enhanced_icon())
 
         # 应用样式
         self.setStyleSheet(StyleManager.get_main_stylesheet())
+
 
     def init_ui(self):
         """初始化UI"""
@@ -80,6 +81,7 @@ class EnhancedDetectionUI(QMainWindow):
 
         # 尝试加载默认模型
         self.try_load_default_model()
+
 
     def create_control_panel(self):
         """创建控制面板"""
@@ -217,7 +219,7 @@ class EnhancedDetectionUI(QMainWindow):
         log_group = QGroupBox("📋 运行日志")
         log_layout = QVBoxLayout(log_group)
 
-        self.log_text = QTextEdit()
+        # self.log_text = QTextEdit()
         self.log_text.setMinimumHeight(180)
         self.log_text.setFont(QFont("Consolas", 10))
         log_layout.addWidget(self.log_text)
@@ -924,8 +926,8 @@ def main():
     app.setOrganizationName("AI Vision Lab")
 
     # 设置高DPI缩放
-    app.setAttribute(Qt.AA_EnableHighDpiScaling)
-    app.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    # app.setAttribute(Qt.AA_EnableHighDpiScaling)
+    # app.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     # 创建主窗口
     window = EnhancedDetectionUI()

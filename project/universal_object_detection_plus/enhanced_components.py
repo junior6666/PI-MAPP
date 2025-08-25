@@ -671,7 +671,6 @@ class MonitoringWidget(QWidget):
             # 图像显示标签
             image_label = QLabel("等待连接...")
             image_label.setMinimumSize(300, 240)
-            image_label.setMaximumHeight(350)
             image_label.setStyleSheet("""
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(248, 249, 250, 0.9), stop:1 rgba(233, 236, 239, 0.9));
@@ -684,7 +683,7 @@ class MonitoringWidget(QWidget):
             image_label.setAlignment(Qt.AlignCenter)
             image_label.setScaledContents(True)
 
-            camera_layout.addWidget(image_label)
+            camera_layout.addWidget(image_label,stretch=6)
 
             # 状态标签
             status_label = QLabel("状态: 初始化中...")
