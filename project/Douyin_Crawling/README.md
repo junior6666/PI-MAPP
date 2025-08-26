@@ -52,8 +52,6 @@ pip install PySide6 DrissionPage
 
 ## 🖼️ 界面预览
 ![wechat_2025-08-26_164011_277.png](ui_img/wechat_2025-08-26_164011_277.png)
-![应用界面](https://via.placeholder.com/800x500.png?text=Douyin+数据爬取工具界面预览)
-
 > ✨ 精美的渐变背景和现代化按钮设计
 
 ## 📁 项目结构
