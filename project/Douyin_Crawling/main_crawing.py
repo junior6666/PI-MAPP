@@ -35,12 +35,21 @@ def parse_chunked_data(data_str,csv_w):
                             '作者': nickname,
                             '签名': signature
                         }
+                        print(dic)
                         csv_w.writerow(dic)
 
                 except json.JSONDecodeError as e:
                     print(f"JSON 解析失败: {e}")
             i += 1
 
+def get_data(raw_json: dict) -> dict:
+    # raw_json 就是你上面贴的那种结构
+    ai = raw_json['data'][0]['aweme_info']   # 如果有多条再循环
+    return {
+        '文案': ai['desc'],
+        '作者': ai['author']['nickname'],
+        '签名': '无'
+    }
 
 # 打开 CSV 文件
 f = open('data/data_wenan.csv', mode='w', encoding='utf-8', newline='')
@@ -58,16 +67,23 @@ url = "https://www.douyin.com/jingxuan/search/%E8%87%AA%E5%BE%8B"
 driver.get(url)
 
 # 爬取多页内容
-for page in range(20):
+for page in range(10):
     print(f'正在爬取第{page + 1}页的内容')
-    driver.scroll.to_bottom()
+
     try:
         # 等待监听到数据包
         resp = driver.listen.wait()
         data_str = resp.response.body
-        parse_chunked_data(data_str=data_str,csv_w=csv_w)
+        # print(data_str)
+        if page!=0:
+            print(get_data(data_str))
+        else:
+            parse_chunked_data(data_str=data_str,csv_w=csv_w)
+        driver.scroll.to_bottom()
+        driver.listen.start('aweme/v1/web/general/search/single/')
     except Exception as e:
         print(f"监听数据包时出错: {e}")
 
 # 关闭文件
 f.close()
+

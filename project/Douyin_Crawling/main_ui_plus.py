@@ -6,25 +6,13 @@ import threading
 from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLineEdit,
-    QPushButton, QLabel, QFileDialog, QTextEdit
+    QPushButton, QLabel, QFileDialog, QTextEdit, QCheckBox
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor
 from DrissionPage import ChromiumPage
 
-
-def create_icon_pixmap(text="DC", size=64, bg_color=QColor(40, 40, 40), text_color=QColor(200, 200, 200)):
-    """生成包含文字的正方形图标"""
-    pixmap = QPixmap(size, size)
-    pixmap.fill(bg_color)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing)
-    painter.setPen(text_color)
-    font = QFont("SimHei", 24, QFont.Bold)
-    painter.setFont(font)
-    painter.drawText(pixmap.rect(), Qt.AlignCenter, text)
-    painter.end()
-    return pixmap
+from project.Douyin_Crawling.save_icon_as_ico import IconGenerator
 
 
 class CrawlerWorker(QThread):
@@ -32,14 +20,22 @@ class CrawlerWorker(QThread):
     status_signal = Signal(str)
     data_signal = Signal(list)
     finished_signal = Signal()
+    error_signal = Signal(str)
 
-    def __init__(self, search_theme, page_count):
+    def __init__(self, search_theme, page_count, csv_filename='data/data_wenan.csv'):
         super().__init__()
         self.search_theme = search_theme
         self.page_count = page_count
+        self.csv_filename = csv_filename
+        self.csv_file = None
+        self.csv_writer = None
+        self.collected_data = []  # 在worker中维护完整的数据集合
 
     def run(self):
         try:
+            # 初始化CSV文件
+            self._init_csv_file()
+
             self.status_signal.emit("正在启动浏览器...")
             driver = ChromiumPage()
 
@@ -54,56 +50,120 @@ class CrawlerWorker(QThread):
 
             for page in range(self.page_count):
                 self.status_signal.emit(f"正在爬取第 {page + 1} / {self.page_count} 页...")
-                driver.scroll.to_bottom()
+
                 try:
                     resp = driver.listen.wait(timeout=10)
                     if not resp:
                         self.status_signal.emit(f"第 {page + 1} 页未获取到数据，继续...")
                         continue
+
                     data_str = resp.response.body
-                    new_data = self.parse_chunked_data(data_str)
-                    collected_data.extend(new_data)
+
+                    # 处理第一页和其他页的不同格式
+                    if page == 0:
+                        new_data = self.parse_chunked_data(data_str)
+                    else:
+                        new_data = self.parse_json_data(data_str)
+
+                    # 保存数据到CSV并收集
+                    for item in new_data:
+                        self.csv_writer.writerow(item)
+                        collected_data.append(item)
+
                     self.data_signal.emit(new_data)  # 实时发送数据
+
+                    # 滚动到底部准备加载下一页
+                    driver.scroll.to_bottom()
+
                 except Exception as e:
                     self.status_signal.emit(f"第 {page + 1} 页爬取失败: {str(e)}")
                     continue
 
             driver.quit()
-            self.status_signal.emit(f"爬取完成，共获取 {len(collected_data)} 条数据。")
+            self.status_signal.emit(f"爬取完成，共获取 {len(self.collected_data)} 条数据。")
             self.finished_signal.emit()
+
         except Exception as e:
             self.status_signal.emit(f"爬取异常: {str(e)}")
+            self.error_signal.emit(str(e))
+        finally:
+            # 确保关闭CSV文件
+            if self.csv_file:
+                self.csv_file.close()
+
+    def _init_csv_file(self):
+        """初始化CSV文件"""
+        try:
+            self.csv_file = open(self.csv_filename, mode='w', encoding='utf-8', newline='')
+            self.csv_writer = csv.DictWriter(self.csv_file, fieldnames=['文案', '作者', '签名'])
+            self.csv_writer.writeheader()
+        except Exception as e:
+            self.status_signal.emit(f"CSV文件初始化失败: {str(e)}")
+            self.error_signal.emit(str(e))
 
     def parse_chunked_data(self, data_str):
+        """解析分块传输编码的数据（第一页）"""
         lines = data_str.strip().splitlines()
         results = []
         i = 0
+
         while i < len(lines):
             line = lines[i].strip()
-            if not line or re.fullmatch(r'[0-9a-fA-F]+', line):
+
+            # 跳过空行
+            if not line:
                 i += 1
+                continue
+
+            # 匹配十六进制数字（块大小）
+            if re.fullmatch(r'[0-9a-fA-F]+', line):
+                i += 1  # 下一行是数据
                 if i < len(lines):
                     json_line = lines[i].strip()
                     try:
                         data = json.loads(json_line)
-                        for item in data.get("data", []):
-                            aweme_info = item.get("aweme_info", {})
-                            desc = aweme_info.get("desc", "").strip()
-                            author = aweme_info.get("author", {})
-                            nickname = author.get('nickname', '无').strip()
-                            signature = author.get('signature', '无').strip()
-                            if desc:  # 只保留有文案的内容
-                                results.append({
-                                    '文案': desc,
-                                    '作者': nickname,
-                                    '签名': signature
-                                })
-                    except json.JSONDecodeError:
-                        pass
+                        results.extend(self._extract_data_from_json(data))
+                    except json.JSONDecodeError as e:
+                        self.status_signal.emit(f"JSON解析失败: {e}")
                 i += 1
             else:
                 i += 1
+
         return results
+
+    def parse_json_data(self, data_str):
+        """解析JSON格式的数据（第二页及以后）"""
+        try:
+            data = json.loads(data_str)
+            return self._extract_data_from_json(data)
+        except json.JSONDecodeError as e:
+            self.status_signal.emit(f"JSON解析失败: {e}")
+            return []
+
+    def _extract_data_from_json(self, data):
+        """从JSON数据中提取信息"""
+        results = []
+        for item in data.get("data", []):
+            aweme_info = item.get("aweme_info", {})
+            desc = aweme_info.get("desc", "").strip()
+            author = aweme_info.get("author", {})
+            nickname = author.get('nickname', '无').strip()
+            signature = author.get('signature', '无').strip()
+
+            if desc:  # 只保留有文案的内容
+                item_data = {
+                    '文案': desc,
+                    '作者': nickname,
+                    '签名': signature
+                }
+                results.append(item_data)
+                self.collected_data.append(item_data)  # 同时添加到完整数据集合中
+
+        return results
+
+    def get_collected_data(self):
+        """获取收集到的完整数据"""
+        return self.collected_data
 
 
 class MainWindow(QMainWindow):
@@ -114,7 +174,15 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 900, 600)
 
         # 设置图标
-        icon_pixmap = create_icon_pixmap()
+        icon_pixmap = IconGenerator(
+            bg_color=(30, 60, 120),
+            text_color=(230, 255, 255),
+            text="Dc",
+            enable_gradient=True,
+            size=128,
+            font_size=48,
+            corner_radius=20,
+        ).pixmap()
         self.setWindowIcon(QIcon(icon_pixmap))
 
         # 应用渐变样式（黑灰简约）
@@ -169,18 +237,17 @@ class MainWindow(QMainWindow):
         # 顶部横向布局：搜索框、页数、按钮
         top_layout = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("请输入搜索主题（如：自律）")
+        self.search_input.setPlaceholderText("请输入搜索主题（如：自律, 健身, 美食, 锻炼, 减肥, 早起, 阅读, 旅行")
         self.page_input = QLineEdit()
         self.page_input.setPlaceholderText("页数")
+        self.pure_mode_cb = QCheckBox("纯净模式")
+        self.pure_mode_cb.setStyleSheet("color:white;")# <--- 新增
         self.start_button = QPushButton("开始爬取")
 
-        # 设置等宽
-        # self.search_input.setSizePolicy(Qt.Expanding, Qt.Fixed)
-        # self.page_input.setSizePolicy(Qt.Expanding, Qt.Fixed)
-        # self.start_button.setSizePolicy(Qt.Expanding, Qt.Fixed)
 
         top_layout.addWidget(self.search_input,stretch=2)
-        top_layout.addWidget(self.page_input,stretch=2)
+        top_layout.addWidget(self.page_input,stretch=1)
+        top_layout.addWidget(self.pure_mode_cb)
         top_layout.addWidget(self.start_button)
         main_layout.addLayout(top_layout)
 
@@ -209,11 +276,6 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self.start_crawling)
         self.export_button.clicked.connect(self.export_data)
 
-        # 初始化
-        self.data_list = []
-        self.worker = None
-        self.thread = None
-
     def start_crawling(self):
         search_theme = self.search_input.text().strip()
         page_text = self.page_input.text().strip()
@@ -232,7 +294,6 @@ class MainWindow(QMainWindow):
         # 禁用按钮
         self.start_button.setEnabled(False)
         self.text_output.clear()
-        self.data_list.clear()
 
         # 启动爬虫线程
         self.worker = CrawlerWorker(search_theme, page_count)
@@ -243,6 +304,7 @@ class MainWindow(QMainWindow):
         self.worker.status_signal.connect(self.update_status)
         self.worker.data_signal.connect(self.append_texts)
         self.worker.finished_signal.connect(self.on_crawl_finished)
+        self.worker.error_signal.connect(self.on_crawl_error)
         self.worker.finished_signal.connect(self.thread.quit)
         self.worker.finished_signal.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
@@ -253,19 +315,34 @@ class MainWindow(QMainWindow):
         self.status_label.setText(msg)
 
     def append_texts(self, new_data):
+        pure = self.pure_mode_cb.isChecked()  # 是否开启纯净模式
         for item in new_data:
-            text = f"【{item['作者']}】{item['文案']}\n"
-            if item['签名'] != '无':
-                text += f"   签名: {item['签名']}\n"
-            text += "\n"
+            if pure:
+                text = f"{item['文案']}\n\n"
+            else:
+                text = f"【{item['作者']}】{item['文案']}\n"
+                if item['签名'] != '无':
+                    text += f"   签名: {item['签名']}\n"
+                text += "\n"
             self.text_output.insertPlainText(text)
-            self.data_list.append(item)
 
     def on_crawl_finished(self):
         self.start_button.setEnabled(True)
+        self.status_label.setText("爬取完成")
+
+    def on_crawl_error(self, error_msg):
+        self.start_button.setEnabled(True)
+        self.status_label.setText(f"爬取出错: {error_msg}")
 
     def export_data(self):
-        if not self.data_list:
+        if not self.worker:
+            self.status_label.setText("没有可用的数据可导出！")
+            return
+            
+        # 从worker获取完整的数据
+        data_list = self.worker.get_collected_data()
+        
+        if not data_list:
             self.status_label.setText("没有数据可导出！")
             return
 
@@ -281,14 +358,18 @@ class MainWindow(QMainWindow):
                 with open(file_path, mode='w', encoding='utf-8', newline='') as f:
                     writer = csv.DictWriter(f, fieldnames=['文案', '作者', '签名'])
                     writer.writeheader()
-                    writer.writerows(self.data_list)
+                    writer.writerows(data_list)
             elif ext == ".txt":
                 with open(file_path, mode='w', encoding='utf-8') as f:
-                    for item in self.data_list:
-                        f.write(f"【{item['作者']}】{item['文案']}\n")
-                        if item['签名'] != '无':
-                            f.write(f"   签名: {item['签名']}\n")
-                        f.write("\n")
+                    pure = self.pure_mode_cb.isChecked()
+                    for item in data_list:
+                        if pure:
+                            f.write(f"{item['文案']}\n\n")
+                        else:
+                            f.write(f"【{item['作者']}】{item['文案']}\n")
+                            if item['签名'] != '无':
+                                f.write(f"   签名: {item['签名']}\n")
+                            f.write("\n")
             self.status_label.setText(f"数据已导出到：{file_path}")
         except Exception as e:
             self.status_label.setText(f"导出失败：{str(e)}")
