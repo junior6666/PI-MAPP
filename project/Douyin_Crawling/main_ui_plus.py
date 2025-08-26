@@ -71,11 +71,11 @@ class CrawlerWorker(QThread):
                         collected_data.append(item)
 
                     self.data_signal.emit(new_data)  # 实时发送数据
-
                     # 滚动到底部准备加载下一页
                     driver.scroll.to_bottom()
-
+                    driver.listen.start('aweme/v1/web/general/search/single/')
                 except Exception as e:
+                    print(f"第 {page + 1} 页爬取失败: {str(e)}")
                     self.status_signal.emit(f"第 {page + 1} 页爬取失败: {str(e)}")
                     continue
 
@@ -134,8 +134,8 @@ class CrawlerWorker(QThread):
     def parse_json_data(self, data_str):
         """解析JSON格式的数据（第二页及以后）"""
         try:
-            data = json.loads(data_str)
-            return self._extract_data_from_json(data)
+            # data = json.loads(data_str)
+            return self._extract_data_from_json(data_str)
         except json.JSONDecodeError as e:
             self.status_signal.emit(f"JSON解析失败: {e}")
             return []

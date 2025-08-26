@@ -108,6 +108,8 @@ pyinstaller --onefile --windowed --icon=icon.ico --name "DouyinCrawler" --clean 
 
 - [DrissionPage](https://github.com/g1879/DrissionPage) - 优秀的网页自动化工具
 - [PySide6](https://www.qt.io/qt-for-python) - Qt for Python 官方绑定库
+- 灵感来源：[UP主：轻松学Python](https://www.bilibili.com/video/BV1tH4y1c7Ca?spm_id_from=333.788.videopod.episodes&vd_source=ea444bcb59e16e58cfdca990f3514384&p=4)
+- 
 - 所有贡献者和用户 🎊
 
 ---

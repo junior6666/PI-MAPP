@@ -80,7 +80,7 @@ for page in range(10):
         else:
             parse_chunked_data(data_str=data_str,csv_w=csv_w)
         driver.scroll.to_bottom()
-        driver.listen.start('aweme/v1/web/general/search/single/')
+        driver.listen.start('aweme/v1/web/general/search/')
     except Exception as e:
         print(f"监听数据包时出错: {e}")
 
