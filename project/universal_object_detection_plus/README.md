@@ -46,6 +46,8 @@
 - **异常处理**: 完善的错误处理和用户提示系统
 - **资源管理**: 自动管理摄像头等硬件资源
 
+
+
 ## 🛠️ 系统要求
 
 ### 基础环境
@@ -112,7 +114,188 @@ models/             # 通用模型目录
 weights/            # 权重文件目录
 ~/yolo_models/      # 用户主目录
 ```
+## YOLOv8 - YOLOv12 权重下载链接 🚀
 
+### 代码自动下载 🧑‍💻
+```python
+from ultralytics import YOLO
+# 下面任意一行代码都可以自动从对应链接下载权重到当前目录，你也可以手动从链接中下载权重（需要科学上网）;经测试，目前该UI支持以下所有权重
+
+# YOLOv8
+model = YOLO('yolov8s.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov8m.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov8l.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov8x.pt')  # 🌟 你可以选择 s/m/l/x 版本
+
+# YOLOv9
+model = YOLO('yolov9s.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov9m.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov9l.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov9x.pt')  # 🌟 你可以选择 s/m/l/x 版本
+
+# YOLOv10
+model = YOLO('yolov10s.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov10m.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov10l.pt')  # 🌟 你可以选择 s/m/l/x 版本
+model = YOLO('yolov10x.pt')  # 🌟 你可以选择 s/m/l/x 版本
+
+# YOLOv11
+model = YOLO('yolo11n.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo11m.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo11l.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo11x.pt')  # 🌟 你可以选择 n/m/l/x 版本
+
+# YOLOv12
+model = YOLO('yolo12n.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo12m.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo12l.pt')  # 🌟 你可以选择 n/m/l/x 版本
+model = YOLO('yolo12x.pt')  # 🌟 你可以选择 n/m/l/x 版本
+```
+
+## 🌐 手动下载链接（需访问 GitHub）
+
+您可以复制以下链接，在浏览器中直接下载对应模型权重：
+
+### YOLOv8
+- `yolov8s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8s.pt) 🔗
+- `yolov8m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8m.pt) 🔗
+- `yolov8l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8l.pt) 🔗
+- `yolov8x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8x.pt) 🔗
+
+### YOLOv9
+- `yolov9s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9s.pt) 🔗
+- `yolov9m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9m.pt) 🔗
+- `yolov9l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9l.pt) 🔗
+- `yolov9x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9x.pt) 🔗
+
+### YOLOv10
+- `yolov10s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10s.pt) 🔗
+- `yolov10m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10m.pt) 🔗
+- `yolov10l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10l.pt) 🔗
+- `yolov10x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10x.pt) 🔗
+
+### YOLOv11
+- `yolo11n.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt) 🔗
+- `yolo11m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt) 🔗
+- `yolo11l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l.pt) 🔗
+- `yolo11x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt) 🔗
+
+### YOLOv12
+- `yolo12n.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12n.pt) 🔗
+- `yolo12m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12m.pt) 🔗
+- `yolo12l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12l.pt) 🔗
+- `yolo12x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12x.pt) 🔗
+
+---
+## 自定义权重介绍及获取方式
+
+### 垃圾检测 (Garbage Detection)
+- **权重名**：`garbage_detection.pt` (垃圾检测权重)
+- **分类目标**：
+  - 0: Aluminium foil (铝箔)
+  - 1: Bottle cap (瓶盖)
+  - 2: Bottle (瓶子)
+  - 3: Broken glass (碎玻璃)
+  - 4: Can (罐子)
+  - 5: Carton (纸板)
+  - 6: Cigarette (香烟)
+  - 7: Cup (杯子)
+  - 8: Lid (盖子)
+  - 9: Other litter (其他垃圾)
+  - 10: Other plastic (其他塑料)
+  - 11: Paper (纸张)
+  - 12: Plastic bag - wrapper (塑料袋 - 包装纸)
+  - 13: Plastic container (塑料容器)
+  - 14: Pop tab (拉环)
+  - 15: Straw (吸管)
+  - 16: Styrofoam piece (泡沫塑料碎片)
+  - 17: Unlabeled litter (未标记的垃圾)
+
+### 头盔检测 (Helmet Detection)
+- **权重名**：`helmet_detection.pt` (头盔检测权重)
+- **分类目标**：
+  - 0: Helmet (头盔)
+  - 1: Face (面部)
+
+### 息肉诊断 (Polyp Diagnosis)
+- **权重名**：`polyp_diagnosis.pt` (息肉诊断权重)
+- **分类目标**：
+  - 0: O_Hyperplastic (增生性息肉)
+  - 1: 1_Adenomatic (腺瘤性息肉)
+
+### 文档分析 (Document Analysis)
+- **权重名**：`document_analysis.pt` (文档分析权重)
+- **分类目标**：
+  - 0: Caption (标题)
+  - 1: Footnote (脚注)
+  - 2: Formula (公式)
+  - 3: List-item (列表项)
+  - 4: Page-footer (页脚)
+  - 5: Page-header (页眉)
+  - 6: Picture (图片)
+  - 7: Section-header (节标题)
+  - 8: Table (表格)
+  - 9: Text (文本)
+  - 10: Title (标题)
+
+### 火情诊断 (Fire and Smoke Detection)
+- **权重名**：`fire_smoke_detection.pt` (火情诊断权重)
+- **分类目标**：
+  - 0: fire (火)
+  - 1: smoke (烟)
+
+### 摔倒检测 (Fall Detection)
+- **权重名**：`fall_detection.pt` (摔倒检测权重)
+- **分类目标**：
+  - 0: Fall Detected (检测到摔倒)
+  - 1: Walking (行走)
+  - 2: Sitting (坐着)
+
+### 动物检测 (Animal Detection)
+- **权重名**：`animal_detection.pt` (动物检测权重)
+- **分类目标**：
+  - 0: tit (山雀)
+  - 1: bullfinch (金翅雀)
+  - 2: squirrel (松鼠)
+  - 3: jay (鹊)
+
+### 无人机检测 (Drone Detection)
+- **权重名**：`drone_detection.pt` (无人机检测权重)
+- **分类目标**：
+  - 0: drone (无人机)
+
+### vis_drone2019_数据集目标检测 (vis_drone2019 Dataset Object Detection)
+- **权重名**：`vis_drone2019_detection.pt` (vis_drone2019 数据集目标检测权重)
+- **分类目标**：
+  - 0: pedestrian (行人)
+  - 1: people (人群)
+  - 2: bicycle (自行车)
+  - 3: car (汽车)
+  - 4: van (面包车)
+  - 5: truck (卡车)
+  - 6: tricycle (三轮车)
+  - 7: awning-tricycle (带遮阳篷的三轮车)
+  - 8: bus (公共汽车)
+  - 9: motor (摩托车)
+#### 🎉 **权重获取方式** 📧
+联系邮箱：2642144249@qq.com
+
+💰 **价格**：19.9RMB/个
+
+📝 **需要提供**：
+- 支付记录截图
+- 权重名
+
+🔗 **支持支付方式**：
+- 微信支付 <img src="donate/donate.png" alt="描述" width="" height="200">
+支付宝  <img src="donate/zhifubao.jpg" alt="描述" width="" height="200">
+
+🚀 **购买流程**：
+1. 完成支付。
+2. 将支付记录截图和权重名发送至邮箱 2642144249@qq.com。
+3. 我们将尽快为您发送权重文件。
+
+🌟 **私人定制**：如有特殊需求，可联系邮箱 2642144249@qq.com 进行定制，我们将根据您的需求提供专属服务。
 ### 2. 启动应用程序
 ```bash
 # 运行主程序
@@ -150,7 +333,7 @@ python enhanced_detection_main.py  # 基础版本
 ### 🖥️ 实时监控页面
 - **多摄像头**: 同时连接和监控多个摄像头设备
 - **网格显示**: 自动排列多个视频流的显示区域
-- **独立控制**: 每个摄像头可以独立控制开始/停止
+- **独立控制**: 每个摄像头可以独立控制开始/停止（TODO）
 - **状态监控**: 显示连接状态、检测数量、处理速度等
 
 ### 📋 运行日志
