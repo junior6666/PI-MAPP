@@ -81,7 +81,7 @@ Douyin_Crawling/
 ## 📁 打包
 ```python
 # 最精简的打包命令
-pyinstaller --onefile --windowed --icon=icon.ico --name "DouyinCrawler" --clean --hidden-import PySide6.QtXml --exclude-module tkinter --exclude-module matplotlib main_ui_plus.py
+pyinstaller --onefile --windowed --icon=icon1.ico --name "DouyinCrawler" --clean --hidden-import PySide6.QtXml --exclude-module tkinter --exclude-module matplotlib main_ui_plus.py
 ```
 ## ⚠️ 注意事项
 

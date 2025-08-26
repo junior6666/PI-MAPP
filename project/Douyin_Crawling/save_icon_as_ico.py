@@ -57,7 +57,7 @@ class IconGenerator:
 
     # ----------------- 公有方法 -----------------
 
-    def create_icon(self, output_path: str = "icon.ico") -> bool:
+    def create_icon(self, output_path: str = "icon1.ico") -> bool:
         """
         根据当前属性生成 .ico 文件并返回是否成功。
         """
@@ -124,4 +124,4 @@ if __name__ == "__main__":
         size=128,
         font_size=48,
         corner_radius=20,
-    ).create_icon("icon.ico")
+    ).create_icon("icon1.ico")
