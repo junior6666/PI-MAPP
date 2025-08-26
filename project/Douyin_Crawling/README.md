@@ -57,8 +57,8 @@ pip install PySide6 DrissionPage
 ## 📁 项目结构
 
 ```
-douyin-crawler/
-├── douyin_crawler.py    # 🎮 主程序文件
+Douyin_Crawling/
+├── main_ui_plua.py    # 🎮 主程序文件
 ├── requirements.txt     # 📦 依赖列表
 ├── README.md           # 📖 说明文档
 └── data/               # 💾 导出数据目录(运行时生成)
