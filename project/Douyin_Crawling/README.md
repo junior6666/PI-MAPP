@@ -78,7 +78,11 @@ Douyin_Crawling/
 3. 点击"开始爬取" 🟢
 4. 等待爬取完成 ✅
 5. 导出为CSV文件 💾
-
+## 📁 打包
+```python
+# 最精简的打包命令
+pyinstaller --onefile --windowed --icon=icon.ico --name "DouyinCrawler" --clean --hidden-import PySide6.QtXml --exclude-module tkinter --exclude-module matplotlib main_ui_plus.py
+```
 ## ⚠️ 注意事项
 
 - 🚨 请遵守抖音的 robots.txt 协议
