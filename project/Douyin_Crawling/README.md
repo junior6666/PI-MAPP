@@ -20,8 +20,8 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/yourusername/douyin-crawler.git
-
+git clone https://github.com/junior6666/PI-MAPP.git
+cd project/Douyin_Crawling
 
 ```
 
