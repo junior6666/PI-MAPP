@@ -8,15 +8,12 @@ from DrissionPage import ChromiumPage
 def parse_chunked_data(data_str,csv_w):
     lines = data_str.strip().splitlines()
     i = 0
-
     while i < len(lines):
         line = lines[i].strip()
-
         # 跳过空行
         if not line:
             i += 1
             continue
-
         # 匹配十六进制数字（块大小）
         if re.fullmatch(r'[0-9a-fA-F]+', line):
             i += 1  # 下一行是数据
