@@ -277,6 +277,83 @@ model = YOLO('yolo12x.pt')  # 🌟 你可以选择 n/m/l/x 版本
   - 7: awning-tricycle (带遮阳篷的三轮车)
   - 8: bus (公共汽车)
   - 9: motor (摩托车)
+
+### 日常交通工具检测（监控视角）
+#### 类别对照表（ID → 中文名称）
+
+| ID | 英文名称 | 中文名称 |
+|----|--------|--------|
+| 0 | articulated_truck | 铰接式卡车 |
+| 1 | bicycle | 自行车 |
+| 2 | bus | 公交车 |
+| 3 | car | 小汽车 |
+| 4 | motorcycle | 摩托车 |
+| 5 | motorized_vehicle | 机动车辆（泛指） |
+| 6 | non-motorized_vehicle | 非机动车辆（泛指） |
+| 7 | pedestrian | 行人 |
+| 8 | pickup_truck | 皮卡车 |
+| 9 | single_unit_truck | 单体卡车 |
+| 10 | work_van | 厢式工作车/作业面包车 |
+
+---
+
+### 战舰检测（仅供学习研究）
+#### 类别对照表（ID → 中文名称）
+
+| ID | 英文名称 | 中文名称 |
+|----|--------|--------|
+| 0 | AOE | 快速战斗支援舰（AOE） |
+| 1 | Arleigh Burke DD | 阿利·伯克级驱逐舰 |
+| 2 | Asagiri DD | 朝雾级驱逐舰 |
+| 3 | Atago DD | 爱宕级驱逐舰 |
+| 4 | Austin LL | 奥斯汀级船坞登陆舰 |
+| 5 | Barge | 驳船 |
+| 6 | Cargo | 货船 |
+| 7 | Commander | 指挥舰 |
+| 8 | Container Ship | 集装箱船 |
+| 9 | Dock | 浮船坞 |
+| 10 | EPF | 远征快速运输舰 |
+| 11 | Enterprise | 企业号航空母舰 |
+| 12 | Ferry | 渡轮 |
+| 13 | Fishing Vessel | 渔船 |
+| 14 | Hatsuyuki DD | 初雪级驱逐舰 |
+| 15 | Hovercraft | 气垫船 |
+| 16 | Hyuga DD | 日向级直升机驱逐舰 |
+| 17 | LHA LL | 两栖攻击舰（LHA） |
+| 18 | LSD 41 LL | 惠德贝岛级船坞登陆舰 |
+| 19 | Masyuu AS | 摩周级补给舰 |
+| 20 | Medical Ship | 医疗船 |
+| 21 | Midway | 中途岛号航空母舰 |
+| 22 | Motorboat | 摩托艇 |
+| 23 | Nimitz | 尼米兹级航空母舰 |
+| 24 | Oil Tanker | 油轮 |
+| 25 | Osumi LL | 大隅级运输登陆舰 |
+| 26 | Other Aircraft Carrier | 其他航空母舰 |
+| 27 | Other Auxiliary Ship | 其他辅助舰船 |
+| 28 | Other Destroyer | 其他驱逐舰 |
+| 29 | Other Frigate | 其他护卫舰 |
+| 30 | Other Landing | 其他登陆舰 |
+| 31 | Other Merchant | 其他商船 |
+| 32 | Other Ship | 其他船舶 |
+| 33 | Other Warship | 其他军舰 |
+| 34 | Patrol | 巡逻艇 |
+| 35 | Perry FF | 佩里级护卫舰 |
+| 36 | RoRo | 滚装船 |
+| 37 | Sailboat | 帆船 |
+| 38 | Sanantonio AS | 圣安东尼奥级船坞运输舰 |
+| 39 | Submarine | 潜艇 |
+| 40 | Test Ship | 试验船 |
+| 41 | Ticonderoga | 提康德罗加级巡洋舰 |
+| 42 | Training Ship | 训练舰 |
+| 43 | Tugboat | 拖船 |
+| 44 | Wasp LL | 黄蜂级两栖攻击舰 |
+| 45 | Yacht | 游艇 |
+| 46 | YuDao LL | 玉岛级登陆舰 |
+| 47 | YuDeng LL | 玉登级登陆舰 |
+| 48 | YuTing LL | 玉亭级登陆舰 |
+| 49 | YuZhao LL | 玉昭级登陆舰 |
+
+
 #### 🎉 **权重获取方式** 📧
 联系邮箱：2642144249@qq.com
 
@@ -537,6 +614,12 @@ class ModelManager:
 * vis_drone2019_数据集目标检测
 * 类别信息： {0: 'pedestrian', 1: 'people', 2: 'bicycle', 3: 'car', 4: 'van', 5: 'truck', 6: 'tricycle', 7: 'awning-tricycle', 8: 'bus', 9: 'motor'}
 ![vis_drone2019数据集目标检测.png](ui_predict_results/vis_drone2019%E6%95%B0%E6%8D%AE%E9%9B%86%E7%9B%AE%E6%A0%87%E6%A3%80%E6%B5%8B.png)
+* Daily Transportation Detection（日常交通工具检测，监控视角）
+* 类别信息： {0: 'articulated_truck', 1: 'bicycle', 2: 'bus', 3: 'car', 4: 'motorcycle', 5: 'motorized_vehicle', 6: 'non-motorized_vehicle', 7: 'pedestrian', 8: 'pickup_truck', 9: 'single_unit_truck', 10: 'work_van'}
+![日常交通工具检测.png](ui_predict_results/%E6%97%A5%E5%B8%B8%E4%BA%A4%E9%80%9A%E5%B7%A5%E5%85%B7%E6%A3%80%E6%B5%8B.png)
+* 战舰检测（仅可用作学习研究）
+* 类别信息： {0: 'AOE', 1: 'Arleigh Burke DD', 2: 'Asagiri DD', 3: 'Atago DD', 4: 'Austin LL', 5: 'Barge', 6: 'Cargo', 7: 'Commander', 8: 'Container Ship', 9: 'Dock', 10: 'EPF', 11: 'Enterprise', 12: 'Ferry', 13: 'Fishing Vessel', 14: 'Hatsuyuki DD', 15: 'Hovercraft', 16: 'Hyuga DD', 17: 'LHA LL', 18: 'LSD 41 LL', 19: 'Masyuu AS', 20: 'Medical Ship', 21: 'Midway', 22: 'Motorboat', 23: 'Nimitz', 24: 'Oil Tanker', 25: 'Osumi LL', 26: 'Other Aircraft Carrier', 27: 'Other Auxiliary Ship', 28: 'Other Destroyer', 29: 'Other Frigate', 30: 'Other Landing', 31: 'Other Merchant', 32: 'Other Ship', 33: 'Other Warship', 34: 'Patrol', 35: 'Perry FF', 36: 'RoRo', 37: 'Sailboat', 38: 'Sanantonio AS', 39: 'Submarine', 40: 'Test Ship', 41: 'Ticonderoga', 42: 'Training Ship', 43: 'Tugboat', 44: 'Wasp LL', 45: 'Yacht', 46: 'YuDao LL', 47: 'YuDeng LL', 48: 'YuTing LL', 49: 'YuZhao LL'}
+![战舰检测.png](ui_predict_results/%E6%88%98%E8%88%B0%E6%A3%80%E6%B5%8B.png)
 
 ---
 
