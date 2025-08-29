@@ -82,6 +82,9 @@ Douyin_Crawling/
 ```python
 # 最精简的打包命令
 pyinstaller --onefile --windowed --icon=icon1.ico --name "DouyinCrawler" --clean --hidden-import PySide6.QtXml --exclude-module tkinter --exclude-module matplotlib main_ui_plus.py
+
+pyinstaller --onefile --windowed --icon=icon1.ico --name "DouyinCrawler2.0" --clean --hidden-import PySide6.QtXml --exclude-module tkinter --exclude-module matplotlib best_main_ui.py
+
 ```
 ## ⚠️ 注意事项
 
@@ -109,8 +112,11 @@ pyinstaller --onefile --windowed --icon=icon1.ico --name "DouyinCrawler" --clean
 - [DrissionPage](https://github.com/g1879/DrissionPage) - 优秀的网页自动化工具
 - [PySide6](https://www.qt.io/qt-for-python) - Qt for Python 官方绑定库
 - 灵感来源：[UP主：轻松学Python](https://www.bilibili.com/video/BV1tH4y1c7Ca?spm_id_from=333.788.videopod.episodes&vd_source=ea444bcb59e16e58cfdca990f3514384&p=4)
-- 
 - 所有贡献者和用户 🎊
+
+## 免责声明
+大家请以学习为目的使用本仓库，爬虫违法违规的案件：https://github.com/HiddenStrawberry/Crawler_Illegal_Cases_In_China
+本项目的所有内容仅供学习和参考之用，禁止用于商业用途。任何人或组织不得将本仓库的内容用于非法用途或侵犯他人合法权益。本仓库所涉及的爬虫技术仅用于学习和研究，不得用于对其他平台进行大规模爬虫或其他非法行为。对于因使用本仓库内容而引起的任何法律责任，本仓库不承担任何责任。使用本仓库的内容即表示您同意本免责声明的所有条款和条件。
 
 ---
 
