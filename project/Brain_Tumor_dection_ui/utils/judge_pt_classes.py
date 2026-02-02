@@ -6,7 +6,7 @@ import cv2
 # trans = Translator(from_lang='en', to_lang='zh')   # 这里用 translate 库
 
 # ---------------- 加载模型 ----------------
-model = YOLO(r'H:\pycharm_project\github_projects\PI-MAPP\project\Brain_Tumor_dection_ui\pt_models\segmentation.pt')
+model = YOLO(r'H:\pycharm_project\github_projects\PI-MAPP\project\Brain_Tumor_dection_ui\pt_models\Brain_Tumor.pt')
 
 # # ---------------- 一次性把英文类别译成中文 ----------------
 # zh_names = {k: trans.translate(v) for k, v in model.names.items()}
