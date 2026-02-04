@@ -7,6 +7,7 @@ opencv-python>=4.7.0
 numpy>=1.21.0
 Pillow>=9.0.0
 pathlib2>=2.3.7
+requests>=2.25.0
 
 # Optional Dependencies for GPU acceleration
 torch>=1.12.0

@@ -1,11 +1,10 @@
-
+import ast
 import sys
+
+import requests
 from ultralytics import YOLO
 
-
-
 import threading
-
 import cv2
 import time
 import numpy as np
@@ -14,6 +13,7 @@ from datetime import datetime
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
+import csv
 
 class BatchDetectionThread(QThread):
     """批量检测线程"""
@@ -239,23 +239,111 @@ class MultiCameraMonitorThread(QThread):
             cap.release()
             self._reconnect_later(cid)
 
+
 class ModelSelectionDialog(QDialog):
     """模型选择对话框"""
+
+    # 常量定义
+    LOCAL_TAB_INDEX = 0
+    NETWORK_TAB_INDEX = 1
+    MODEL_NAME_COL = 0
+    SIZE_COL = 1
+    MODIFIED_COL = 2
+    PATH_COL = 3
+    STATUS_COL = 4
+    ACTION_COL = 5
+
+    COLUMN_HEADERS_LOCAL = ["模型名称", "大小", "修改时间", "路径"]
+    COLUMN_HEADERS_NETWORK = ["模型名称", "大小(MB)", "修改时间", "类别数量", "状态", "操作"]
 
     def __init__(self, model_manager, parent=None):
         super().__init__(parent)
         self.model_manager = model_manager
         self.selected_model = None
+        self.network_models = []
         self.init_ui()
+        self.load_network_models()
 
     def init_ui(self):
+        """初始化UI界面"""
         self.setWindowTitle("🔧 高级模型选择")
         self.setModal(True)
-        self.resize(700, 450)
+        self.resize(800, 500)
+        # self.setStyleSheet(self._get_dialog_stylesheet())
 
         layout = QVBoxLayout(self)
 
-        # 自定义路径
+        # 创建标签页
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # 本地模型标签页
+        self.local_tab = QWidget()
+        self.setup_local_tab()
+        self.tab_widget.addTab(self.local_tab, "💻 本地资源模型")
+
+        # 网络模型标签页
+        self.network_tab = QWidget()
+        self.setup_network_tab()
+        self.tab_widget.addTab(self.network_tab, "🌐 网络资源模型")
+
+        # 按钮区域
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def _get_dialog_stylesheet(self):
+        """返回对话框样式表"""
+        return """
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
+            }
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #ced4da;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px;
+            }
+            QTableWidget {
+                gridline-color: #dee2e6;
+                alternate-background-color: #f8f9fa;
+                selection-background-color: #d0ebff;
+            }
+            QPushButton {
+                background-color: #4dabf7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 1px 1px 1px 1px;
+                font-weight: bold;
+                font-size: 8px;
+                min-width: 40px;
+                min-height: 15px;
+            }
+            QPushButton:hover {
+                background-color: #339af0;
+            }
+            QPushButton:pressed {
+                background-color: #228be6;
+            }
+            QPushButton:disabled {
+                background-color: #adb5bd;
+            }
+        """
+
+    def setup_local_tab(self):
+        """设置本地模型标签页"""
+        layout = QVBoxLayout(self.local_tab)
+
+        # 路径选择组
         path_group = QGroupBox("📁 自定义模型路径")
         path_layout = QHBoxLayout(path_group)
 
@@ -273,36 +361,57 @@ class ModelSelectionDialog(QDialog):
 
         layout.addWidget(path_group)
 
-        # 模型列表
+        # 模型列表组
         models_group = QGroupBox("📋 可用模型")
         models_layout = QVBoxLayout(models_group)
 
-        self.model_table = QTableWidget()
-        self.model_table.setColumnCount(4)
-        self.model_table.setHorizontalHeaderLabels(["模型名称", "大小", "修改时间", "路径"])
-        self.model_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.model_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.model_table.setAlternatingRowColors(True)
+        self.model_table = self._create_table(self.COLUMN_HEADERS_LOCAL, 4)
         self.model_table.doubleClicked.connect(self.accept)
-
         models_layout.addWidget(self.model_table)
+
+        layout.addWidget(models_group)
+        self.refresh_models()
+
+    def setup_network_tab(self):
+        """设置网络模型标签页"""
+        layout = QVBoxLayout(self.network_tab)
+
+        # 下载路径组
+        path_group = QGroupBox("📥 下载设置")
+        path_layout = QHBoxLayout(path_group)
+
+        self.download_path_edit = QLineEdit()
+        self.download_path_edit.setText(str(Path("pt_models").absolute()))
+        self.download_path_edit.setPlaceholderText("模型下载目录路径...")
+        path_layout.addWidget(self.download_path_edit)
+
+        browse_download_btn = QPushButton("📂 浏览")
+        browse_download_btn.clicked.connect(self.browse_download_path)
+        path_layout.addWidget(browse_download_btn)
+
+        layout.addWidget(path_group)
+
+        # 网络模型组
+        models_group = QGroupBox("📋 网络模型资源")
+        models_layout = QVBoxLayout(models_group)
+
+        self.network_table = self._create_table(self.COLUMN_HEADERS_NETWORK, 6)
+        self.network_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.network_table.customContextMenuRequested.connect(self.show_network_context_menu)
+        self.network_table.doubleClicked.connect(self.show_network_model_info)
+        models_layout.addWidget(self.network_table)
+
         layout.addWidget(models_group)
 
-        # 按钮
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-        # 设置样式
-        self.setStyleSheet("""
-            QDialog {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #f8f9fa, stop:1 #e9ecef);
-            }
-        """)
-
-        self.refresh_models()
+    def _create_table(self, headers, column_count):
+        """创建标准表格控件"""
+        table = QTableWidget()
+        table.setColumnCount(column_count)
+        table.setHorizontalHeaderLabels(headers)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setAlternatingRowColors(True)
+        return table
 
     def browse_path(self):
         """浏览自定义路径"""
@@ -311,25 +420,268 @@ class ModelSelectionDialog(QDialog):
             self.path_edit.setText(path)
             self.refresh_models()
 
+    def browse_download_path(self):
+        """浏览下载路径"""
+        path = QFileDialog.getExistingDirectory(self, "选择下载目录")
+        if path:
+            self.download_path_edit.setText(path)
+
     def refresh_models(self):
-        """刷新模型列表"""
-        custom_path = self.path_edit.text() if self.path_edit.text() else None
-        models = self.model_manager.scan_models(custom_path)
+        """刷新本地模型列表"""
+        try:
+            custom_path = self.path_edit.text() or None
+            models = self.model_manager.scan_models(custom_path)
 
-        self.model_table.setRowCount(len(models))
+            self.model_table.setRowCount(len(models))
+            for row, model in enumerate(models):
+                self.model_table.setItem(row, self.MODEL_NAME_COL, QTableWidgetItem(model['name']))
+                self.model_table.setItem(row, self.SIZE_COL, QTableWidgetItem(model['size']))
+                self.model_table.setItem(row, self.MODIFIED_COL, QTableWidgetItem(model['modified']))
+                self.model_table.setItem(row, self.PATH_COL, QTableWidgetItem(model['path']))
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"刷新模型列表失败: {str(e)}")
 
-        for i, model in enumerate(models):
-            self.model_table.setItem(i, 0, QTableWidgetItem(model['name']))
-            self.model_table.setItem(i, 1, QTableWidgetItem(model['size']))
-            self.model_table.setItem(i, 2, QTableWidgetItem(model['modified']))
-            self.model_table.setItem(i, 3, QTableWidgetItem(model['path']))
+    def load_network_models(self):
+        """加载网络模型数据"""
+        try:
+            csv_path = Path("pt_files_report.csv")
+            if not csv_path.exists():
+                QMessageBox.warning(self, "警告", "未找到网络模型数据文件 pt_files_report.csv")
+                return
+
+            models_data = self._read_csv_with_encodings(csv_path)
+            if not models_data:
+                QMessageBox.warning(self, "警告", "无法正确读取网络模型数据文件")
+                return
+
+            self.network_models = models_data
+            self.refresh_network_models()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载网络模型数据失败: {str(e)}")
+
+    def _read_csv_with_encodings(self, file_path):
+        """尝试多种编码读取CSV文件"""
+        encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig']
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    reader = csv.DictReader(f)
+                    data = list(reader)
+                    if data and '文件名' in data[0]:
+                        return data
+            except UnicodeDecodeError:
+                continue
+        return []
+
+    def refresh_network_models(self):
+        """刷新网络模型列表"""
+        self.network_table.setRowCount(len(self.network_models))
+
+        for row, model in enumerate(self.network_models):
+            # 基本信息列
+            self.network_table.setItem(row, self.MODEL_NAME_COL, QTableWidgetItem(model['文件名']))
+            self.network_table.setItem(row, self.SIZE_COL, QTableWidgetItem(f"{model['大小(MB)']} MB"))
+            self.network_table.setItem(row, self.MODIFIED_COL, QTableWidgetItem(model['修改日期']))
+            self.network_table.setItem(row, self.STATUS_COL - 1, QTableWidgetItem(model['类别数量']))  # 类别数量列
+
+            # 状态列 - 根据本地文件存在情况判断
+            download_path = Path(self.download_path_edit.text())
+            local_path = download_path / model['文件名']
+            is_downloaded = local_path.exists()
+            
+            status_text = "已下载" if is_downloaded else "未下载"
+            status_color = QColor("#27ae60") if is_downloaded else QColor("#e74c3c")
+            
+            status_item = QTableWidgetItem(status_text)
+            status_item.setForeground(status_color)
+            self.network_table.setItem(row, self.STATUS_COL, status_item)
+
+            # 操作列
+            self._create_operation_buttons(row, model)
+
+    def _create_operation_buttons(self, row, model):
+        """创建操作按钮"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(4)
+
+        # 下载按钮
+        download_btn = QPushButton("📥 下载")
+        download_btn.setStyleSheet(self._get_dialog_stylesheet())
+        download_btn.setFixedSize(70, 28)
+        download_btn.clicked.connect(lambda _, r=row: self.download_network_model(r))
+
+        # 复制链接按钮
+        copy_btn = QPushButton("🔗 复制")
+        copy_btn.setStyleSheet(self._get_dialog_stylesheet())
+        copy_btn.setFixedSize(70, 28)
+        copy_btn.clicked.connect(lambda _, m=model: self.copy_download_link(m))
+
+        # 检查是否已下载
+        download_path = Path(self.download_path_edit.text())
+
+        local_path = download_path / model['文件名']
+        is_downloaded = local_path.exists()
+        
+        if is_downloaded:
+            download_btn.setText("✅ 已下载")
+            download_btn.setEnabled(False)
+
+
+        layout.addWidget(download_btn)
+        layout.addWidget(copy_btn)
+        layout.addStretch()
+
+        self.network_table.setCellWidget(row, self.ACTION_COL, widget)
+
+    def show_network_model_info(self):
+        """显示网络模型详细信息"""
+        row = self.network_table.currentRow()
+        if row < 0 or row >= len(self.network_models):
+            return
+
+        model = self.network_models[row]
+        try:
+            class_info = ast.literal_eval(model['类别信息'])
+            class_text = "\n".join([f"{k}: {v}" for k, v in class_info.items()])
+        except:
+            class_text = model['类别信息']
+
+        info = (
+            f"模型名称: {model['文件名']}\n"
+            f"大小: {model['大小(MB)']} MB\n"
+            f"修改时间: {model['修改日期']}\n"
+            f"类别数量: {model['类别数量']}\n\n"
+            f"类别信息:\n{class_text}"
+        )
+        QMessageBox.information(self, "模型详细信息", info)
+
+    def show_network_context_menu(self, pos):
+        """显示网络模型右键菜单"""
+        row = self.network_table.currentRow()
+        if row < 0:
+            return
+
+        menu = QMenu(self)
+        download_action = menu.addAction("📥 下载模型")
+        download_action.triggered.connect(lambda: self.download_network_model(row))
+        menu.exec_(self.network_table.viewport().mapToGlobal(pos))
+
+    def download_network_model(self, row):
+        """下载网络模型"""
+        if row >= len(self.network_models):
+            return
+
+        model = self.network_models[row]
+        model_name = model['文件名']
+        download_dir = Path(self.download_path_edit.text())
+
+        try:
+            # 准备下载目录
+            download_dir.mkdir(parents=True, exist_ok=True)
+            local_path = download_dir / model_name
+
+            # 检查文件存在
+            if local_path.exists():
+                reply = QMessageBox.question(
+                    self, "确认覆盖",
+                    f"模型文件 {model_name} 已存在，是否覆盖？",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+
+            # 更新状态
+            status_item = self.network_table.item(row, self.STATUS_COL)
+            status_item.setText("下载中...")
+            status_item.setForeground(QColor("#f39c12"))
+
+            # 执行下载
+            self._perform_download(model_name, local_path)
+
+            # 更新状态
+            status_item.setText("已下载")
+            status_item.setForeground(QColor("#27ae60"))
+
+            # 更新按钮状态
+            widget = self.network_table.cellWidget(row, self.ACTION_COL)
+            for btn in widget.findChildren(QPushButton):
+                if "下载" in btn.text():
+                    btn.setText("✅ 已下载")
+                    btn.setEnabled(False)
+
+            QMessageBox.information(
+                self, "下载完成",
+                f"模型 {model_name} 下载完成！\n保存路径: {local_path}"
+            )
+
+        except Exception as e:
+            # 恢复状态
+            status_item = self.network_table.item(row, self.STATUS_COL)
+            status_item.setText("下载失败")
+            status_item.setForeground(QColor("#e74c3c"))
+            QMessageBox.critical(self, "下载失败", f"错误: {str(e)}")
+
+    def _perform_download(self, model_name, save_path):
+        """执行实际的下载操作"""
+        url = f"https://github.com/JingW-ui/PI-MAPP/releases/download/pt_download/{model_name}"
+
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+
+        with open(save_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+    def copy_download_link(self, model):
+        """复制下载链接到剪贴板"""
+        try:
+            if not model or '文件名' not in model:
+                raise ValueError("模型数据无效")
+
+            url = f"https://github.com/JingW-ui/PI-MAPP/releases/download/pt_download/{model['文件名']}"
+            QApplication.clipboard().setText(url)
+            QMessageBox.information(self, "复制成功", "下载链接已复制到剪贴板")
+        except Exception as e:
+            QMessageBox.critical(self, "复制失败", f"错误: {str(e)}")
 
     def accept(self):
-        """确认选择"""
-        current_row = self.model_table.currentRow()
-        if current_row >= 0:
-            self.selected_model = self.model_table.item(current_row, 3).text()
+        """确认选择模型"""
+        current_tab = self.tab_widget.currentIndex()
+
+        if current_tab == self.LOCAL_TAB_INDEX:
+            self._handle_local_selection()
+        elif current_tab == self.NETWORK_TAB_INDEX:
+            self._handle_network_selection()
+        else:
+            super().accept()
+
+    def _handle_local_selection(self):
+        """处理本地模型选择"""
+        row = self.model_table.currentRow()
+        if row >= 0:
+            self.selected_model = self.model_table.item(row, self.PATH_COL).text()
+            super().accept()
+
+    def _handle_network_selection(self):
+        """处理网络模型选择"""
+        row = self.network_table.currentRow()
+        if row < 0:
+            return
+
+        model = self.network_models[row]
+        model_name = model['文件名']
+        local_path = Path(self.download_path_edit.text()) / model_name
+
+        if not local_path.exists():
+            QMessageBox.warning(self, "警告", "请先下载选中的网络模型！")
+            return
+
+        self.selected_model = str(local_path)
         super().accept()
+
 
 class DetectionResultWidget(QWidget):
     """检测结果显示组件"""
