@@ -326,7 +326,7 @@ class ModelSelectionDialog(QDialog):
                 font-weight: bold;
                 font-size: 8px;
                 min-width: 40px;
-                min-height: 15px;
+                min-height: 10px;
             }
             QPushButton:hover {
                 background-color: #339af0;
