@@ -377,7 +377,7 @@ class ModelSelectionDialog(QDialog):
         layout = QVBoxLayout(self.network_tab)
 
         # 下载路径组
-        path_group = QGroupBox("📥 下载设置")
+        path_group = QGroupBox("📥 路径设置")
         path_layout = QHBoxLayout(path_group)
 
         self.download_path_edit = QLineEdit()
@@ -510,13 +510,13 @@ class ModelSelectionDialog(QDialog):
         download_btn = QPushButton("📥 下载")
         download_btn.setStyleSheet(self._get_dialog_stylesheet())
         download_btn.setFixedSize(70, 28)
-        download_btn.clicked.connect(lambda _, r=row: self.download_network_model(r))
+        download_btn.clicked.connect(lambda r=row: self.download_network_model(r))
 
         # 复制链接按钮
         copy_btn = QPushButton("🔗 复制")
         copy_btn.setStyleSheet(self._get_dialog_stylesheet())
         copy_btn.setFixedSize(70, 28)
-        copy_btn.clicked.connect(lambda _, m=model: self.copy_download_link(m))
+        copy_btn.clicked.connect(lambda m=model: self.copy_download_link(m))
 
         # 检查是否已下载
         download_path = Path(self.download_path_edit.text())
@@ -555,7 +555,23 @@ class ModelSelectionDialog(QDialog):
             f"类别数量: {model['类别数量']}\n\n"
             f"类别信息:\n{class_text}"
         )
-        QMessageBox.information(self, "模型详细信息", info)
+        # 使用自定义对话框替代 QMessageBox，以支持最大高度与滚动显示
+        dlg = QDialog(self)
+        dlg.setWindowTitle("模型详细信息")
+        dlg_layout = QVBoxLayout(dlg)
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(info)
+        text_edit.setMinimumWidth(480)
+        text_edit.setMaximumHeight(400)  # 最大高度，超过则显示滚动条
+        dlg_layout.addWidget(text_edit)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        dlg_layout.addWidget(btn_box)
+
+        dlg.exec()
 
     def show_network_context_menu(self, pos):
         """显示网络模型右键菜单"""
@@ -929,7 +945,7 @@ class MonitoringWidget(QWidget):
                 self.model_combo.clear()
                 self.model_combo.addItem(model_name)
                 self.start_monitor_btn.setEnabled(True)
-                QMessageBox.information(self, "成功", f"模型加载成功: {model_name}")
+                # QMessageBox.information(self, "成功", f"模型加载成功: {model_name}")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"模型加载失败: {str(e)}")
 
