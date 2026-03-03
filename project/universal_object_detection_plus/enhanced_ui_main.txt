@@ -1,0 +1,7 @@
+
+pyinstaller --onefile --name "UniversalObjectDetection" --add-data "csv_reports;csv_reports" --add-data "YOLO_pt;YOLO_pt" --add-data "pt_models;pt_models" --hidden-import=PySide6 --hidden-import=PySide6.QtCore --hidden-import=PySide6.QtGui --hidden-import=PySide6.QtWidgets --hidden-import=ultralytics --hidden-import=cv2 --hidden-import=requests --hidden-import=numpy --hidden-import=PIL --collect-all=ultralytics --collect-all=PySide6 --windowed enhanced_ui_main.py
+
+pyinstaller --onefile --name "UniversalObjectDetection" --add-data "csv_reports;csv_reports"  --collect-all=ultralytics --collect-all=PySide6 --windowed enhanced_ui_main.py
+
+
+

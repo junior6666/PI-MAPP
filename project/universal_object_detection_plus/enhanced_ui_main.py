@@ -16,6 +16,14 @@ from PySide6.QtCore import *
 from PySide6.QtGui import *
 import csv
 
+# 处理打包环境
+if getattr(sys, 'frozen', False):
+    # 打包环境
+    base_dir = Path(sys._MEIPASS)
+else:
+    # 开发环境
+    base_dir = Path(__file__).parent
+
 class BatchDetectionThread(QThread):
     """批量检测线程"""
     result_ready = Signal(str, object, object, float, object, list)  # 文件路径, 原图, 结果图, 耗时, 检测结果, 类别名称
@@ -397,7 +405,7 @@ class ModelSelectionDialog(QDialog):
         path_layout = QHBoxLayout(path_group)
 
         self.download_path_edit = QLineEdit()
-        self.download_path_edit.setText(str(Path("pt_models").absolute()))
+        self.download_path_edit.setText(str((base_dir / "pt_models").absolute()))
         self.download_path_edit.setPlaceholderText("模型下载目录路径...")
         path_layout.addWidget(self.download_path_edit)
 
@@ -429,7 +437,7 @@ class ModelSelectionDialog(QDialog):
         path_layout = QHBoxLayout(path_group)
 
         self.official_download_path_edit = QLineEdit()
-        self.official_download_path_edit.setText(str(Path("YOLO_pt").absolute()))
+        self.official_download_path_edit.setText(str((base_dir / "YOLO_pt").absolute()))
         self.official_download_path_edit.setPlaceholderText("官方模型下载目录路径...")
         path_layout.addWidget(self.official_download_path_edit)
 
@@ -736,9 +744,9 @@ class ModelSelectionDialog(QDialog):
     def load_network_models(self):
         """加载网络模型数据"""
         try:
-            csv_path = Path("csv_reports/pt_files_report.csv")
+            csv_path = base_dir / "csv_reports" / "pt_files_report.csv"
             if not csv_path.exists():
-                QMessageBox.warning(self, "警告", "未找到网络模型数据文件 csv_reports/pt_files_report.csv")
+                QMessageBox.warning(self, "警告", f"未找到网络模型数据文件 {csv_path}")
                 return
 
             models_data = self._read_csv_with_encodings(csv_path)
@@ -754,9 +762,9 @@ class ModelSelectionDialog(QDialog):
     def load_official_network_models(self):
         """加载官方网络模型数据"""
         try:
-            csv_path = Path("csv_reports/YOLO_pt_files_report.csv")
+            csv_path = base_dir / "csv_reports" / "YOLO_pt_files_report.csv"
             if not csv_path.exists():
-                QMessageBox.warning(self, "警告", "未找到官方网络模型数据文件 csv_reports/YOLO_pt_files_report.csv")
+                QMessageBox.warning(self, "警告", f"未找到官方网络模型数据文件 {csv_path}")
                 return
 
             models_data = self._read_csv_with_encodings(csv_path)
@@ -1947,9 +1955,9 @@ class ModelManager:
 
     def __init__(self):
         self.models_paths = [
-            Path("pt_models"),
-            Path("models"),
-            Path("weights"),
+            base_dir / "pt_models",
+            base_dir / "models",
+            base_dir / "weights",
         ]
         self.current_model = None
         self.class_names = []
