@@ -1,5 +1,6 @@
 import ast
 import sys
+import functools
 
 import requests
 from ultralytics import YOLO
@@ -246,6 +247,7 @@ class ModelSelectionDialog(QDialog):
     # 常量定义
     LOCAL_TAB_INDEX = 0
     NETWORK_TAB_INDEX = 1
+    OFFICIAL_NETWORK_TAB_INDEX = 2
     MODEL_NAME_COL = 0
     SIZE_COL = 1
     MODIFIED_COL = 2
@@ -255,20 +257,23 @@ class ModelSelectionDialog(QDialog):
 
     COLUMN_HEADERS_LOCAL = ["模型名称", "大小", "修改时间", "路径"]
     COLUMN_HEADERS_NETWORK = ["模型名称", "大小(MB)", "修改时间", "类别数量", "状态", "操作"]
+    COLUMN_HEADERS_OFFICIAL_NETWORK = ["模型名称", "大小(MB)", "修改时间", "类别数量", "状态", "操作"]
 
     def __init__(self, model_manager, parent=None):
         super().__init__(parent)
         self.model_manager = model_manager
         self.selected_model = None
         self.network_models = []
+        self.official_network_models = []
         self.init_ui()
         self.load_network_models()
+        self.load_official_network_models()
 
     def init_ui(self):
         """初始化UI界面"""
         self.setWindowTitle("🔧 高级模型选择")
         self.setModal(True)
-        self.resize(800, 500)
+        self.resize(900, 700)
         # self.setStyleSheet(self._get_dialog_stylesheet())
 
         layout = QVBoxLayout(self)
@@ -282,10 +287,20 @@ class ModelSelectionDialog(QDialog):
         self.setup_local_tab()
         self.tab_widget.addTab(self.local_tab, "💻 本地资源模型")
 
-        # 网络模型标签页
+        # 私有网络模型标签页
         self.network_tab = QWidget()
         self.setup_network_tab()
-        self.tab_widget.addTab(self.network_tab, "🌐 网络资源模型")
+        self.tab_widget.addTab(self.network_tab, "🌐 私有网络资源模型")
+
+        # 官方网络模型标签页
+        self.official_network_tab = QWidget()
+        self.setup_official_network_tab()
+        self.tab_widget.addTab(self.official_network_tab, "🏢 官方网络资源模型")
+
+        # 帮助标签页
+        self.help_tab = QWidget()
+        self.setup_help_tab()
+        self.tab_widget.addTab(self.help_tab, "❓ 使用帮助")
 
         # 按钮区域
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -367,6 +382,7 @@ class ModelSelectionDialog(QDialog):
 
         self.model_table = self._create_table(self.COLUMN_HEADERS_LOCAL, 4)
         self.model_table.doubleClicked.connect(self.accept)
+        self.model_table.setMinimumHeight(450)
         models_layout.addWidget(self.model_table)
 
         layout.addWidget(models_group)
@@ -399,9 +415,279 @@ class ModelSelectionDialog(QDialog):
         self.network_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.network_table.customContextMenuRequested.connect(self.show_network_context_menu)
         self.network_table.doubleClicked.connect(self.show_network_model_info)
+        self.network_table.setMinimumHeight(450)
         models_layout.addWidget(self.network_table)
 
         layout.addWidget(models_group)
+
+    def setup_official_network_tab(self):
+        """设置官方网络模型标签页"""
+        layout = QVBoxLayout(self.official_network_tab)
+
+        # 下载路径组
+        path_group = QGroupBox("📥 路径设置")
+        path_layout = QHBoxLayout(path_group)
+
+        self.official_download_path_edit = QLineEdit()
+        self.official_download_path_edit.setText(str(Path("YOLO_pt").absolute()))
+        self.official_download_path_edit.setPlaceholderText("官方模型下载目录路径...")
+        path_layout.addWidget(self.official_download_path_edit)
+
+        browse_official_btn = QPushButton("📂 浏览")
+        browse_official_btn.clicked.connect(self.browse_official_download_path)
+        path_layout.addWidget(browse_official_btn)
+
+        layout.addWidget(path_group)
+
+        # 官方网络模型组
+        models_group = QGroupBox("📋 官方YOLO模型资源")
+        models_layout = QVBoxLayout(models_group)
+
+        self.official_network_table = self._create_table(self.COLUMN_HEADERS_OFFICIAL_NETWORK, 6)
+        self.official_network_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.official_network_table.customContextMenuRequested.connect(self.show_official_network_context_menu)
+        self.official_network_table.doubleClicked.connect(self.show_official_network_model_info)
+        self.official_network_table.setMinimumHeight(450)
+        models_layout.addWidget(self.official_network_table)
+
+        layout.addWidget(models_group)
+
+    def setup_help_tab(self):
+        """设置帮助标签页"""
+        layout = QVBoxLayout(self.help_tab)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # 标题
+        title_label = QLabel("📖 模型加载使用指南")
+        title_label.setStyleSheet("""
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 10px;
+        """)
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setSpacing(20)
+
+        # 1. 本地资源模型
+        local_group = QGroupBox("💻 本地资源模型")
+        local_layout = QVBoxLayout(local_group)
+        local_text = QTextEdit()
+        local_text.setReadOnly(True)
+        local_text.setHtml("""
+        <h3 style="color: #3498db;">什么是本地资源模型？</h3>
+        <p>本地资源模型是指您已经下载并存储在计算机上的YOLO模型文件（.pt格式）。</p>
+        
+        <h3 style="color: #3498db;">如何使用？</h3>
+        <ol>
+            <li><b>自动扫描：</b>程序启动时会自动扫描默认目录下的模型文件</li>
+            <li><b>自定义路径：</b>在"自定义模型路径"输入框中输入您的模型所在目录，点击"浏览"按钮选择文件夹</li>
+            <li><b>刷新列表：</b>点击"🔄 刷新"按钮更新模型列表</li>
+            <li><b>选择模型：</b>在表格中单击选中您需要的模型</li>
+            <li><b>确认选择：</b>点击"确定"按钮加载选中的模型</li>
+        </ol>
+        
+        <h3 style="color: #3498db;">支持的模型格式</h3>
+        <ul>
+            <li>YOLOv8 模型 (.pt文件)</li>
+            <li>YOLOv11 模型 (.pt文件)</li>
+            <li>YOLOv26 模型 (.pt文件)</li>
+        </ul>
+        
+        <h3 style="color: #e74c3c;">注意事项</h3>
+        <ul>
+            <li>确保模型文件完整且未损坏</li>
+            <li>模型文件需要有相应的读取权限</li>
+            <li>建议使用官方或可信来源的模型文件</li>
+        </ul>
+        """)
+        local_text.setMaximumHeight(600)
+        local_text.setMinimumHeight(350)
+        local_layout.addWidget(local_text)
+        scroll_layout.addWidget(local_group)
+
+        # 2. 私有网络资源模型
+        network_group = QGroupBox("🌐 私有网络资源模型")
+        network_layout = QVBoxLayout(network_group)
+        network_text = QTextEdit()
+        network_text.setReadOnly(True)
+        network_text.setHtml("""
+        <h3 style="color: #9b59b6;">什么是私有网络资源模型？</h3>
+        <p>私有网络资源模型是指存储在私有服务器或GitHub Releases上的模型文件，
+        您可以直接从网络下载使用，无需预先保存在本地。</p>
+        
+        <h3 style="color: #9b59b6;">如何使用？</h3>
+        <ol>
+            <li><b>设置下载路径：</b>在"📥 路径设置"中指定模型下载保存的位置（默认：pt_models文件夹）</li>
+            <li><b>浏览模型列表：</b>表格中显示了所有可用的网络模型资源，包括：
+                <ul>
+                    <li>模型名称和版本</li>
+                    <li>文件大小</li>
+                    <li>更新日期</li>
+                    <li>支持的类别数量</li>
+                    <li>当前下载状态</li>
+                </ul>
+            </li>
+            <li><b>下载模型：</b>
+                <ul>
+                    <li>点击"📥 下载"按钮下载选中的模型</li>
+                    <li>或右键点击模型行选择"下载模型"</li>
+                    <li>下载过程中状态会显示"下载中..."</li>
+                </ul>
+            </li>
+            <li><b>复制下载链接：</b>点击"🔗 复制"按钮可复制模型的下载链接，用于其他下载工具</li>
+            <li><b>查看详情：</b>双击模型行可查看详细信息，包括所有支持的检测类别</li>
+            <li><b>选择模型：</b>下载完成后，选中模型并点击"确定"按钮加载</li>
+        </ol>
+        
+        <h3 style="color: #9b59b6;">下载状态说明</h3>
+        <ul>
+            <li><span style="color: #e74c3c;">未下载</span> - 模型尚未下载到本地</li>
+            <li><span style="color: #f39c12;">下载中...</span> - 正在从网络下载模型</li>
+            <li><span style="color: #27ae60;">已下载</span> - 模型已存在于本地，可以直接使用</li>
+        </ul>
+        
+        <h3 style="color: #e74c3c;">注意事项</h3>
+        <ul>
+            <li>下载模型需要网络连接</li>
+            <li>模型文件较大，请确保有足够的磁盘空间</li>
+            <li>下载时间取决于网络速度和文件大小</li>
+            <li>如果下载失败，可以复制链接使用其他下载工具</li>
+        </ul>
+        """)
+        network_text.setMaximumHeight(600)
+        network_text.setMinimumHeight(450)
+        network_layout.addWidget(network_text)
+        scroll_layout.addWidget(network_group)
+
+        # 3. 官方网络资源模型
+        official_group = QGroupBox("🏢 官方网络资源模型")
+        official_layout = QVBoxLayout(official_group)
+        official_text = QTextEdit()
+        official_text.setReadOnly(True)
+        official_text.setHtml("""
+        <h3 style="color: #27ae60;">什么是官方网络资源模型？</h3>
+        <p>官方网络资源模型是指由Ultralytics官方发布的YOLO模型，
+        包括YOLOv11系列（n/s/m/l/x）和YOLOv26系列（n/s/m/l）等多种规格，
+        以及支持分割任务的seg版本。</p>
+        
+        <h3 style="color: #27ae60;">模型规格说明</h3>
+        <table border="1" cellpadding="5" style="border-collapse: collapse;">
+            <tr style="background-color: #ecf0f1;">
+                <th>规格</th>
+                <th>说明</th>
+                <th>适用场景</th>
+            </tr>
+            <tr>
+                <td><b>n (nano)</b></td>
+                <td>最轻量级，约5-6MB</td>
+                <td>边缘设备、移动端、实时性要求高的场景</td>
+            </tr>
+            <tr>
+                <td><b>s (small)</b></td>
+                <td>轻量级，约18-20MB</td>
+                <td>平衡速度和精度</td>
+            </tr>
+            <tr>
+                <td><b>m (medium)</b></td>
+                <td>中等，约38-43MB</td>
+                <td>一般桌面应用</td>
+            </tr>
+            <tr>
+                <td><b>l (large)</b></td>
+                <td>大型，约49-54MB</td>
+                <td>精度优先的场景</td>
+            </tr>
+            <tr>
+                <td><b>x (xlarge)</b></td>
+                <td>超大型，约109-119MB</td>
+                <td>最高精度，计算资源充足</td>
+            </tr>
+        </table>
+        
+        <h3 style="color: #27ae60;">如何使用？</h3>
+        <ol>
+            <li><b>设置下载路径：</b>在"📥 路径设置"中指定模型下载保存的位置（默认：YOLO_pt文件夹）</li>
+            <li><b>浏览模型列表：</b>表格中显示了所有官方可用的YOLO模型</li>
+            <li><b>下载模型：</b>
+                <ul>
+                    <li>点击"📥 下载"按钮从Ultralytics官方仓库下载</li>
+                    <li>支持断点续传，如果下载中断可以重新下载</li>
+                </ul>
+            </li>
+            <li><b>复制下载链接：</b>点击"🔗 复制"按钮可复制官方下载链接</li>
+            <li><b>查看详情：</b>双击模型行可查看模型支持的80个COCO数据集类别</li>
+            <li><b>选择模型：</b>下载完成后，选中模型并点击"确定"按钮加载</li>
+        </ol>
+        
+        <h3 style="color: #27ae60;">模型类别信息</h3>
+        <p>所有官方模型都基于COCO数据集训练，支持检测以下80个类别：</p>
+        <p style="font-size: 12px; color: #7f8c8d;">
+        人、自行车、汽车、摩托车、飞机、公交车、火车、卡车、船、红绿灯、消防栓、
+        停车标志、停车计时器、长椅、鸟、猫、狗、马、羊、牛、大象、熊、斑马、长颈鹿、
+        背包、雨伞、手提包、领带、行李箱、飞盘、滑雪板、 snowboard、运动球、风筝、
+        棒球棒、棒球手套、滑板、冲浪板、网球拍、瓶子、酒杯、杯子、叉子、刀、勺子、
+        碗、香蕉、苹果、三明治、橙子、西兰花、胡萝卜、热狗、披萨、甜甜圈、蛋糕、
+        椅子、沙发、盆栽植物、床、餐桌、马桶、电视、笔记本电脑、鼠标、遥控器、
+        键盘、手机、微波炉、烤箱、烤面包机、水槽、冰箱、书、时钟、花瓶、剪刀、
+        泰迪熊、吹风机、牙刷
+        </p>
+        
+        <h3 style="color: #e74c3c;">注意事项</h3>
+        <ul>
+            <li>官方模型需要从GitHub下载，请确保网络可以访问github.com</li>
+            <li>较大的模型（x版本）下载时间较长，请耐心等待</li>
+            <li>seg版本模型支持实例分割任务，文件比普通版本稍大</li>
+            <li>建议根据您的硬件配置选择合适的模型规格</li>
+            <li>首次下载后，模型会缓存在本地，下次使用无需重新下载</li>
+        </ul>
+        """)
+        official_text.setMaximumHeight(600)
+        official_text.setMinimumHeight(450)
+        official_layout.addWidget(official_text)
+        scroll_layout.addWidget(official_group)
+
+        # 通用提示
+        tips_group = QGroupBox("💡 通用提示")
+        tips_layout = QVBoxLayout(tips_group)
+        tips_text = QTextEdit()
+        tips_text.setReadOnly(True)
+        tips_text.setHtml("""
+        <h3 style="color: #f39c12;">快速开始建议</h3>
+        <ol>
+            <li><b>新手推荐：</b>如果您是第一次使用，建议从"官方网络资源模型"中下载YOLOv11n.pt（最小最快）</li>
+            <li><b>精度优先：</b>如果需要更高的检测精度，可以选择YOLOv11x.pt或YOLOv26l.pt</li>
+            <li><b>已有模型：</b>如果您已经有下载好的模型文件，使用"本地资源模型"直接加载</li>
+            <li><b>网络不好：</b>如果网络下载慢，可以复制链接使用下载工具，然后放到对应目录使用本地加载</li>
+        </ol>
+        
+        <h3 style="color: #f39c12;">常见问题</h3>
+        <ul>
+            <li><b>Q: 下载失败怎么办？</b><br>
+            A: 检查网络连接，或复制链接使用其他下载工具手动下载后放到对应目录。</li>
+            <li><b>Q: 模型加载失败？</b><br>
+            A: 确保模型文件完整，尝试重新下载或使用其他模型。</li>
+            <li><b>Q: 如何选择模型规格？</b><br>
+            A: 根据您的硬件配置选择，配置低选n/s，配置高选l/x。</li>
+            <li><b>Q: seg版本和普通版本有什么区别？</b><br>
+            A: seg版本支持实例分割（像素级物体轮廓），普通版本只支持目标检测（矩形框）。</li>
+        </ul>
+        """)
+        tips_text.setMaximumHeight(280)
+        tips_text.setMinimumHeight(200)
+        tips_layout.addWidget(tips_text)
+        scroll_layout.addWidget(tips_group)
+
+        scroll_layout.addStretch()
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
 
     def _create_table(self, headers, column_count):
         """创建标准表格控件"""
@@ -426,6 +712,12 @@ class ModelSelectionDialog(QDialog):
         if path:
             self.download_path_edit.setText(path)
 
+    def browse_official_download_path(self):
+        """浏览官方模型下载路径"""
+        path = QFileDialog.getExistingDirectory(self, "选择官方模型下载目录")
+        if path:
+            self.official_download_path_edit.setText(path)
+
     def refresh_models(self):
         """刷新本地模型列表"""
         try:
@@ -444,9 +736,9 @@ class ModelSelectionDialog(QDialog):
     def load_network_models(self):
         """加载网络模型数据"""
         try:
-            csv_path = Path("pt_files_report.csv")
+            csv_path = Path("csv_reports/pt_files_report.csv")
             if not csv_path.exists():
-                QMessageBox.warning(self, "警告", "未找到网络模型数据文件 pt_files_report.csv")
+                QMessageBox.warning(self, "警告", "未找到网络模型数据文件 csv_reports/pt_files_report.csv")
                 return
 
             models_data = self._read_csv_with_encodings(csv_path)
@@ -458,6 +750,24 @@ class ModelSelectionDialog(QDialog):
             self.refresh_network_models()
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载网络模型数据失败: {str(e)}")
+
+    def load_official_network_models(self):
+        """加载官方网络模型数据"""
+        try:
+            csv_path = Path("csv_reports/YOLO_pt_files_report.csv")
+            if not csv_path.exists():
+                QMessageBox.warning(self, "警告", "未找到官方网络模型数据文件 csv_reports/YOLO_pt_files_report.csv")
+                return
+
+            models_data = self._read_csv_with_encodings(csv_path)
+            if not models_data:
+                QMessageBox.warning(self, "警告", "无法正确读取官方网络模型数据文件")
+                return
+
+            self.official_network_models = models_data
+            self.refresh_official_network_models()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载官方网络模型数据失败: {str(e)}")
 
     def _read_csv_with_encodings(self, file_path):
         """尝试多种编码读取CSV文件"""
@@ -499,6 +809,32 @@ class ModelSelectionDialog(QDialog):
             # 操作列
             self._create_operation_buttons(row, model)
 
+    def refresh_official_network_models(self):
+        """刷新官方网络模型列表"""
+        self.official_network_table.setRowCount(len(self.official_network_models))
+
+        for row, model in enumerate(self.official_network_models):
+            # 基本信息列
+            self.official_network_table.setItem(row, self.MODEL_NAME_COL, QTableWidgetItem(model['文件名']))
+            self.official_network_table.setItem(row, self.SIZE_COL, QTableWidgetItem(f"{model['大小(MB)']} MB"))
+            self.official_network_table.setItem(row, self.MODIFIED_COL, QTableWidgetItem(model['修改日期']))
+            self.official_network_table.setItem(row, self.STATUS_COL - 1, QTableWidgetItem(model['类别数量']))  # 类别数量列
+
+            # 状态列 - 根据本地文件存在情况判断
+            download_path = Path(self.official_download_path_edit.text())
+            local_path = download_path / model['文件名']
+            is_downloaded = local_path.exists()
+
+            status_text = "已下载" if is_downloaded else "未下载"
+            status_color = QColor("#27ae60") if is_downloaded else QColor("#e74c3c")
+
+            status_item = QTableWidgetItem(status_text)
+            status_item.setForeground(status_color)
+            self.official_network_table.setItem(row, self.STATUS_COL, status_item)
+
+            # 操作列
+            self._create_official_operation_buttons(row, model)
+
     def _create_operation_buttons(self, row, model):
         """创建操作按钮"""
         widget = QWidget()
@@ -510,20 +846,22 @@ class ModelSelectionDialog(QDialog):
         download_btn = QPushButton("📥 下载")
         download_btn.setStyleSheet(self._get_dialog_stylesheet())
         download_btn.setFixedSize(70, 28)
-        download_btn.clicked.connect(lambda r=row: self.download_network_model(r))
+        # 使用partial解决闭包问题
+        download_btn.clicked.connect(functools.partial(self.download_network_model, row))
 
         # 复制链接按钮
         copy_btn = QPushButton("🔗 复制")
         copy_btn.setStyleSheet(self._get_dialog_stylesheet())
         copy_btn.setFixedSize(70, 28)
-        copy_btn.clicked.connect(lambda m=model: self.copy_download_link(m))
+        # 使用partial解决闭包问题
+        copy_btn.clicked.connect(functools.partial(self.copy_download_link, model))
 
         # 检查是否已下载
         download_path = Path(self.download_path_edit.text())
 
         local_path = download_path / model['文件名']
         is_downloaded = local_path.exists()
-        
+
         if is_downloaded:
             download_btn.setText("✅ 已下载")
             download_btn.setEnabled(False)
@@ -534,6 +872,42 @@ class ModelSelectionDialog(QDialog):
         layout.addStretch()
 
         self.network_table.setCellWidget(row, self.ACTION_COL, widget)
+
+    def _create_official_operation_buttons(self, row, model):
+        """创建官方模型操作按钮"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(4)
+
+        # 下载按钮
+        download_btn = QPushButton("📥 下载")
+        download_btn.setStyleSheet(self._get_dialog_stylesheet())
+        download_btn.setFixedSize(70, 28)
+        # 使用partial解决闭包问题
+        download_btn.clicked.connect(functools.partial(self.download_official_network_model, row))
+
+        # 复制链接按钮
+        copy_btn = QPushButton("🔗 复制")
+        copy_btn.setStyleSheet(self._get_dialog_stylesheet())
+        copy_btn.setFixedSize(70, 28)
+        # 使用partial解决闭包问题
+        copy_btn.clicked.connect(functools.partial(self.copy_official_download_link, model))
+
+        # 检查是否已下载
+        download_path = Path(self.official_download_path_edit.text())
+        local_path = download_path / model['文件名']
+        is_downloaded = local_path.exists()
+
+        if is_downloaded:
+            download_btn.setText("✅ 已下载")
+            download_btn.setEnabled(False)
+
+        layout.addWidget(download_btn)
+        layout.addWidget(copy_btn)
+        layout.addStretch()
+
+        self.official_network_table.setCellWidget(row, self.ACTION_COL, widget)
 
     def show_network_model_info(self):
         """显示网络模型详细信息"""
@@ -573,6 +947,44 @@ class ModelSelectionDialog(QDialog):
 
         dlg.exec()
 
+    def show_official_network_model_info(self):
+        """显示官方网络模型详细信息"""
+        row = self.official_network_table.currentRow()
+        if row < 0 or row >= len(self.official_network_models):
+            return
+
+        model = self.official_network_models[row]
+        try:
+            class_info = ast.literal_eval(model['类别信息'])
+            class_text = "\n".join([f"{k}: {v}" for k, v in class_info.items()])
+        except:
+            class_text = model['类别信息']
+
+        info = (
+            f"模型名称: {model['文件名']}\n"
+            f"大小: {model['大小(MB)']} MB\n"
+            f"修改时间: {model['修改日期']}\n"
+            f"类别数量: {model['类别数量']}\n\n"
+            f"类别信息:\n{class_text}"
+        )
+        # 使用自定义对话框替代 QMessageBox，以支持最大高度与滚动显示
+        dlg = QDialog(self)
+        dlg.setWindowTitle("官方模型详细信息")
+        dlg_layout = QVBoxLayout(dlg)
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(info)
+        text_edit.setMinimumWidth(480)
+        text_edit.setMaximumHeight(400)  # 最大高度，超过则显示滚动条
+        dlg_layout.addWidget(text_edit)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        btn_box.accepted.connect(dlg.accept)
+        dlg_layout.addWidget(btn_box)
+
+        dlg.exec()
+
     def show_network_context_menu(self, pos):
         """显示网络模型右键菜单"""
         row = self.network_table.currentRow()
@@ -582,7 +994,18 @@ class ModelSelectionDialog(QDialog):
         menu = QMenu(self)
         download_action = menu.addAction("📥 下载模型")
         download_action.triggered.connect(lambda: self.download_network_model(row))
-        menu.exec_(self.network_table.viewport().mapToGlobal(pos))
+        menu.exec(self.network_table.viewport().mapToGlobal(pos))
+
+    def show_official_network_context_menu(self, pos):
+        """显示官方网络模型右键菜单"""
+        row = self.official_network_table.currentRow()
+        if row < 0:
+            return
+
+        menu = QMenu(self)
+        download_action = menu.addAction("📥 下载模型")
+        download_action.triggered.connect(lambda: self.download_official_network_model(row))
+        menu.exec(self.official_network_table.viewport().mapToGlobal(pos))
 
     def download_network_model(self, row):
         """下载网络模型"""
@@ -639,9 +1062,77 @@ class ModelSelectionDialog(QDialog):
             status_item.setForeground(QColor("#e74c3c"))
             QMessageBox.critical(self, "下载失败", f"错误: {str(e)}")
 
+    def download_official_network_model(self, row):
+        """下载官方网络模型"""
+        if row >= len(self.official_network_models):
+            return
+
+        model = self.official_network_models[row]
+        model_name = model['文件名']
+        download_dir = Path(self.official_download_path_edit.text())
+
+        try:
+            # 准备下载目录
+            download_dir.mkdir(parents=True, exist_ok=True)
+            local_path = download_dir / model_name
+
+            # 检查文件存在
+            if local_path.exists():
+                reply = QMessageBox.question(
+                    self, "确认覆盖",
+                    f"模型文件 {model_name} 已存在，是否覆盖？",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+
+            # 更新状态
+            status_item = self.official_network_table.item(row, self.STATUS_COL)
+            status_item.setText("下载中...")
+            status_item.setForeground(QColor("#f39c12"))
+
+            # 执行下载
+            self._perform_official_download(model_name, local_path)
+
+            # 更新状态
+            status_item.setText("已下载")
+            status_item.setForeground(QColor("#27ae60"))
+
+            # 更新按钮状态
+            widget = self.official_network_table.cellWidget(row, self.ACTION_COL)
+            for btn in widget.findChildren(QPushButton):
+                if "下载" in btn.text():
+                    btn.setText("✅ 已下载")
+                    btn.setEnabled(False)
+
+            QMessageBox.information(
+                self, "下载完成",
+                f"官方模型 {model_name} 下载完成！\n保存路径: {local_path}"
+            )
+
+        except Exception as e:
+            # 恢复状态
+            status_item = self.official_network_table.item(row, self.STATUS_COL)
+            status_item.setText("下载失败")
+            status_item.setForeground(QColor("#e74c3c"))
+            QMessageBox.critical(self, "下载失败", f"错误: {str(e)}")
+
     def _perform_download(self, model_name, save_path):
         """执行实际的下载操作"""
         url = f"https://github.com/JingW-ui/PI-MAPP/releases/download/pt_download/{model_name}"
+
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+
+        with open(save_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+    def _perform_official_download(self, model_name, save_path):
+        """执行官方模型的实际下载操作"""
+        # 官方YOLO模型从Ultralytics官方下载
+        url = f"https://github.com/ultralytics/assets/releases/download/v8.4.0/{model_name}"
 
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
@@ -663,6 +1154,18 @@ class ModelSelectionDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "复制失败", f"错误: {str(e)}")
 
+    def copy_official_download_link(self, model):
+        """复制官方模型下载链接到剪贴板"""
+        try:
+            if not model or '文件名' not in model:
+                raise ValueError("模型数据无效")
+
+            url = f"https://github.com/ultralytics/assets/releases/download/v8.4.0/{model['文件名']}"
+            QApplication.clipboard().setText(url)
+            QMessageBox.information(self, "复制成功", "官方模型下载链接已复制到剪贴板")
+        except Exception as e:
+            QMessageBox.critical(self, "复制失败", f"错误: {str(e)}")
+
     def accept(self):
         """确认选择模型"""
         current_tab = self.tab_widget.currentIndex()
@@ -671,6 +1174,8 @@ class ModelSelectionDialog(QDialog):
             self._handle_local_selection()
         elif current_tab == self.NETWORK_TAB_INDEX:
             self._handle_network_selection()
+        elif current_tab == self.OFFICIAL_NETWORK_TAB_INDEX:
+            self._handle_official_network_selection()
         else:
             super().accept()
 
@@ -693,6 +1198,23 @@ class ModelSelectionDialog(QDialog):
 
         if not local_path.exists():
             QMessageBox.warning(self, "警告", "请先下载选中的网络模型！")
+            return
+
+        self.selected_model = str(local_path)
+        super().accept()
+
+    def _handle_official_network_selection(self):
+        """处理官方网络模型选择"""
+        row = self.official_network_table.currentRow()
+        if row < 0:
+            return
+
+        model = self.official_network_models[row]
+        model_name = model['文件名']
+        local_path = Path(self.official_download_path_edit.text()) / model_name
+
+        if not local_path.exists():
+            QMessageBox.warning(self, "警告", "请先下载选中的官方网络模型！")
             return
 
         self.selected_model = str(local_path)
@@ -894,6 +1416,7 @@ class MonitoringWidget(QWidget):
 
     def init_model_combo(self):
         """初始化模型下拉框"""
+        self.model_combo.blockSignals(True)
         self.model_combo.clear()
         models = self.model_manager.scan_models()
 
@@ -903,6 +1426,7 @@ class MonitoringWidget(QWidget):
         else:
             self.model_combo.addItems([model['name'] for model in models])
             self.model_combo.setEnabled(True)
+            self.model_combo.blockSignals(False)
             self.try_load_default_model()
 
     def try_load_default_model(self):
@@ -2032,6 +2556,7 @@ class EnhancedDetectionUI(QMainWindow):
 
     def init_model_combo(self):
         """初始化模型下拉框"""
+        self.model_combo.blockSignals(True)
         self.model_combo.clear()
         models = self.model_manager.scan_models()
 
@@ -2041,6 +2566,7 @@ class EnhancedDetectionUI(QMainWindow):
         else:
             self.model_combo.addItems([model['name'] for model in models])
             self.model_combo.setEnabled(True)
+        self.model_combo.blockSignals(False)
 
     def try_load_default_model(self):
         """尝试加载默认模型"""
@@ -2061,7 +2587,7 @@ class EnhancedDetectionUI(QMainWindow):
         try:
             self.model = YOLO(model_path)
             self.log_message(f"✅ 模型加载成功: {Path(model_path).name}")
-            self.update_button_states()
+            # self.update_button_states()
             return True
         except Exception as e:
             self.log_message(f"❌ 模型加载失败: {str(e)}")
@@ -2072,15 +2598,20 @@ class EnhancedDetectionUI(QMainWindow):
         """显示模型选择对话框"""
         dialog = ModelSelectionDialog(self.model_manager, self)
         if dialog.exec() == QDialog.Accepted and dialog.selected_model:
+            model_name = Path(dialog.selected_model).name
+            # 先更新下拉框，避免触发重复加载
+            self.model_combo.blockSignals(True)
+            index = self.model_combo.findText(model_name)
+            if index >= 0:
+                self.model_combo.setCurrentIndex(index)
+            else:
+                self.model_combo.addItem(model_name)
+                self.model_combo.setCurrentText(model_name)
+            self.model_combo.blockSignals(False)
+            
+            # 再加载模型
             if self.load_model(dialog.selected_model):
-                model_name = Path(dialog.selected_model).name
-                # 更新下拉框
-                index = self.model_combo.findText(model_name)
-                if index >= 0:
-                    self.model_combo.setCurrentIndex(index)
-                else:
-                    self.model_combo.addItem(model_name)
-                    self.model_combo.setCurrentText(model_name)
+                pass  # 加载成功，已在load_model中记录日志
 
     def refresh_camera_list(self):
         """刷新摄像头列表"""
