@@ -1,75 +1,21 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Enhanced UI Main - 主界面实现
-包含完整的增强UI界面
-"""
 
-import sys
-import os
-import cv2
-import time
-import json
-from pathlib import Path
-from datetime import datetime
-from typing import List, Dict, Optional, Tuple
-
-from PySide6.QtWidgets import *
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-import numpy as np
-
-# !/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Enhanced Components - 增强组件模块
-包含批量检测、结果显示、监控等组件
-"""
 import sys
 import threading
-
-import cv2
-import time
-import numpy as np
-from pathlib import Path
 from datetime import datetime
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
+
+
 from ultralytics import YOLO
 
-# !/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Enhanced Universal Object Detection System v2.0
-优化的通用目标检测系统 - 主程序
-
-新功能特性:
-✨ 渐变UI样式效果
-📱 优化的响应式布局
-📊 增强的日志显示（类别识别信息）
-📁 支持自定义模型目录加载
-📹 多摄像头支持和选择
-🖥️ 实时监控页面
-🎨 优化的图标设计
-⚡ 性能优化和错误处理
-"""
-
-import sys
-from datetime import datetime
-from PySide6.QtWidgets import *
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-
-try:
-    from ultralytics import YOLO
-except ImportError:
-    print("错误: 请安装ultralytics库: pip install ultralytics")
-    sys.exit(1)
+from utils.TumorSliceFinder import TumorSliceFinder
+import nibabel as nib
 
 
 class StyleManager:
-    """样式管理器 - 提供渐变和现代化UI样式"""
+    """Style Manager - Provides gradient and modern UI styles"""
+
 
     @staticmethod
     def get_main_stylesheet():
@@ -388,6 +334,16 @@ class StyleManager:
             border-radius: 10px;
             padding: 15px;
         """
+    @staticmethod
+    def get_image_niigz_label_style():
+        return """
+            background: black;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            padding: 0px;
+        """
+
 
     @staticmethod
     def get_video_label_style():
@@ -403,43 +359,44 @@ class StyleManager:
 
 
 class CameraManager:
-    """摄像头管理器 - 处理多摄像头检测和管理"""
+    """Camera Manager - Handles multi-camera detection and management"""
+
 
     def __init__(self):
         self.cameras = []
         self.scan_cameras()
 
     def scan_cameras(self):
-        """扫描可用摄像头"""
+        """Scan available cameras"""
         self.cameras = []
 
-        # 检测摄像头（检测前8个索引）
-        for i in range(8):  # 扩展到8个摄像头检测
+        # Detect cameras (check first 8 indices)
+        for i in range(8):  # Extended to 8 camera detection
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
                 ret, frame = cap.read()
                 if ret and frame is not None:
-                    # 获取摄像头信息
+                    # Get camera information
                     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     fps = cap.get(cv2.CAP_PROP_FPS)
 
                     camera_info = {
                         'id': i,
-                        'name': f"摄像头 {i}",
+                        'name': f"Camera {i}",
                         'resolution': f"{width}x{height}",
                         'fps': fps if fps > 0 else 30,
                         'available': True,
-                        'cap': None  # 保留摄像头对象位置
+                        'cap': None  # Reserve camera object position
                     }
                     self.cameras.append(camera_info)
                 cap.release()
 
-        # 如果没有摄像头，添加虚拟摄像头用于测试
+        # If no cameras, add virtual camera for testing
         if not self.cameras:
             self.cameras.append({
                 'id': -1,
-                'name': "虚拟摄像头",
+                'name': "Virtual Camera",
                 'resolution': "640x480",
                 'fps': 30,
                 'available': False,
@@ -447,34 +404,34 @@ class CameraManager:
             })
 
     def get_camera_count(self):
-        """返回可用摄像头数量
+        """Return available camera count
 
         Returns:
-            int: 可用摄像头数量
+            int: Available camera count
         """
         return len(self.get_available_cameras())
 
     def get_available_cameras(self):
-        """获取可用摄像头列表
+        """Get available camera list
 
         Returns:
-            list: 可用摄像头信息字典列表
+            list: Available camera information dictionary list
         """
         return [cam for cam in self.cameras if cam['available']]
 
     def get_camera_info(self, camera_id):
-        """获取指定摄像头的详细信息
+        """Get detailed information for specified camera
 
         Args:
-            camera_id (int): 摄像头ID
+            camera_id (int): Camera ID
 
         Returns:
-            dict: 摄像头信息字典，包含以下键：
-                - id: 摄像头索引
-                - name: 摄像头名称
-                - resolution: 分辨率字符串(如"640x480")
-                - fps: 帧率
-                - available: 是否可用
+            dict: Camera information dictionary with following keys:
+                - id: Camera index
+                - name: Camera name
+                - resolution: Resolution string (e.g., "640x480")
+                - fps: Frame rate
+                - available: Whether available
         """
         for cam in self.cameras:
             if cam['id'] == camera_id:
@@ -482,15 +439,15 @@ class CameraManager:
         return None
 
     def get_camera_names(self):
-        """获取所有摄像头名称列表
+        """Get all camera names list
 
         Returns:
-            list: 摄像头名称字符串列表
+            list: Camera name string list
         """
         return [cam['name'] for cam in self.cameras]
 
     def release_all(self):
-        """释放所有摄像头资源"""
+        """Release all camera resources"""
         for cam in self.cameras:
             if cam['cap'] is not None:
                 cam['cap'].release()
@@ -498,11 +455,12 @@ class CameraManager:
 
 
 class ModelManager:
-    """模型管理器 - 处理模型扫描和加载"""
+    """Model Manager - Handles model scanning and loading"""
 
     def __init__(self):
         self.models_paths = [
             Path("pt_models"),
+            Path("onnx_models"),
             Path("../models"),
             Path("weights"),
         ]
@@ -510,7 +468,7 @@ class ModelManager:
         self.class_names = []
 
     def scan_models(self, custom_path=None):
-        """扫描模型文件"""
+        """Scan model files"""
         models = []
         search_paths = self.models_paths.copy()
 
@@ -520,35 +478,57 @@ class ModelManager:
         for model_dir in search_paths:
             if model_dir.exists():
                 try:
+                    # Scan .pt files
                     pt_files = sorted(model_dir.glob("*.pt"))
                     for pt_file in pt_files:
                         models.append({
                             'name': pt_file.name,
                             'path': str(pt_file),
                             'size': self._get_file_size(pt_file),
-                            'modified': self._get_modification_time(pt_file)
+                            'modified': self._get_modification_time(pt_file),
+                            'format': 'pt'
+                        })
+                    
+                    # Scan .onnx files
+                    onnx_files = sorted(model_dir.glob("*.onnx"))
+                    for onnx_file in onnx_files:
+                        models.append({
+                            'name': onnx_file.name,
+                            'path': str(onnx_file),
+                            'size': self._get_file_size(onnx_file),
+                            'modified': self._get_modification_time(onnx_file),
+                            'format': 'onnx'
                         })
                 except Exception as e:
-                    print(f"扫描目录 {model_dir} 时出错: {e}")
+                    print(f"Error scanning directory {model_dir}: {e}")
 
         return models
 
     def load_model(self, model_path):
-        """加载模型"""
+        """Load model"""
         try:
-            self.current_model = YOLO(model_path)
+            # Check file extension to determine model format
+            file_extension = Path(model_path).suffix.lower()
+            
+            if file_extension == '.onnx':
+                # Load ONNX model
+                self.current_model = YOLO(model_path, task='detect')
+            else:
+                # Default load .pt model
+                self.current_model = YOLO(model_path)
+            
             self.class_names = list(self.current_model.names.values())
             return True
         except Exception as e:
-            print(f"模型加载失败: {e}")
+            print(f"Model loading failed: {e}")
             return False
 
     def get_class_names(self):
-        """获取类别名称"""
+        """Get class names"""
         return self.class_names
 
     def _get_file_size(self, file_path):
-        """获取文件大小"""
+        """Get file size"""
         try:
             size = file_path.stat().st_size
             for unit in ['B', 'KB', 'MB', 'GB']:
@@ -560,7 +540,7 @@ class ModelManager:
             return "Unknown"
 
     def _get_modification_time(self, file_path):
-        """获取修改时间"""
+        """Get modification time"""
         try:
             timestamp = file_path.stat().st_mtime
             return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
@@ -600,7 +580,7 @@ class DetectionThread(QThread):
             elif self.source_type == 'camera':
                 self._process_camera()
         except Exception as e:
-            self.error_occurred.emit(f"检测过程发生错误: {str(e)}")
+            self.error_occurred.emit(f"Detection error: {str(e)}")
         finally:
             self.is_running = False
             self.finished.emit()
@@ -608,10 +588,10 @@ class DetectionThread(QThread):
     def _process_image(self):
         """处理单张图片"""
         if not self.source_path or not Path(self.source_path).exists():
-            self.error_occurred.emit("图片文件不存在")
+            self.error_occurred.emit("Image file not found")
             return
 
-        self.status_changed.emit("正在处理图片...")
+        self.status_changed.emit("Processing image...")
 
         start_time = time.time()
         results = self.model(self.source_path, conf=self.confidence_threshold, verbose=False)
@@ -619,7 +599,7 @@ class DetectionThread(QThread):
 
         original_img = cv2.imread(self.source_path)
         if original_img is None:
-            self.error_occurred.emit("无法读取图片文件")
+            self.error_occurred.emit("Image file read error")
             return
 
         original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
@@ -629,24 +609,24 @@ class DetectionThread(QThread):
 
         self.result_ready.emit(original_img, result_img, end_time - start_time, results, class_names)
         self.progress_updated.emit(100)
-        self.status_changed.emit("处理完成")
+        self.status_changed.emit("Detection completed")
 
     def _process_video(self):
         """处理视频文件"""
         if not self.source_path or not Path(self.source_path).exists():
-            self.error_occurred.emit("视频文件不存在")
+            self.error_occurred.emit("Video file not found")
             return
 
         cap = cv2.VideoCapture(self.source_path)
         if not cap.isOpened():
-            self.error_occurred.emit("无法打开视频文件")
+            self.error_occurred.emit("Video file open error")
             return
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_count = 0
         class_names = list(self.model.names.values())
 
-        self.status_changed.emit(f"开始处理视频 (共{total_frames}帧)...")
+        self.status_changed.emit(f"Processing video... {total_frames} frames)")
 
         while cap.isOpened() and self.is_running:
             if self.is_paused:
@@ -678,7 +658,7 @@ class DetectionThread(QThread):
             # 状态更新（每30帧更新一次）
             if frame_count % 30 == 0:
                 current_fps = self._get_current_fps()
-                self.status_changed.emit(f"处理中... {frame_count}/{total_frames} 帧 (FPS: {current_fps:.1f})")
+                self.status_changed.emit(f"Processing video... {frame_count}/{total_frames} frames (FPS: {current_fps:.1f})")
 
             time.sleep(0.033)  # 约30fps
 
@@ -688,7 +668,7 @@ class DetectionThread(QThread):
         """处理摄像头"""
         cap = cv2.VideoCapture(self.camera_id)
         if not cap.isOpened():
-            self.error_occurred.emit(f"无法打开摄像头 {self.camera_id}")
+            self.error_occurred.emit(f"Camera {self.camera_id} open error")
             return
 
         # 设置摄像头参数
@@ -697,7 +677,7 @@ class DetectionThread(QThread):
         cap.set(cv2.CAP_PROP_FPS, 30)
 
         class_names = list(self.model.names.values())
-        self.status_changed.emit(f"摄像头 {self.camera_id} 已启动...")
+        self.status_changed.emit(f"Camera {self.camera_id} started...")
 
         while cap.isOpened() and self.is_running:
             if self.is_paused:
@@ -724,7 +704,7 @@ class DetectionThread(QThread):
             # 状态更新（每60帧更新一次）
             if self.frame_count % 60 == 0:
                 current_fps = self._get_current_fps()
-                self.status_changed.emit(f"摄像头运行中 (FPS: {current_fps:.1f})")
+                self.status_changed.emit(f"Camera {self.camera_id} processing (FPS: {current_fps:.1f})")
 
             time.sleep(0.033)  # 约30fps
 
@@ -751,15 +731,15 @@ class DetectionThread(QThread):
 
     def pause(self):
         self.is_paused = True
-        self.status_changed.emit(f"暂停中...")
+        self.status_changed.emit(f"Detection paused...")
 
     def resume(self):
         self.is_paused = False
-        self.status_changed.emit(f"恢复检测")
+        self.status_changed.emit(f"Detection resumed")
 
     def stop(self):
         self.is_running = False
-        self.status_changed.emit(f"检测结束!")
+        self.status_changed.emit(f"Detection completed!")
 
 
 class BatchDetectionThread(QThread):
@@ -793,11 +773,11 @@ class BatchDetectionThread(QThread):
 
             total_files = len(image_files)
             if total_files == 0:
-                self.status_changed.emit("文件夹中没有找到支持的图片格式")
+                self.status_changed.emit("No supported image formats found in folder")
                 self.finished.emit()
                 return
 
-            self.status_changed.emit(f"开始批量处理 {total_files} 个文件...")
+            self.status_changed.emit(f"Start batch processing {total_files} files...")
 
             # 获取类别名称
             class_names = list(self.model.names.values())
@@ -828,7 +808,7 @@ class BatchDetectionThread(QThread):
                         self.processed_count += 1
 
                 except Exception as e:
-                    self.error_occurred.emit(f"处理文件 {img_path.name} 时发生错误: {str(e)}")
+                    self.error_occurred.emit(f"Processing file {img_path.name} error: {str(e)}")
                     self.error_count += 1
 
                 # 更新进度
@@ -838,10 +818,10 @@ class BatchDetectionThread(QThread):
                 # 状态更新
                 if (i + 1) % 10 == 0 or i == total_files - 1:
                     self.status_changed.emit(
-                        f"处理进度: {i + 1}/{total_files} (成功: {self.processed_count}, 错误: {self.error_count})")
+                        f"Batch processing progress: {i + 1}/{total_files} (Success: {self.processed_count}, Error: {self.error_count})")
 
         except Exception as e:
-            self.error_occurred.emit(f"批量处理发生错误: {str(e)}")
+            self.error_occurred.emit(f"Batch processing error: {str(e)}")
         finally:
             self.is_running = False
             # self.finished.emit()
@@ -862,18 +842,18 @@ class MultiCameraMonitorThread(QThread):
         self.model = model
         self.cam_ids = camera_ids
         self.conf = conf
-        self.period = 1.0 / fps  # 帧间隔
+        self.period = 1.0 / fps  # Frame interval
         self.caps = {}  # {id: cv2.VideoCapture}
-        self.active = {}  # {id: bool} 是否在线
+        self.active = {}  # {id: bool} Whether online
         self.last_t = {}  # {id: float}
 
-        # 线程同步
+        # Thread synchronization
         self._run_flag = True
         self._pause_cond = QWaitCondition()
         self._pause_mutex = QMutex()
         self._paused_flag = False
 
-    # ----------------- 生命周期 -----------------
+    # ----------------- Lifecycle -----------------
     def run(self):
         self._open_all()
         if not self.caps:
@@ -892,7 +872,7 @@ class MultiCameraMonitorThread(QThread):
                 if not self._run_flag:
                     break
                 if not self._grab_and_infer(cid, cls_names):
-                    self._reconnect_later(cid)  # 断线后异步重连
+                    self._reconnect_later(cid)  # Async reconnect after disconnection
             self.msleep(10)
 
         self._close_all()
@@ -900,7 +880,7 @@ class MultiCameraMonitorThread(QThread):
 
     def stop(self):
         self._run_flag = False
-        self.resume()  # 确保等待线程被唤醒
+        self.resume()  # Ensure waiting thread is woken up
         self.wait()
 
     def pause(self):
@@ -914,7 +894,7 @@ class MultiCameraMonitorThread(QThread):
         self._pause_mutex.unlock()
         self._pause_cond.wakeAll()
 
-    # ----------------- 私有工具 -----------------
+    # ----------------- Private tools -----------------
     def _open_all(self):
         for cid in self.cam_ids:
             cap = cv2.VideoCapture(cid, cv2.CAP_DSHOW)
@@ -925,9 +905,9 @@ class MultiCameraMonitorThread(QThread):
                 self.caps[cid] = cap
                 self.active[cid] = True
                 self.last_t[cid] = 0.0
-                self.camera_status.emit(cid, "已连接")
+                self.camera_status.emit(cid, "Connected")
             else:
-                self.camera_error.emit(cid, "无法打开")
+                self.camera_error.emit(cid, "Cannot open")
                 cap.release()
 
     def _close_all(self):
@@ -940,13 +920,13 @@ class MultiCameraMonitorThread(QThread):
         if not cap or not cap.isOpened():
             return False
 
-        # 读帧非阻塞：先 grab 再 retrieve
+        # Non-blocking frame reading: first grab then retrieve
         if not cap.grab():
             return False
 
         now = time.time()
         if now - self.last_t[cid] < self.period:
-            return True  # 未超时，但帧已 grab，避免堆积
+            return True  # Not timed out, but frame has been grabbed to avoid accumulation
         self.last_t[cid] = now
 
         ret, frame = cap.retrieve()
@@ -964,15 +944,15 @@ class MultiCameraMonitorThread(QThread):
                                           infer_ms / 1000.0, results, cls_names)
             return True
         except Exception as e:
-            self.camera_error.emit(cid, f"推理异常: {e}")
+            self.camera_error.emit(cid, f"Inference error: {e}")
             return False
 
     def _reconnect_later(self, cid):
-        # 简单策略：5 秒后重试
+        # Simple strategy: retry after 5 seconds
         if self.active.get(cid) is False:
             return
         self.active[cid] = False
-        self.camera_status.emit(cid, "重连中…")
+        self.camera_status.emit(cid, "Reconnecting…")
         threading.Timer(5.0, lambda: self._try_reopen(cid)).start()
 
     def _try_reopen(self, cid):
@@ -982,14 +962,14 @@ class MultiCameraMonitorThread(QThread):
         if cap.isOpened():
             self.caps[cid] = cap
             self.active[cid] = True
-            self.camera_status.emit(cid, "已重连")
+            self.camera_status.emit(cid, "Reconnected")
         else:
             cap.release()
             self._reconnect_later(cid)
 
 
 class ModelSelectionDialog(QDialog):
-    """模型选择对话框"""
+    """Model selection dialog"""
 
     def __init__(self, model_manager, parent=None):
         super().__init__(parent)
@@ -998,37 +978,37 @@ class ModelSelectionDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("🔧 高级模型选择")
+        self.setWindowTitle("🔧 Advanced Model Selection")
         self.setModal(True)
         self.resize(700, 450)
 
         layout = QVBoxLayout(self)
 
-        # 自定义路径
-        path_group = QGroupBox("📁 自定义模型路径")
+        # Custom path
+        path_group = QGroupBox("📁 Custom Model Path")
         path_layout = QHBoxLayout(path_group)
 
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("输入自定义模型目录路径...")
+        self.path_edit.setPlaceholderText("Enter custom model directory path...")
         path_layout.addWidget(self.path_edit)
 
-        browse_btn = QPushButton("📂 浏览")
+        browse_btn = QPushButton("📂 Browse")
         browse_btn.clicked.connect(self.browse_path)
         path_layout.addWidget(browse_btn)
 
-        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.clicked.connect(self.refresh_models)
         path_layout.addWidget(refresh_btn)
 
         layout.addWidget(path_group)
 
-        # 模型列表
-        models_group = QGroupBox("📋 可用模型")
+        # Model list
+        models_group = QGroupBox("📋 Available Models")
         models_layout = QVBoxLayout(models_group)
 
         self.model_table = QTableWidget()
         self.model_table.setColumnCount(4)
-        self.model_table.setHorizontalHeaderLabels(["模型名称", "大小", "修改时间", "路径"])
+        self.model_table.setHorizontalHeaderLabels(["Model Name", "Size", "Modified Time", "Path"])
         self.model_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.model_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.model_table.setAlternatingRowColors(True)
@@ -1037,13 +1017,13 @@ class ModelSelectionDialog(QDialog):
         models_layout.addWidget(self.model_table)
         layout.addWidget(models_group)
 
-        # 按钮
+        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
-        # 设置样式
+        # Set style
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -1054,14 +1034,14 @@ class ModelSelectionDialog(QDialog):
         self.refresh_models()
 
     def browse_path(self):
-        """浏览自定义路径"""
-        path = QFileDialog.getExistingDirectory(self, "选择模型目录")
+        """Browse custom path"""
+        path = QFileDialog.getExistingDirectory(self, "Select Model Directory")
         if path:
             self.path_edit.setText(path)
             self.refresh_models()
 
     def refresh_models(self):
-        """刷新模型列表"""
+        """Refresh model list"""
         custom_path = self.path_edit.text() if self.path_edit.text() else None
         models = self.model_manager.scan_models(custom_path)
 
@@ -1074,7 +1054,7 @@ class ModelSelectionDialog(QDialog):
             self.model_table.setItem(i, 3, QTableWidgetItem(model['path']))
 
     def accept(self):
-        """确认选择"""
+        """Confirm selection"""
         current_row = self.model_table.currentRow()
         if current_row >= 0:
             self.selected_model = self.model_table.item(current_row, 3).text()
@@ -1083,7 +1063,7 @@ class ModelSelectionDialog(QDialog):
 
 
 class DetectionResultWidget(QWidget):
-    """检测结果显示组件 - 修改版本，包含诊断报告"""
+    """Detection result display component - Modified version with diagnosis report"""
 
     def __init__(self):
         super().__init__()
@@ -1091,39 +1071,39 @@ class DetectionResultWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        # 使用水平布局，左侧检测结果表格，右侧诊断报告
+        # Use horizontal layout, left side detection result table, right side diagnosis report
         main_layout = QHBoxLayout(self)
 
-        # 左侧：检测结果表格区域
+        # Left panel: Detection result table area
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
 
-        # 标题
-        title = QLabel("🎯 检测结果详情表")
+        # Title
+        title = QLabel("🎯 Detection Result Details")
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; margin-bottom: 5px;")
         left_layout.addWidget(title)
 
-        # 结果表格
+        # Result table
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(6)
         self.result_table.setHorizontalHeaderLabels(
-            ["类别", "置信度", "坐标 (x,y)", "尺寸 (w×h)", "估计直径 (pixel)", "像素面积(pixel²)"])
+            ["Class", "Confidence", "Coordinates (x,y)", "Size (w×h)", "Estimated Diameter (pixel)", "Pixel Area (pixel²)"])
         self.result_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.result_table.horizontalHeader().setStyleSheet("""
             QHeaderView::section {
-                background-color: white;  /* 深蓝色背景 */
+                background-color: white;  /* Deep blue background */
                 color: #2c3e50;               
                 font-size: 8pt;
                 font-weight: bold;
                 height: 12px;
-                border: 1px solid #d0d0d0;       /* 边框 */
+                border: 1px solid #d0d0d0;       /* Border */
             }
         """)
         self.result_table.setStyleSheet("""
             QTableWidget {
-                font-size: 8pt;  /* 调整表格内容字体大小 */
-                text-align: center; /* 居中对齐 */
-                align: center; /* 居中对齐 */
+                font-size: 8pt;  /* Adjust table content font size */
+                text-align: center; /* Center alignment */
+                align: center; /* Center alignment */
             }
         """)
         self.result_table.setMaximumHeight(200)
@@ -1131,9 +1111,9 @@ class DetectionResultWidget(QWidget):
 
         left_layout.addWidget(self.result_table)
 
-        # 统计信息
-        self.stats_label = QLabel("检测摘要...")
-        self.stats_label.setMinimumHeight(60)  # 设置最小高度为40像素
+        # Statistics information
+        self.stats_label = QLabel("Detection summary...")
+        self.stats_label.setMinimumHeight(60)  # Set minimum height to 40 pixels
         self.stats_label.setStyleSheet("""
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 rgba(236, 240, 241, 0.9), stop:1 rgba(189, 195, 199, 0.9));
@@ -1143,17 +1123,17 @@ class DetectionResultWidget(QWidget):
             color: #2c3e50;
             font-weight: bold;
         """)
-        # 修改这部分代码
+        # Modify this part of the code
         left_layout.addWidget(self.stats_label)
 
         main_layout.addWidget(left_panel)
 
 
     def update_results(self, results, class_names, inference_time):
-        """更新检测结果"""
+        """Update detection results"""
         if not results or not results[0].boxes or len(results[0].boxes) == 0:
             self.result_table.setRowCount(0)
-            self.stats_label.setText("❌ 未检测到目标")
+            self.stats_label.setText("❌ No targets detected")
             return
 
         boxes = results[0].boxes
@@ -1161,32 +1141,32 @@ class DetectionResultWidget(QWidget):
         classes = boxes.cls.cpu().numpy().astype(int)
         xyxy = boxes.xyxy.cpu().numpy()
 
-        # 更新表格
+        # Update table
         self.result_table.setRowCount(len(confidences))
 
         class_counts = {}
-        detection_data = []  # 存储检测数据用于生成报告
+        detection_data = []  # Store detection data for report generation
 
         for i, (conf, cls, box) in enumerate(zip(confidences, classes, xyxy)):
-            class_name = class_names[cls] if cls < len(class_names) else f"类别{cls}"
+            class_name = class_names[cls] if cls < len(class_names) else f"Class{cls}"
 
-            # 统计类别数量
+            # Count class occurrences
             class_counts[class_name] = class_counts.get(class_name, 0) + 1
 
-            # 从第0列开始填充数据，跳过序号列
+            # Fill data starting from column 0, skipping serial number column
             self.result_table.setItem(i, 0, QTableWidgetItem(class_name))
 
-            # 置信度带颜色
+            # Confidence with color
             conf_item = QTableWidgetItem(f"{conf:.3f}")
             if conf > 0.8:
-                conf_item.setBackground(QColor(46, 204, 113, 100))  # 绿色
+                conf_item.setBackground(QColor(46, 204, 113, 100))  # Green
             elif conf > 0.5:
-                conf_item.setBackground(QColor(241, 196, 15, 100))  # 黄色
+                conf_item.setBackground(QColor(241, 196, 15, 100))  # Yellow
             else:
-                conf_item.setBackground(QColor(231, 76, 60, 100))  # 红色
+                conf_item.setBackground(QColor(231, 76, 60, 100))  # Red
             self.result_table.setItem(i, 1, conf_item)
 
-            # 计算宽度和高度
+            # Calculate width and height
             width = box[2] - box[0]
             height = box[3] - box[1]
 
@@ -1239,26 +1219,26 @@ class DetectionResultWidget(QWidget):
             avg_diameter = np.mean(diameters)
             avg_voxel = np.mean(voxels)
             if total_objects > 1:
-                # 构建统计文本
-                stats_text = f"✅ 检测到 {total_objects} 个目标 | "
-                stats_text += f"🎯 平均置信度: {avg_confidence:.3f} | "
-                stats_text += f"⌀ 平均直径: {avg_diameter:.2f}pixel | "
-                stats_text += f"🧩 平均像素面积: {avg_voxel:.2f}pixel²\n"
-                stats_text += "📊 类别统计: " + " | ".join([f"{name}: {count}" for name, count in class_counts.items()])
+                # Build statistics text
+                stats_text = f"✅ Detected {total_objects} objects | "
+                stats_text += f"🎯 Average confidence: {avg_confidence:.3f} | "
+                stats_text += f"⌀ Average diameter: {avg_diameter:.2f}pixel | "
+                stats_text += f"🧩 Average pixel area: {avg_voxel:.2f}pixel²\n"
+                stats_text += "📊 Class statistics: " + " | ".join([f"{name}: {count}" for name, count in class_counts.items()])
             else:
-                # 构建统计文本
-                stats_text = f"✅ 检测到 {total_objects} 个目标 | "
-                stats_text += f"🎯 置信度: {avg_confidence:.3f} | "
-                stats_text += f"⌀ 直径: {avg_diameter:.2f}pixel | "
-                stats_text += f"🧩 像素面积: {avg_voxel:.2f}pixel²\n"
-                stats_text += "📊 类别: " + " | ".join([f"{name}: {count}" for name, count in class_counts.items()])
+                # Build statistics text
+                stats_text = f"✅ Detected {total_objects} object | "
+                stats_text += f"🎯 Confidence: {avg_confidence:.3f} | "
+                stats_text += f"⌀ Diameter: {avg_diameter:.2f}pixel | "
+                stats_text += f"🧩 Pixel area: {avg_voxel:.2f}pixel²\n"
+                stats_text += "📊 Class: " + " | ".join([f"{name}: {count}" for name, count in class_counts.items()])
 
         else:
-            stats_text = "❌ 未检测到目标"
+            stats_text = "❌ No objects detected"
 
         self.stats_label.setText(stats_text)
 class MonitoringWidget(QWidget):
-    """监控页面组件"""
+    """Monitoring page component"""
 
     def __init__(self, model_manager, camera_manager):
         super().__init__()
@@ -1267,9 +1247,9 @@ class MonitoringWidget(QWidget):
         self.monitoring_thread = None
         self.camera_labels = {}
         self.current_model = None
-        self.start_monitor_btn = QPushButton("🚀 开始监控")
+        self.start_monitor_btn = QPushButton("🚀 Start monitoring")
 
-        # 自动保存监控快照相关属性
+        # Auto-save monitoring snapshots related properties
         self.is_auto_saving = False
         self.camera_recorders = {}  # {camera_id: VideoRecorder}
         self.monitor_history_dir = Path("monitor_history")
@@ -1282,55 +1262,55 @@ class MonitoringWidget(QWidget):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
-        # 控制面板
-        control_group = QGroupBox("🖥️ 监控控制")
-        control_group.setMaximumHeight(120)  # 增加高度以容纳新控件
+        # Control panel
+        control_group = QGroupBox("🖥️ Monitoring control")
+        control_group.setMaximumHeight(120)  # Increase height to accommodate new controls
         control_layout = QVBoxLayout(control_group)
 
-        # 第一行：模型和摄像头选择
+        # First row: Model and camera selection
         first_row_layout = QHBoxLayout()
 
-        # 模型选择
+        # Model selection
         model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("模型:"))
+        model_layout.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         self.init_model_combo()
         model_layout.addWidget(self.model_combo)
-        select_model_btn = QPushButton("🔧 选择模型")
+        select_model_btn = QPushButton("🔧 Select model")
         select_model_btn.clicked.connect(self.select_model)
         model_layout.addWidget(select_model_btn)
         first_row_layout.addLayout(model_layout)
 
-        # 摄像头选择
+        # Camera selection
         camera_layout = QHBoxLayout()
-        camera_layout.addWidget(QLabel("摄像头:"))
+        camera_layout.addWidget(QLabel("Camera:"))
         self.camera_list = QListWidget()
         self.camera_list.setMaximumWidth(300)
         self.camera_list.setSelectionMode(QListWidget.MultiSelection)
         self.refresh_cameras()
         camera_layout.addWidget(self.camera_list)
-        refresh_camera_btn = QPushButton("🔄 刷新")
+        refresh_camera_btn = QPushButton("🔄 Refresh")
         refresh_camera_btn.clicked.connect(self.refresh_cameras)
         camera_layout.addWidget(refresh_camera_btn)
         first_row_layout.addLayout(camera_layout)
 
         control_layout.addLayout(first_row_layout)
 
-        # 第二行：监控控制和自动保存设置
+        # Second row: Monitoring control and auto-save settings
         second_row_layout = QHBoxLayout()
 
-        # 监控控制按钮
+        # Monitoring control buttons
         monitor_btn_layout = QHBoxLayout()
         self.start_monitor_btn.clicked.connect(self.start_monitoring)
         self.start_monitor_btn.setEnabled(True)
         monitor_btn_layout.addWidget(self.start_monitor_btn)
 
-        self.stop_monitor_btn = QPushButton("⏸️ 暂停")
+        self.stop_monitor_btn = QPushButton("⏸️ Pause")
         self.stop_monitor_btn.clicked.connect(self.stop_monitoring)
         monitor_btn_layout.addWidget(self.stop_monitor_btn)
 
-        self.clear_monitor_btn = QPushButton("🗑️ 清除监控")
+        self.clear_monitor_btn = QPushButton("🗑️ Clear Monitor")
         self.clear_monitor_btn.clicked.connect(self.clear_monitoring)
         self.clear_monitor_btn.setEnabled(False)
         self.stop_monitor_btn.setEnabled(False)
@@ -1338,23 +1318,23 @@ class MonitoringWidget(QWidget):
 
         second_row_layout.addLayout(monitor_btn_layout)
 
-        # 自动保存监控快照控制
+        # Auto-save monitoring snapshots control
         snapshot_control_layout = QHBoxLayout()
 
-        self.auto_save_btn = QPushButton("🎬 自动保存监控快照")
+        self.auto_save_btn = QPushButton("🎬 Auto-save Monitoring Snapshots")
         self.auto_save_btn.clicked.connect(self.toggle_auto_save)
         self.auto_save_btn.setEnabled(False)
         snapshot_control_layout.addWidget(self.auto_save_btn)
 
-        # 录制设置
-        snapshot_control_layout.addWidget(QLabel("帧率:"))
+        # Recording settings
+        snapshot_control_layout.addWidget(QLabel("FPS:"))
         self.recording_fps_spinbox = QSpinBox()
         self.recording_fps_spinbox.setRange(5, 60)
         self.recording_fps_spinbox.setValue(20)
         self.recording_fps_spinbox.setSuffix(" fps")
         snapshot_control_layout.addWidget(self.recording_fps_spinbox)
 
-        snapshot_control_layout.addWidget(QLabel("内存限制:"))
+        snapshot_control_layout.addWidget(QLabel("Memory Limit:"))
         self.memory_limit_spinbox = QSpinBox()
         self.memory_limit_spinbox.setRange(100, 2000)
         self.memory_limit_spinbox.setValue(500)
@@ -1391,12 +1371,12 @@ class MonitoringWidget(QWidget):
         layout.addWidget(self.monitor_scroll)
 
     def init_model_combo(self):
-        """初始化模型下拉框"""
+        """Initialize model dropdown"""
         self.model_combo.clear()
         models = self.model_manager.scan_models()
 
         if not models:
-            self.model_combo.addItem("无可用模型")
+            self.model_combo.addItem("No models available")
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.addItems([model['name'] for model in models])
@@ -1404,13 +1384,13 @@ class MonitoringWidget(QWidget):
             self.try_load_default_model()
 
     def try_load_default_model(self):
-        """尝试加载默认模型"""
-        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "无可用模型":
+        """Try to load default model"""
+        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "No models available":
             first_model = self.model_combo.itemText(0)
             self.load_model_by_name(first_model)
 
     def load_model_by_name(self, model_name):
-        """根据名称加载模型"""
+        """Load model by name"""
         models = self.model_manager.scan_models()
         for model in models:
             if model['name'] == model_name:
@@ -1418,13 +1398,13 @@ class MonitoringWidget(QWidget):
                 break
 
     def on_model_changed(self, model_text):
-        """模型选择改变"""
-        if model_text != "无可用模型":
+        """Model selection changed"""
+        if model_text != "No models available":
             self.load_model_by_name(model_text)
 
     def load_model(self, model_path):
 
-        """加载模型"""
+        """Load model"""
         try:
             self.current_model = YOLO(model_path)
             self.start_monitor_btn.setEnabled(True)
@@ -1435,7 +1415,7 @@ class MonitoringWidget(QWidget):
             return False
 
     def select_model(self):
-        """选择模型"""
+        """Select model"""
         dialog = ModelSelectionDialog(self.model_manager, self)
         if dialog.exec() == QDialog.Accepted and dialog.selected_model:
             try:
@@ -1444,12 +1424,12 @@ class MonitoringWidget(QWidget):
                 self.model_combo.clear()
                 self.model_combo.addItem(model_name)
                 self.start_monitor_btn.setEnabled(True)
-                QMessageBox.information(self, "成功", f"模型加载成功: {model_name}")
+                QMessageBox.information(self, "Success", f"Model loaded successfully: {model_name}")
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"模型加载失败: {str(e)}")
+                QMessageBox.critical(self, "Error", f"Model loading failed: {str(e)}")
 
     def refresh_cameras(self):
-        """刷新摄像头列表"""
+        """Refresh camera list"""
         self.camera_manager.scan_cameras()
         self.camera_list.clear()
 
@@ -1459,14 +1439,14 @@ class MonitoringWidget(QWidget):
             self.camera_list.addItem(item)
 
     def start_monitoring(self):
-        """开始监控"""
+        """Start Monitoring"""
         if not self.current_model:
-            QMessageBox.warning(self, "警告", "请先选择模型")
+            QMessageBox.warning(self, "Warning", "Please select a model first")
             return
 
         selected_items = self.camera_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "警告", "请选择至少一个摄像头")
+            QMessageBox.warning(self, "Warning", "Please select at least one camera")
             return
 
         camera_ids = [item.data(Qt.UserRole) for item in selected_items]
@@ -1526,7 +1506,7 @@ class MonitoringWidget(QWidget):
             col = i % cols
 
             # 创建摄像头组
-            camera_group = QGroupBox(f"📹 摄像头 {camera_id}")
+            camera_group = QGroupBox(f"📹 Camera {camera_id}")
             camera_group.setStyleSheet("""
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 rgba(248, 249, 250, 0.9), stop:1 rgba(233, 236, 239, 0.9));
@@ -1540,31 +1520,31 @@ class MonitoringWidget(QWidget):
             camera_layout = QVBoxLayout(camera_group)
             self.start_btn = QPushButton("▶️")
             self.start_btn.setObjectName("startBtn")
-            self.start_btn.setToolTip("启动检测")
+            self.start_btn.setToolTip("Start detection")
             # self.start_btn.clicked.connect(self.start_detection)
 
             self.pause_btn = QPushButton("⏸️")
             self.pause_btn.setObjectName("pauseBtn")
-            self.pause_btn.setToolTip("暂停检测")
+            self.pause_btn.setToolTip("Pause detection")
             # self.pause_btn.clicked.connect(self.pause_detection)
 
             self.stop_btn = QPushButton("⏹️")
             self.stop_btn.setObjectName("stopBtn")
-            self.stop_btn.setToolTip("停止检测")
+            self.stop_btn.setToolTip("Stop detection")
             # self.stop_btn.clicked.connect(self.stop_detection)
 
             self.monitor_btn = QPushButton("👁️")
             self.monitor_btn.setObjectName("monitorBtn")
-            self.monitor_btn.setToolTip("监控模式")
+            self.monitor_btn.setToolTip("Monitor mode switch")
             # self.monitor_btn.clicked.connect(self.toggle_monitor_mode)
 
             self.clear_btn = QPushButton("🗑️")
             self.clear_btn.setObjectName("clearBtn")
-            self.clear_btn.setToolTip("清空画面")
+            self.clear_btn.setToolTip("Clear monitor")
             # self.clear_btn.clicked.connect(self.clear_frame)
 
             # 状态标签
-            status_label = QLabel("状态: 初始化中...")
+            status_label = QLabel("Status: Initializing...")
             status_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
 
             control_layout = QHBoxLayout()
@@ -1577,7 +1557,7 @@ class MonitoringWidget(QWidget):
             control_layout.addWidget(status_label)
 
             # 图像显示标签
-            image_label = QLabel("等待连接...")
+            image_label = QLabel("Waiting for connection...")
             image_label.setMinimumSize(300, 240)
             # image_label.setMaximumHeight(350)
             image_label.setStyleSheet("""
@@ -1713,21 +1693,21 @@ class MonitoringWidget(QWidget):
         self.camera_labels.clear()
 
     def update_camera_display(self, camera_id, original_img, result_img, inference_time, results, class_names):
-        """更新摄像头显示"""
+        """Update camera display"""
         if camera_id not in self.camera_labels:
             return
 
-        # 显示结果图
+        # Display result image
         self.display_image(result_img, self.camera_labels[camera_id]['image'])
 
-        # 更新状态
+        # Update status
         if results and results[0].boxes and len(results[0].boxes) > 0:
             object_count = len(results[0].boxes)
             self.camera_labels[camera_id]['status'].setText(
-                f"状态: 检测到 {object_count} 个目标 | 耗时: {inference_time:.3f}s"
+                f"Status: Detected {object_count} objects | Time: {inference_time:.3f}s"
             )
 
-            # 添加检测帧到自动保存系统
+            # Add detection frame to auto-save system
             detection_info = {
                 'results': results,
                 'class_names': class_names,
@@ -1736,25 +1716,25 @@ class MonitoringWidget(QWidget):
             self.add_detection_frame(camera_id, result_img, detection_info)
         else:
             self.camera_labels[camera_id]['status'].setText(
-                f"状态: 无目标 | 耗时: {inference_time:.3f}s"
+                f"Status: No objects | Time: {inference_time:.3f}s"
             )
 
     def handle_camera_error(self, camera_id, error_msg):
-        """处理摄像头错误"""
+        """Handle camera error"""
         if camera_id in self.camera_labels:
-            self.camera_labels[camera_id]['status'].setText(f"错误: {error_msg}")
+            self.camera_labels[camera_id]['status'].setText(f"Error: {error_msg}")
             self.camera_labels[camera_id]['status'].setStyleSheet("color: red; font-size: 10px;")
 
     def on_monitoring_finished(self):
-        """监控结束"""
+        """Monitoring finished"""
         self.start_monitor_btn.setEnabled(True)
         self.stop_monitor_btn.setEnabled(False)
 
         for camera_id in self.camera_labels:
-            self.camera_labels[camera_id]['status'].setText("状态: 已停止")
+            self.camera_labels[camera_id]['status'].setText("Status: Stopped")
 
     def display_image(self, img_array, label):
-        """显示图像"""
+        """Display image"""
         if img_array is None:
             return
 
@@ -1766,51 +1746,51 @@ class MonitoringWidget(QWidget):
         label.setPixmap(scaled_pixmap)
 
     def toggle_auto_save(self):
-        """切换自动保存监控快照状态"""
+        """Toggle auto-save monitoring snapshots status"""
         if not self.is_auto_saving:
             self.start_auto_save()
         else:
             self.stop_auto_save()
 
     def start_auto_save(self):
-        """开始自动保存监控快照"""
+        """Start auto-save monitoring snapshots"""
         if not self.current_model:
-            QMessageBox.warning(self, "警告", "请先选择模型")
+            QMessageBox.warning(self, "Warning", "Please select a model first")
             return
 
         self.is_auto_saving = True
         self.max_memory_limit = self.memory_limit_spinbox.value()
 
-        self.auto_save_btn.setText("⏹️ 停止自动保存")
+        self.auto_save_btn.setText("⏹️ Stop auto-save")
 
-        # 禁用设置控件
+        # Disable setting controls
         self.recording_fps_spinbox.setEnabled(False)
         self.memory_limit_spinbox.setEnabled(False)
 
-        QMessageBox.information(self, "成功", "自动保存监控快照已启动")
+        QMessageBox.information(self, "Success", "Auto-save monitoring snapshots started")
 
     def stop_auto_save(self):
-        """停止自动保存监控快照"""
+        """Stop auto-save monitoring snapshots"""
         self.is_auto_saving = False
 
-        # 停止所有录制器
+        # Stop all recorders
         for recorder in self.camera_recorders.values():
             recorder.stop_recording()
         self.camera_recorders.clear()
 
-        self.auto_save_btn.setText("🎬 自动保存监控快照")
-        # 启用设置控件
+        self.auto_save_btn.setText("🎬 Auto-save monitoring snapshots")
+        # Enable setting controls
         self.recording_fps_spinbox.setEnabled(True)
         self.memory_limit_spinbox.setEnabled(True)
 
-        QMessageBox.information(self, "成功", "自动保存监控快照已停止")
+        QMessageBox.information(self, "Success", "Auto-save monitoring snapshots stopped")
 
     def add_detection_frame(self, camera_id, frame, detection_info):
-        """添加检测帧到自动保存系统"""
+        """Add detection frame to auto-save system"""
         if not self.is_auto_saving:
             return
 
-        # 检查是否有检测结果
+        # Check if there are detection results
         if not detection_info or not detection_info.get('results'):
             return
 
@@ -1818,29 +1798,29 @@ class MonitoringWidget(QWidget):
         if not hasattr(results[0], 'boxes') or not results[0].boxes or len(results[0].boxes) == 0:
             return
 
-        # 获取摄像头名称
-        camera_name = f"摄像头{camera_id}"
+        # Get camera name
+        camera_name = f"Camera{camera_id}"
         if camera_id in self.camera_labels:
-            camera_name = f"摄像头{camera_id}"
+            camera_name = f"Camera{camera_id}"
 
-        # 创建或获取录制器
+        # Create or get recorder
         if camera_id not in self.camera_recorders:
             self.camera_recorders[camera_id] = CameraVideoRecorder(
                 camera_id, camera_name, self.monitor_history_dir,
                 self.recording_fps_spinbox.value()
             )
-            # 开始录制
+            # Start recording
             self.camera_recorders[camera_id].start_recording()
 
-        # 添加帧到录制器
+        # Add frame to recorder
         self.camera_recorders[camera_id].add_frame(frame, detection_info)
 
-        # 检查内存使用情况
+        # Check memory usage
         self.check_memory_usage()
 
     def check_memory_usage(self):
-        """检查内存使用情况，超过限制时清理最旧的记录"""
-        # 计算当前内存使用
+        """Check memory usage, clean up oldest records when limit is exceeded"""
+        # Calculate current memory usage
         total_size = 0
         for json_file in self.monitor_history_dir.glob("*.json"):
             mp4_file = json_file.with_suffix('.mp4')
@@ -1850,19 +1830,19 @@ class MonitoringWidget(QWidget):
         current_usage_mb = total_size / (1024 * 1024)
 
         if current_usage_mb > self.max_memory_limit:
-            # 删除最旧的记录
+            # Delete oldest records
             self.cleanup_oldest_records()
 
     def cleanup_oldest_records(self):
-        """清理最旧的记录"""
+        """Clean up oldest records"""
         json_files = list(self.monitor_history_dir.glob("*.json"))
         if not json_files:
             return
 
-        # 按修改时间排序，删除最旧的
+        # Sort by modification time, delete oldest
         json_files.sort(key=lambda x: x.stat().st_mtime)
 
-        for json_file in json_files[:len(json_files) // 4]:  # 删除25%的最旧记录
+        for json_file in json_files[:len(json_files) // 4]:  # Delete 25% of oldest records
             mp4_file = json_file.with_suffix('.mp4')
             try:
                 if json_file.exists():
@@ -1870,7 +1850,7 @@ class MonitoringWidget(QWidget):
                 if mp4_file.exists():
                     mp4_file.unlink()
             except Exception as e:
-                print(f"清理文件失败 {json_file}: {e}")
+                print(f"Failed to clean up file {json_file}: {e}")
 
 
 class CameraVideoRecorder:
@@ -1936,7 +1916,7 @@ class CameraVideoRecorder:
             if hasattr(results[0], 'boxes') and results[0].boxes and len(results[0].boxes) > 0:
                 self.total_detections += len(results[0].boxes)
 
-                # 统计类别
+                # Count classes
                 if hasattr(results[0].boxes, 'cls'):
                     classes = results[0].boxes.cls.cpu().numpy().astype(int)
                     class_names = detection_info.get('class_names', [])
@@ -1946,13 +1926,13 @@ class CameraVideoRecorder:
                             class_name = class_names[cls]
                             self.detection_stats[class_name] = self.detection_stats.get(class_name, 0) + 1
 
-        # 检查是否需要保存文件
+        # Check if need to save file
         if len(self.frames) >= self.max_frames_per_file:
             self.save_recording()
-            self.start_recording()  # 开始新的录制
+            self.start_recording()  # Start new recording
 
     def stop_recording(self):
-        """停止录制"""
+        """Stop recording"""
         if not self.is_recording:
             return
 
@@ -1963,21 +1943,21 @@ class CameraVideoRecorder:
             self.video_writer.release()
             self.video_writer = None
 
-        # 保存录制
+        # Save recording
         if self.frames:
             self.save_recording()
 
     def save_recording(self):
-        """保存录制"""
+        """Save recording"""
         if not self.frames or not self.start_time:
             return
 
-        # 确保视频写入器已释放
+        # Ensure video writer is released
         if self.video_writer:
             self.video_writer.release()
             self.video_writer = None
 
-        # 保存JSON元数据
+        # Save JSON metadata
         metadata = {
             'camera_id': self.camera_id,
             'camera_name': self.camera_name,
@@ -1994,13 +1974,13 @@ class CameraVideoRecorder:
         with open(self.json_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-        print(f"保存监控快照: {self.camera_name} - {len(self.frames)} 帧, {self.total_detections} 次检测")
-        print(f"文件路径: {self.mp4_path}")
-        print(f"JSON路径: {self.json_path}")
+        print(f"Saving monitoring snapshot: {self.camera_name} - {len(self.frames)} frames, {self.total_detections} detections")
+        print(f"File path: {self.mp4_path}")
+        print(f"JSON path: {self.json_path}")
 
 
 class VideoWidget(QWidget):
-    """自定义视频显示组件，带控制功能"""
+    """Custom video display component with control functions"""
 
     def __init__(self, camera_id=0, parent=None):
         super().__init__(parent)
@@ -2017,41 +1997,41 @@ class VideoWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
 
-        # 视频显示区域
-        self.video_label = QLabel('视频显示区域')
+        # Video display area
+        self.video_label = QLabel('Video display area')
         self.video_label.setStyleSheet(StyleManager.get_video_label_style())
         self.video_label.setAlignment(Qt.AlignCenter)
-        # 控制按钮区域
+        # Control button area
         control_layout = QHBoxLayout()
 
         self.start_btn = QPushButton("▶️")
         self.start_btn.setObjectName("startBtn")
-        self.start_btn.setToolTip("启动检测")
+        self.start_btn.setToolTip("Start detection")
         self.start_btn.clicked.connect(self.start_detection)
 
         self.pause_btn = QPushButton("⏸️")
         self.pause_btn.setObjectName("pauseBtn")
-        self.pause_btn.setToolTip("暂停检测")
+        self.pause_btn.setToolTip("Pause detection")
         self.pause_btn.clicked.connect(self.pause_detection)
 
         self.stop_btn = QPushButton("⏹️")
         self.stop_btn.setObjectName("stopBtn")
-        self.stop_btn.setToolTip("停止检测")
+        self.stop_btn.setToolTip("Stop detection")
         self.stop_btn.clicked.connect(self.stop_detection)
 
         self.monitor_btn = QPushButton("👁️")
         self.monitor_btn.setObjectName("monitorBtn")
-        self.monitor_btn.setToolTip("监控模式")
+        self.monitor_btn.setToolTip("Monitor mode")
         self.monitor_btn.clicked.connect(self.toggle_monitor_mode)
 
         self.clear_btn = QPushButton("🗑️")
         self.clear_btn.setObjectName("clearBtn")
-        self.clear_btn.setToolTip("清空画面")
+        self.clear_btn.setToolTip("Clear screen")
         self.clear_btn.clicked.connect(self.clear_frame)
 
         # 状态标签
-        self.status_label = QLabel("🟢 就绪")
-
+        self.status_label = QLabel("🟢 Ready")
+        
         control_layout.addWidget(self.start_btn)
         control_layout.addWidget(self.pause_btn)
         control_layout.addWidget(self.stop_btn)
@@ -2079,7 +2059,7 @@ class VideoWidget(QWidget):
 
         # 根据状态设置显示样式  {0: 'Fall Detected', 1: 'Walking', 2: 'Sitting'}
         if state == "Fall Detected":
-            self.status_label.setText(f"⚠️ 跌倒检测 (置信度: {confidence:.2f})")
+            self.status_label.setText(f"⚠️ Fall detected (Confidence: {confidence:.2f})")
             self.status_label.setStyleSheet("""
                 QLabel {
                     color: #B91C1C;
@@ -2088,7 +2068,7 @@ class VideoWidget(QWidget):
                 }
             """)
         elif state == "Walking":
-            self.status_label.setText(f"🚶 行走中 (置信度: {confidence:.2f})")
+            self.status_label.setText(f"🚶 Walking (Confidence: {confidence:.2f})")
             self.status_label.setStyleSheet("""
                 QLabel {
                     color: #2563EB;
@@ -2097,7 +2077,7 @@ class VideoWidget(QWidget):
                 }
             """)
         else:
-            self.status_label.setText(f"🪑 坐着 (置信度: {confidence:.2f})")
+            self.status_label.setText(f"🪑 Sitting (Confidence: {confidence:.2f})")
             self.status_label.setStyleSheet("""
                 QLabel {
                     color: #059669;
@@ -2134,47 +2114,47 @@ class VideoWidget(QWidget):
             self.camera_id = camera_id
 
         self.is_monitoring = False
-        self.status_label.setText("🟡 检测中...")
+        self.status_label.setText("🟡 Detecting...")
 
         # TODO: 实际启动摄像头检测逻辑
-        print(f"启动摄像头 {self.camera_id} 检测")
+        print(f"Start camera detection {self.camera_id}")
 
     def pause_detection(self):
         """暂停检测"""
-        self.status_label.setText("⏸️ 已暂停")
+        self.status_label.setText("⏸️ Paused")
 
         # TODO: 实际暂停检测逻辑
-        print(f"暂停摄像头 {self.camera_id} 检测")
+        print(f"Pause camera detection {self.camera_id}")
 
     def stop_detection(self):
         """停止检测"""
-        self.status_label.setText("⏹️ 已停止")
+        self.status_label.setText("⏹️ Stopped")
 
         # TODO: 实际停止检测逻辑
-        print(f"停止摄像头 {self.camera_id} 检测")
+        print(f"Stop camera detection {self.camera_id}")
 
     def toggle_monitor_mode(self):
         """切换监控模式"""
         self.is_monitoring = not self.is_monitoring
         if self.is_monitoring:
             self.monitor_btn.setText("🔍")
-            self.monitor_btn.setToolTip("退出监控模式")
-            self.status_label.setText("👁️ 监控模式")
+            self.monitor_btn.setToolTip("Exit monitor mode")
+            self.status_label.setText("👁️ Monitor mode")
 
         else:
             self.monitor_btn.setText("👁️")
-            self.monitor_btn.setToolTip("监控模式")
-            self.status_label.setText("🟢 就绪")
+            self.monitor_btn.setToolTip("Monitor mode")
+            self.status_label.setText("🟢 Ready")
 
-        print(f"摄像头 {self.camera_id} 监控模式: {self.is_monitoring}")
+        print(f"Camera {self.camera_id} monitor mode: {self.is_monitoring}")
 
     def clear_frame(self):
         """清空画面"""
         self.video_label.clear()
-        self.video_label.setText("摄像头未激活")
-        self.status_label.setText("⚪ 空闲")
+        self.video_label.setText("Camera not active")
+        self.status_label.setText("⚪ Free")
 
-        print(f"清空摄像头 {self.camera_id} 画面")
+        print(f"Clear camera {self.camera_id} screen")
 
     def set_monitor_mode(self, enable):
         """设置监控模式"""
@@ -2213,16 +2193,16 @@ class CameraThread(QThread):
         try:
             self.cap = cv2.VideoCapture(self.camera_id)
             if not self.cap.isOpened():
-                self.frame_ready.emit(self.camera_id, None, f"错误: 无法打开摄像头 {self.camera_id}", -1)
+                self.frame_ready.emit(self.camera_id, None, f"Error: Camera not found {self.camera_id}", -1)
                 return
 
-            self.frame_ready.emit(self.camera_id, None, "状态: 运行中", -1)
+            self.frame_ready.emit(self.camera_id, None, "Status: Running", -1)
 
             while self._run_flag:
                 if not self._paused_flag:
                     ret, frame = self.cap.read()
                     if not ret:
-                        self.frame_ready.emit(self.camera_id, None, f"错误: 无法读取摄像头 {self.camera_id}", -1)
+                        self.frame_ready.emit(self.camera_id, None, f"Error: Failed to read camera {self.camera_id}", -1)
                         break
 
                     # 转换颜色空间 BGR -> RGB
@@ -2237,14 +2217,14 @@ class CameraThread(QThread):
                         detection_result = self.detect_with_model(rgb_image)
 
                     self.frame_ready.emit(self.camera_id, rgb_image,
-                                          f"状态: 运行中 - {self.get_status_text(detection_result)}",
+                                          f"Status: Running - {self.get_status_text(detection_result)}",
                                           detection_result)
 
                 # 控制帧率
                 time.sleep(0.03)  # ~30fps
 
         except Exception as e:
-            self.frame_ready.emit(self.camera_id, None, f"错误: {str(e)}", -1)
+            self.frame_ready.emit(self.camera_id, None, f"Error: {str(e)}", -1)
         finally:
             if self.cap:
                 self.cap.release()
@@ -2259,12 +2239,12 @@ class CameraThread(QThread):
     def get_status_text(self, result):
         """获取状态文本"""
         status_map = {
-            -1: "无检测",
-            0: "检测到摔倒",
-            1: "检测到行走",
-            2: "检测到坐下"
+            -1: "No detection",
+            0: "Fall Detected",
+            1: "Walking",
+            2: "Sitting"
         }
-        return status_map.get(result, "未知状态")
+        return status_map.get(result, "Unknown status")
 
     def stop(self):
         """停止线程"""
@@ -2311,7 +2291,7 @@ class EnhancedMonitoringWidget(QWidget):
 
     def init_control_panel(self, parent_layout):
         """初始化控制面板"""
-        control_group = QGroupBox("🖥️ 监控控制")
+        control_group = QGroupBox("🖥️ Monitoring Control")
         control_layout = QHBoxLayout(control_group)
 
         # 左侧区域：模型和摄像头选择
@@ -2319,21 +2299,21 @@ class EnhancedMonitoringWidget(QWidget):
 
         # 模型选择
         model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("模型:"))
+        model_layout.addWidget(QLabel("Model:"))
 
         self.model_combo = QComboBox()
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         self.init_model_combo()
         model_layout.addWidget(self.model_combo)
 
-        select_model_btn = QPushButton("🔧 选择模型")
+        select_model_btn = QPushButton("🔧 Select Model")
         select_model_btn.clicked.connect(self.select_model)
         model_layout.addWidget(select_model_btn)
         left_panel.addLayout(model_layout)
 
         # 摄像头选择
         camera_layout = QHBoxLayout()
-        camera_layout.addWidget(QLabel("摄像头:"), stretch=4)
+        camera_layout.addWidget(QLabel("Camera:"), stretch=4)
 
         self.camera_list = QListWidget()
         self.camera_list.setMaximumWidth(300)
@@ -2341,7 +2321,7 @@ class EnhancedMonitoringWidget(QWidget):
         self.refresh_cameras()
         camera_layout.addWidget(self.camera_list)
 
-        refresh_camera_btn = QPushButton("🔄 刷新")
+        refresh_camera_btn = QPushButton("🔄 Refresh")
         refresh_camera_btn.clicked.connect(self.refresh_cameras)
         camera_layout.addWidget(refresh_camera_btn)
         left_panel.addLayout(camera_layout)
@@ -2352,21 +2332,21 @@ class EnhancedMonitoringWidget(QWidget):
         center_panel = QVBoxLayout()
         btn_layout = QHBoxLayout()
 
-        self.start_all_btn = QPushButton("🚀 全部开始")
+        self.start_all_btn = QPushButton("🚀 Start All")
         self.start_all_btn.clicked.connect(self.start_all_cameras)
         btn_layout.addWidget(self.start_all_btn)
 
-        self.pause_all_btn = QPushButton("⏸️ 全部暂停")
+        self.pause_all_btn = QPushButton("⏸️ Pause All")
         self.pause_all_btn.clicked.connect(self.pause_all_cameras)
         self.pause_all_btn.setEnabled(False)
         btn_layout.addWidget(self.pause_all_btn)
 
-        self.stop_all_btn = QPushButton("🛑 全部停止")
+        self.stop_all_btn = QPushButton("🛑 Stop All")
         self.stop_all_btn.clicked.connect(self.stop_all_cameras)
         self.stop_all_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_all_btn)
 
-        self.clear_all_btn = QPushButton("🗑️ 全部清除")
+        self.clear_all_btn = QPushButton("🗑️ Clear All")
         self.clear_all_btn.clicked.connect(self.clear_all_cameras)
         self.clear_all_btn.setEnabled(False)
         btn_layout.addWidget(self.clear_all_btn)
@@ -2374,22 +2354,22 @@ class EnhancedMonitoringWidget(QWidget):
         center_panel.addLayout(btn_layout)
         control_layout.addLayout(center_panel, stretch=4)
 
-        # 右侧区域：状态信息
+        # Right area: Status information
         right_panel = QVBoxLayout()
 
-        # 系统时间显示
+        # System time display
         self.time_label = QLabel()
         self.time_label.setAlignment(Qt.AlignRight)
         self.update_time()
         right_panel.addWidget(self.time_label)
 
-        # 检测统计
+        # Detection statistics
         stats_layout = QHBoxLayout()
-        stats_layout.addWidget(QLabel("检测统计:"))
+        stats_layout.addWidget(QLabel("Detection Statistics:"))
 
-        self.fall_label = QLabel("摔倒: 0")
-        self.walk_label = QLabel("行走: 0")
-        self.sit_label = QLabel("坐下: 0")
+        self.fall_label = QLabel("Fall: 0")
+        self.walk_label = QLabel("Walk: 0")
+        self.sit_label = QLabel("Sit: 0")
 
         stats_layout.addWidget(self.fall_label)
         stats_layout.addWidget(self.walk_label)
@@ -2401,7 +2381,7 @@ class EnhancedMonitoringWidget(QWidget):
         parent_layout.addWidget(control_group)
 
     def init_monitor_area(self, parent_layout):
-        """初始化监控显示区域"""
+        """Initialize monitoring display area"""
         self.monitor_scroll = QScrollArea()
         self.monitor_scroll.setStyleSheet("""
             QScrollArea {
@@ -2426,12 +2406,12 @@ class EnhancedMonitoringWidget(QWidget):
         parent_layout.addWidget(self.monitor_scroll)
 
     def init_model_combo(self):
-        """初始化模型下拉框"""
+        """Initialize model dropdown"""
         self.model_combo.clear()
         models = self.model_manager.scan_models()
 
         if not models:
-            self.model_combo.addItem("无可用模型")
+            self.model_combo.addItem("No models available")
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.addItems([model['name'] for model in models])
@@ -2440,7 +2420,7 @@ class EnhancedMonitoringWidget(QWidget):
 
     def try_load_default_model(self):
         """尝试加载默认模型"""
-        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "无可用模型":
+        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "No models available":
             first_model = self.model_combo.itemText(0)
             self.load_model_by_name(first_model)
 
@@ -2453,8 +2433,8 @@ class EnhancedMonitoringWidget(QWidget):
                 break
 
     def on_model_changed(self, model_text):
-        """模型选择改变"""
-        if model_text != "无可用模型":
+        """Model selection changed"""
+        if model_text != "No models available":
             self.load_model_by_name(model_text)
 
     def load_model(self, model_path):
@@ -2464,11 +2444,11 @@ class EnhancedMonitoringWidget(QWidget):
             self.start_all_btn.setEnabled(True)
             return True
         except Exception as e:
-            print(f"模型加载失败: {e}")
+            print(f"Model loading failed: {e}")
             return False
 
     def select_model(self):
-        """选择模型"""
+        """Select model"""
         dialog = ModelSelectionDialog(self.model_manager, self)
         if dialog.exec() == QDialog.Accepted and dialog.selected_model:
             try:
@@ -2477,12 +2457,12 @@ class EnhancedMonitoringWidget(QWidget):
                 self.model_combo.clear()
                 self.model_combo.addItem(model_name)
                 self.start_all_btn.setEnabled(True)
-                QMessageBox.information(self, "成功", f"模型加载成功: {model_name}")
+                QMessageBox.information(self, "Success", f"Model loaded successfully: {model_name}")
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"模型加载失败: {str(e)}")
+                QMessageBox.critical(self, "Error", f"Model loading failed: {str(e)}")
 
     def refresh_cameras(self):
-        """刷新摄像头列表"""
+        """Refresh camera list"""
         self.camera_manager.scan_cameras()
         self.camera_list.clear()
 
@@ -2492,14 +2472,14 @@ class EnhancedMonitoringWidget(QWidget):
             self.camera_list.addItem(item)
 
     def start_all_cameras(self):
-        """启动所有选中的摄像头"""
+        """Start all selected cameras"""
         if not self.current_model:
-            QMessageBox.warning(self, "警告", "请先选择模型")
+            QMessageBox.warning(self, "Warning", "Please select a model first")
             return
 
         selected_items = self.camera_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "警告", "请选择至少一个摄像头")
+            QMessageBox.warning(self, "Warning", "Please select at least one camera")
             return
 
         camera_ids = [item.data(Qt.UserRole) for item in selected_items]
@@ -2543,7 +2523,7 @@ class EnhancedMonitoringWidget(QWidget):
 
     def add_camera_widget(self, camera_id):
         """为摄像头添加显示和控制部件"""
-        camera_group = QGroupBox(f"📹 摄像头 {camera_id}")
+        camera_group = QGroupBox(f"📹 Camera {camera_id}")
         camera_group.setStyleSheet("""
             QGroupBox {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -2558,20 +2538,20 @@ class EnhancedMonitoringWidget(QWidget):
         layout = QVBoxLayout(camera_group)
 
         # 图像显示区域
-        image_label = QLabel("等待连接...")
+        image_label = QLabel("Connecting...")
         image_label.setAlignment(Qt.AlignCenter)
         image_label.setStyleSheet("background-color: #ecf0f1;")
         layout.addWidget(image_label)
 
         # 状态标签
-        status_label = QLabel("状态: 初始化中...")
+        status_label = QLabel("Status: Connecting...")
         status_label.setStyleSheet("color: #7f8c8d; font-size: 10px;")
         layout.addWidget(status_label)
 
         # 控制按钮
         btn_layout = QHBoxLayout()
 
-        start_btn = QPushButton("▶️ 开始")
+        start_btn = QPushButton("▶️ Start")
         start_btn.clicked.connect(lambda: self.start_camera(camera_id))
         btn_layout.addWidget(start_btn)
 
@@ -2580,7 +2560,7 @@ class EnhancedMonitoringWidget(QWidget):
         pause_btn.setEnabled(False)
         btn_layout.addWidget(pause_btn)
 
-        stop_btn = QPushButton("🛑 停止")
+        stop_btn = QPushButton("🛑 Stop")
         stop_btn.clicked.connect(lambda: self.stop_camera(camera_id))
         stop_btn.setEnabled(False)
         btn_layout.addWidget(stop_btn)
@@ -2633,7 +2613,7 @@ class EnhancedMonitoringWidget(QWidget):
     def start_camera(self, camera_id):
         """启动单个摄像头"""
         if camera_id in self.camera_widgets:
-            self.camera_widgets[camera_id]['status'].setText("状态: 运行中")
+            self.camera_widgets[camera_id]['status'].setText("Status: Running")
             self.camera_widgets[camera_id]['start_btn'].setEnabled(False)
             self.camera_widgets[camera_id]['pause_btn'].setEnabled(True)
             self.camera_widgets[camera_id]['stop_btn'].setEnabled(True)
@@ -2649,14 +2629,14 @@ class EnhancedMonitoringWidget(QWidget):
             if widget['paused']:
                 # 恢复
                 thread.resume()
-                widget['status'].setText("状态: 运行中")
-                widget['pause_btn'].setText("⏸️ 暂停")
+                widget['status'].setText("Status: Running")
+                widget['pause_btn'].setText("⏸️ Pause")   
                 widget['paused'] = False
             else:
                 # 暂停
                 thread.pause()
-                widget['status'].setText("状态: 已暂停")
-                widget['pause_btn'].setText("▶️ 继续")
+                widget['status'].setText("Status: Paused")
+                widget['pause_btn'].setText("▶️ Continue")
                 widget['paused'] = True
 
     def stop_camera(self, camera_id):
@@ -2667,7 +2647,7 @@ class EnhancedMonitoringWidget(QWidget):
             del self.camera_threads[camera_id]
 
         if camera_id in self.camera_widgets:
-            self.camera_widgets[camera_id]['status'].setText("状态: 已停止")
+            self.camera_widgets[camera_id]['status'].setText("Status: Stopped")
             self.camera_widgets[camera_id]['start_btn'].setEnabled(True)
             self.camera_widgets[camera_id]['pause_btn'].setEnabled(False)
             self.camera_widgets[camera_id]['stop_btn'].setEnabled(False)
@@ -2680,7 +2660,7 @@ class EnhancedMonitoringWidget(QWidget):
             del self.camera_threads[camera_id]
 
         if camera_id in self.camera_widgets:
-            self.camera_widgets[camera_id]['status'].setText("状态: 已停止")
+            self.camera_widgets[camera_id]['status'].setText("Status: Stopped")
             self.camera_widgets[camera_id]['start_btn'].setEnabled(True)
             self.camera_widgets[camera_id]['pause_btn'].setEnabled(False)
             self.camera_widgets[camera_id]['stop_btn'].setEnabled(False)
@@ -2697,12 +2677,12 @@ class EnhancedMonitoringWidget(QWidget):
                     if all_paused:
                         # 全部恢复
                         self.pause_camera(cam_id)
-                        self.pause_all_btn.setText("⏸️ 全部暂停")
+                        self.pause_all_btn.setText("⏸️ Pause All")
                     else:
                         # 全部暂停
                         if not widget['paused']:
                             self.pause_camera(cam_id)
-                        self.pause_all_btn.setText("▶️ 全部继续")
+                        self.pause_all_btn.setText("▶️ Continue All")
 
     def stop_all_cameras(self):
         """停止所有摄像头"""
@@ -2731,13 +2711,13 @@ class EnhancedMonitoringWidget(QWidget):
     def update_time(self):
         """更新时间显示"""
         current_time = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
-        self.time_label.setText(f"🕒 系统时间: {current_time}")
+        self.time_label.setText(f"🕒 System Time: {current_time}")
 
     def update_stats(self):
         """更新检测统计"""
-        self.fall_label.setText(f"摔倒: {self.detection_stats[0]}")
-        self.walk_label.setText(f"行走: {self.detection_stats[1]}")
-        self.sit_label.setText(f"坐下: {self.detection_stats[2]}")
+        self.fall_label.setText(f"Fall: {self.detection_stats[0]}")
+        self.walk_label.setText(f"Walk: {self.detection_stats[1]}")
+        self.sit_label.setText(f"Sit: {self.detection_stats[2]}")
 
     @Slot(int, np.ndarray, str, int)
     def update_camera_display(self, camera_id, image, status, detection_result):
@@ -2780,7 +2760,7 @@ class SliceDetailDialog(QDialog):
         self.setMouseTracking(True)
 
     def init_ui(self):
-        self.setWindowTitle(f"切片详细信息 - Slice {self.current_slice_index}")
+        self.setWindowTitle(f"Slice Detail - Slice {self.current_slice_index}")
         self.resize(600, 600)
 
         layout = QVBoxLayout(self)
@@ -2794,10 +2774,10 @@ class SliceDetailDialog(QDialog):
         self.image_label.installEventFilter(self)  # 安装事件过滤器
         layout.addWidget(self.image_label)
 
-        # 控制按钮区域
+        # Control button area
         button_layout = QHBoxLayout()
 
-        self.prev_button = QPushButton("⬆️ 上一张")
+        self.prev_button = QPushButton("⬆️ Previous")
         self.prev_button.clicked.connect(self.show_previous_slice)
         button_layout.addWidget(self.prev_button)
 
@@ -2805,26 +2785,26 @@ class SliceDetailDialog(QDialog):
         self.slice_info_label.setAlignment(Qt.AlignCenter)
         button_layout.addWidget(self.slice_info_label)
 
-        self.next_button = QPushButton("⬇️ 下一张")
+        self.next_button = QPushButton("⬇️ Next")
         self.next_button.clicked.connect(self.show_next_slice)
         button_layout.addWidget(self.next_button)
 
         layout.addLayout(button_layout)
 
-        # 关闭按钮
-        close_button = QPushButton("关闭")
+        # Close button
+        close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
         layout.addWidget(close_button)
 
-        # 更新按钮状态
+        # Update button states
         self.update_button_states()
 
     def eventFilter(self, obj, event):
-        """事件过滤器，用于处理鼠标滚轮事件"""
+        """Event filter for handling mouse wheel events"""
         if obj == self.image_label and event.type() == QEvent.Wheel:
-            if event.angleDelta().y() > 0:  # 向上滚动
+            if event.angleDelta().y() > 0:  # Scroll up
                 self.show_previous_slice()
-            else:  # 向下滚动
+            else:  # Scroll down
                 self.show_next_slice()
             return True
         return super().eventFilter(obj, event)
@@ -2869,7 +2849,7 @@ class SliceDetailDialog(QDialog):
             self.update_button_states()
 
         except Exception as e:
-            self.image_label.setText(f"显示错误: {str(e)}")
+            self.image_label.setText(f"Display Error: {str(e)}")
 
     def update_button_states(self):
         """更新按钮状态"""
@@ -2909,13 +2889,13 @@ class SnapshotWidget(QWidget):
         """初始化UI界面"""
         layout = QVBoxLayout(self)
 
-        # 快照列表和播放区域
+        # Snapshot list and playback area
         content_layout = QHBoxLayout()
 
-        # 左侧：快照列表
+        # Left panel: Snapshot list
         left_panel = QVBoxLayout()
 
-        list_group = QGroupBox("📋 快照历史")
+        list_group = QGroupBox("📋 Snapshot History")
         list_group.setMaximumHeight(780)
         list_layout = QVBoxLayout(list_group)
 
@@ -2923,25 +2903,25 @@ class SnapshotWidget(QWidget):
         self.snapshot_list.itemClicked.connect(self.on_snapshot_selected)
         list_layout.addWidget(self.snapshot_list)
 
-        # 快照操作按钮
+        # Snapshot operation buttons
         snapshot_btn_layout = QHBoxLayout()
 
-        self.play_btn = QPushButton("▶️ 播放")
+        self.play_btn = QPushButton("▶️ Play")
         self.play_btn.clicked.connect(self.play_selected_snapshot)
         self.play_btn.setEnabled(False)
         snapshot_btn_layout.addWidget(self.play_btn)
 
-        self.delete_btn = QPushButton("🗑️ 删除")
+        self.delete_btn = QPushButton("🗑️ Delete")
         self.delete_btn.clicked.connect(self.delete_selected_snapshot)
         self.delete_btn.setEnabled(False)
         snapshot_btn_layout.addWidget(self.delete_btn)
 
-        self.refresh_btn = QPushButton("🔄 刷新")
+        self.refresh_btn = QPushButton("🔄 Refresh")
         self.refresh_btn.clicked.connect(self.load_snapshots)
         snapshot_btn_layout.addWidget(self.refresh_btn)
 
-        # 添加导出按钮到布局中
-        self.export_btn = QPushButton("📤 导出")
+        # Add export button to layout
+        self.export_btn = QPushButton("📤 Export")
         self.export_btn.clicked.connect(self.export_selected_snapshot)
         self.export_btn.setEnabled(False)
         snapshot_btn_layout.addWidget(self.export_btn)
@@ -2951,15 +2931,15 @@ class SnapshotWidget(QWidget):
 
         content_layout.addLayout(left_panel, 1)
 
-        # 右侧：播放区域
+        # Right panel: Playback area
         right_panel = QVBoxLayout()
 
-        player_group = QGroupBox("🎥 快照播放器")
-        # player_group.setMaximumHeight(780)  # 减少高度
+        player_group = QGroupBox("🎥 Snapshot Player")
+        # player_group.setMaximumHeight(780)  # Reduce height
         player_layout = QVBoxLayout(player_group)
 
-        # 视频显示区域
-        self.video_label = QLabel("选择快照进行播放")
+        # Video display area
+        self.video_label = QLabel("Select snapshot to play")
         self.video_label.setMinimumSize(640, 390)
         self.video_label.setStyleSheet("""
             QLabel {
@@ -2998,8 +2978,8 @@ class SnapshotWidget(QWidget):
 
         player_layout.addLayout(playback_layout, stretch=5)
 
-        # 快照信息
-        info_group = QGroupBox("📊 快照信息")
+        # Snapshot information
+        info_group = QGroupBox("📊 Snapshot Information")
         info_group.setStyleSheet("""
                     QGroupBox {
                 border: 1px solid rgba(52, 152, 219, 0.3);
@@ -3037,20 +3017,20 @@ class SnapshotWidget(QWidget):
         self.is_playing = False
 
     def toggle_recording(self):
-        """切换录制状态"""
+        """Toggle recording status"""
         if not self.is_recording:
             self.start_recording()
         else:
             self.stop_recording()
 
     def start_recording(self):
-        """开始录制"""
+        """Start recording"""
         self.is_recording = True
         self.recording_frames.clear()
         self.recording_start_time = time.time()
         self.max_recording_duration = self.duration_spinbox.value()
 
-        self.record_btn.setText("⏹️ 停止录制")
+        self.record_btn.setText("⏹️ Stop Recording")
         self.record_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -3069,7 +3049,7 @@ class SnapshotWidget(QWidget):
         """)
         self.save_btn.setEnabled(False)
         self.clear_btn.setEnabled(True)
-        self.recording_status.setText("状态: 录制中...")
+        self.recording_status.setText("Status: Recording...")
         self.recording_status.setStyleSheet("""
             QLabel {
                 color: #e74c3c;
@@ -3081,10 +3061,10 @@ class SnapshotWidget(QWidget):
         """)
 
     def stop_recording(self):
-        """停止录制"""
+        """Stop recording"""
         self.is_recording = False
 
-        self.record_btn.setText("🔴 开始录制")
+        self.record_btn.setText("🔴 Start Recording")
         self.record_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -3105,7 +3085,7 @@ class SnapshotWidget(QWidget):
         if len(self.recording_frames) > 0:
             self.save_btn.setEnabled(True)
 
-        self.recording_status.setText(f"状态: 录制完成 ({len(self.recording_frames)} 帧)")
+        self.recording_status.setText(f"Status: Recording completed ({len(self.recording_frames)} frames)")
         self.recording_status.setStyleSheet("""
             QLabel {
                 color: #27ae60;
@@ -3117,11 +3097,11 @@ class SnapshotWidget(QWidget):
         """)
 
     def add_frame(self, frame, detection_info=None):
-        """添加帧到录制中"""
+        """Add frame to recording"""
         if not self.is_recording:
             return
 
-        # 检查录制时长
+        # Check recording duration
         if time.time() - self.recording_start_time > self.max_recording_duration:
             self.stop_recording()
             return
@@ -3133,21 +3113,21 @@ class SnapshotWidget(QWidget):
         }
         self.recording_frames.append(frame_data)
 
-        # 更新状态
+        # Update status
         elapsed = time.time() - self.recording_start_time
-        self.recording_status.setText(f"状态: 录制中... ({len(self.recording_frames)} 帧, {elapsed:.1f}s)")
+        self.recording_status.setText(f"Status: Recording... ({len(self.recording_frames)} frames, {elapsed:.1f}s)")
 
     def save_current_recording(self):
-        """保存当前录制"""
+        """Save current recording"""
         if not self.recording_frames:
-            QMessageBox.warning(self, "警告", "没有可保存的录制内容")
+            QMessageBox.warning(self, "Warning", "No recording content to save")
             return
 
-        # 生成快照ID
+        # Generate snapshot ID
         snapshot_id = f"snapshot_{int(time.time())}"
         snapshot_path = self.snapshots_dir / f"{snapshot_id}.json"
 
-        # 保存帧数据
+        # Save frame data
         snapshot_data = {
             'id': snapshot_id,
             'created_time': time.time(),
@@ -3157,9 +3137,9 @@ class SnapshotWidget(QWidget):
             'frames': []
         }
 
-        # 压缩保存帧数据
+        # Compress and save frame data
         for i, frame_data in enumerate(self.recording_frames):
-            # 将帧转换为base64编码的字符串
+            # Convert frame to hex string
             _, buffer = cv2.imencode('.jpg', frame_data['frame'], [cv2.IMWRITE_JPEG_QUALITY, 80])
             frame_str = buffer.tobytes().hex()
 
@@ -3170,11 +3150,11 @@ class SnapshotWidget(QWidget):
                 'detection_info': frame_data['detection_info']
             })
 
-        # 保存到文件
+        # Save to file
         with open(snapshot_path, 'w', encoding='utf-8') as f:
             json.dump(snapshot_data, f, ensure_ascii=False, indent=2)
 
-        # 添加到快照列表
+        # Add to snapshot list
         snapshot_info = {
             'id': snapshot_id,
             'path': str(snapshot_path),
@@ -3187,7 +3167,7 @@ class SnapshotWidget(QWidget):
         self.snapshots.append(snapshot_info)
         self.update_snapshot_list()
 
-        QMessageBox.information(self, "成功", f"快照已保存: {snapshot_id}")
+        QMessageBox.information(self, "Success", f"Snapshot saved: {snapshot_id}")
 
         # 清空当前录制
         self.clear_recording()
@@ -3197,7 +3177,7 @@ class SnapshotWidget(QWidget):
         self.recording_frames.clear()
         self.save_btn.setEnabled(False)
         self.clear_btn.setEnabled(False)
-        self.recording_status.setText("状态: 未录制")
+        self.recording_status.setText("Status: Not Recording")
         self.recording_status.setStyleSheet("""
             QLabel {
                 color: #7f8c8d;
@@ -3222,7 +3202,7 @@ class SnapshotWidget(QWidget):
                 mp4_file = json_file.with_suffix('.mp4')
                 if mp4_file.exists():
                     snapshot_info = {
-                        'camera_name': data.get('camera_name', '未知摄像头'),
+                        'camera_name': data.get('camera_name', 'Unknown Camera'),
                         'start_time': data.get('start_time', 0),
                         'end_time': data.get('end_time', 0),
                         'file_size': self._get_file_size(mp4_file),
@@ -3235,7 +3215,7 @@ class SnapshotWidget(QWidget):
                     }
                     self.snapshots.append(snapshot_info)
             except Exception as e:
-                print(f"加载快照失败 {json_file}: {e}")
+                print(f"Loading snapshot failed {json_file}: {e}")
 
         # 扫描detection_history目录下的JSON文件
         for json_file in self.detection_history_dir.glob("*.json"):
@@ -3247,7 +3227,7 @@ class SnapshotWidget(QWidget):
                 mp4_file = json_file.with_suffix('.mp4')
                 if mp4_file.exists():
                     snapshot_info = {
-                        'camera_name': data.get('source_name', '未知源'),
+                        'camera_name': data.get('source_name', 'Unknown Source'),
                         'start_time': data.get('start_time', 0),
                         'end_time': data.get('end_time', 0),
                         'file_size': self._get_file_size(mp4_file),
@@ -3260,7 +3240,7 @@ class SnapshotWidget(QWidget):
                     }
                     self.snapshots.append(snapshot_info)
             except Exception as e:
-                print(f"加载快照失败 {json_file}: {e}")
+                print(f"Loading snapshot failed {json_file}: {e}")
 
         self.update_snapshot_list()
 
@@ -3298,10 +3278,10 @@ class SnapshotWidget(QWidget):
             # 根据来源添加不同的前缀标识
             source_prefix = "🖥️" if snapshot['source'] == 'monitor' else "📹"
             item_text = f"{source_prefix} {snapshot['camera_name']}\n"
-            item_text += f"时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')} - {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            item_text += f"文件大小: {snapshot['file_size']} | 检测次数: {snapshot['total_detections']}\n"
+            item_text += f"Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} - {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            item_text += f": {snapshot['file_size']} | Detection: {snapshot['total_detections']}\n"
             if stats_text:
-                item_text += f"检测统计: {stats_text}"
+                item_text += f"Detection: {stats_text}"
 
             item = QListWidgetItem(item_text)
             item.setData(Qt.UserRole, snapshot)
@@ -3325,20 +3305,20 @@ class SnapshotWidget(QWidget):
         end_time = datetime.fromtimestamp(snapshot['end_time'])
         duration = snapshot['end_time'] - snapshot['start_time']
 
-        info_text = f"摄像头: {snapshot['camera_name']}\n"
-        info_text += f"开始时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        info_text += f"结束时间: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        info_text += f"录制时长: {duration:.1f} 秒\n"
-        info_text += f"文件大小: {snapshot['file_size']}\n"
-        info_text += f"帧率: {snapshot['fps']} fps\n"
-        info_text += f"检测次数: {snapshot['total_detections']}\n"
+        info_text = f"Camera: {snapshot['camera_name']}\n"
+        info_text += f"StartTime: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        info_text += f"EndTime: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        info_text += f"Duration: {duration:.1f} s\n"
+        info_text += f"Size: {snapshot['file_size']}\n"
+        info_text += f"FPS: {snapshot['fps']} fps\n"
+        info_text += f"Detection: {snapshot['total_detections']}\n"
 
         if snapshot['detection_stats']:
-            info_text += f"检测统计:\n"
+            info_text += f"Detection:\n"
             for class_name, count in snapshot['detection_stats'].items():
-                info_text += f"  {class_name}: {count} 次\n"
+                info_text += f"  {class_name}: {count} times\n"
 
-        info_text += f"视频文件: {snapshot['mp4_path']}"
+        info_text += f"Video File: {snapshot['mp4_path']}"
 
         self.info_text.setText(info_text)
 
@@ -3353,7 +3333,7 @@ class SnapshotWidget(QWidget):
             # 使用OpenCV读取MP4文件
             cap = cv2.VideoCapture(snapshot['mp4_path'])
             if not cap.isOpened():
-                QMessageBox.warning(self, "错误", "无法打开视频文件")
+                QMessageBox.warning(self, "Error", "Failed to open video file")
                 return
 
             # 读取所有帧
@@ -3367,7 +3347,7 @@ class SnapshotWidget(QWidget):
             cap.release()
 
             if not self.playback_frames:
-                QMessageBox.warning(self, "错误", "视频文件为空")
+                QMessageBox.warning(self, "Error", "Video file is empty")
                 return
 
             # 设置播放参数
@@ -3385,7 +3365,7 @@ class SnapshotWidget(QWidget):
             self.toggle_playback()
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"播放快照失败: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to play snapshot video: {str(e)}")
 
     def toggle_playback(self):
         """切换播放状态"""
@@ -3482,54 +3462,54 @@ class SnapshotWidget(QWidget):
         self.video_label.setPixmap(scaled_pixmap)
 
     def delete_selected_snapshot(self):
-        """删除选中的快照"""
+        """Delete selected snapshot"""
         if not self.snapshots or self.current_snapshot_index >= len(self.snapshots):
             return
 
         snapshot = self.snapshots[self.current_snapshot_index]
 
         reply = QMessageBox.question(
-            self, "确认删除",
-            f"确定要删除摄像头 '{snapshot['camera_name']}' 的快照吗？\n此操作不可恢复。",
+            self, "Confirm Delete",
+            f"Are you sure you want to delete the snapshot for camera '{snapshot['camera_name']}'?\nThis operation cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             try:
-                # 删除MP4和JSON文件
+                # Delete MP4 and JSON files
                 Path(snapshot['mp4_path']).unlink()
                 Path(snapshot['json_path']).unlink()
 
-                # 从列表中移除
+                # Remove from list
                 self.snapshots.pop(self.current_snapshot_index)
                 self.update_snapshot_list()
 
-                # 清空播放区域
+                # Clear playback area
                 self.video_label.clear()
-                self.video_label.setText("选择快照进行播放")
+                self.video_label.setText("Select snapshot to play")
                 self.info_text.clear()
 
-                # 禁用按钮
+                # Disable buttons
                 self.play_btn.setEnabled(False)
                 self.delete_btn.setEnabled(False)
                 self.export_btn.setEnabled(False)
 
-                QMessageBox.information(self, "成功", "快照已删除")
+                QMessageBox.information(self, "Success", "Snapshot deleted")
 
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"删除快照失败: {str(e)}")
+                QMessageBox.critical(self, "Error", f"Failed to delete snapshot: {str(e)}")
 
     # 添加导出功能的实现
     def export_selected_snapshot(self):
-        """导出选中的快照"""
+        """Export selected snapshot"""
         if not self.snapshots or self.current_snapshot_index >= len(self.snapshots):
             return
 
         snapshot = self.snapshots[self.current_snapshot_index]
 
-        # 选择导出目录
-        export_dir = QFileDialog.getExistingDirectory(self, "选择导出目录")
+        # Select export directory
+        export_dir = QFileDialog.getExistingDirectory(self, "Select Export Directory")
         if not export_dir:
             return
 
@@ -3538,23 +3518,23 @@ class SnapshotWidget(QWidget):
             mp4_file = Path(snapshot['mp4_path'])
             json_file = Path(snapshot['json_path'])
 
-            # 构造导出文件路径
+            # Construct export file paths
             mp4_export_path = export_path / mp4_file.name
             json_export_path = export_path / json_file.name
 
-            # 复制文件
+            # Copy files
             import shutil
             shutil.copy2(mp4_file, mp4_export_path)
             shutil.copy2(json_file, json_export_path)
 
-            QMessageBox.information(self, "成功", f"快照已导出到:\n{export_path}")
+            QMessageBox.information(self, "Success", f"Snapshot exported to:\n{export_path}")
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出快照失败: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to export snapshot: {str(e)}")
 
 
 class EnhancedDetectionUI(QMainWindow):
-    """增强的检测UI主窗口"""
+    """Enhanced detection UI main window"""
 
     def __init__(self):
         super().__init__()
@@ -3567,20 +3547,20 @@ class EnhancedDetectionUI(QMainWindow):
         self.batch_results = []
         self.current_batch_index = 0
 
-        # 快照相关属性
+        # Snapshot related properties
         self.is_auto_saving = False
         self.video_recorder = None
         self.history_dir = Path("detection_history")
         self.history_dir.mkdir(exist_ok=True)
 
-        # 管理器
+        # Managers
         self.camera_manager = CameraManager()
         self.model_manager = ModelManager()
         self.log_text = QTextEdit()
         self.init_ui()
         self.setWindowIcon(self.create_enhanced_icon())
 
-        # 应用样式
+        # Apply style
         self.setStyleSheet(StyleManager.get_main_stylesheet())
         self.setup_title_shortcut()
 
@@ -3590,23 +3570,23 @@ class EnhancedDetectionUI(QMainWindow):
         self.slice_range_changed = False
 
     def init_ui(self):
-        """初始化UI"""
-        self.setWindowTitle("🚀 基于YOLO的脑部肿瘤检测系统 ")
+        """Initialize UI"""
+        self.setWindowTitle("🚀 MediScreen-Brain Tumor Detection System ")
         self.setGeometry(100, 100, 1400, 750)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
 
-        # 创建主分割器
+        # Create main splitter
         main_splitter = QSplitter(Qt.Horizontal)
 
-        # 左侧控制面板
+        # Left control panel
         left_widget = self.create_control_panel()
         left_widget.setMaximumWidth(500)
         left_widget.setMinimumWidth(400)
 
-        # 右侧显示区域
+        # Right display area
         right_widget = self.create_display_area()
 
         main_splitter.addWidget(left_widget)
@@ -3615,27 +3595,24 @@ class EnhancedDetectionUI(QMainWindow):
 
         main_layout.addWidget(main_splitter)
 
-        # 状态栏
-        self.statusBar().showMessage("🎯 就绪 - 请选择模型和检测源")
-
-        # 尝试加载默认模型
-        self.try_load_default_model()
+        # Status bar
+        self.statusBar().showMessage("🎯 Ready - Please select model and detection source")
 
     def setup_title_shortcut(self):
-        """设置标题编辑快捷键"""
+        """Set title edit shortcut"""
         title_shortcut = QShortcut(QKeySequence("F2"), self)
         title_shortcut.activated.connect(self.edit_window_title)
-        # 添加新的 Ctrl+R 快捷键
+        # Add new Ctrl+R shortcut
         title_shortcut_ctrl_r = QShortcut(QKeySequence("Ctrl+R"), self)
         title_shortcut_ctrl_r.activated.connect(self.edit_window_title)
 
     def edit_window_title(self):
-        """编辑窗口标题"""
+        """Edit window title"""
         current_title = self.windowTitle().strip()
         new_title, ok = QInputDialog.getText(
             self,
-            "编辑窗口标题",
-            "请输入新的窗口标题:",
+            "Edit Window Title",
+            "Please enter new window title:",
             text=current_title
         )
 
@@ -3643,33 +3620,33 @@ class EnhancedDetectionUI(QMainWindow):
             self.setWindowTitle(new_title)
 
     def create_control_panel(self):
-        """创建控制面板"""
+        """Create control panel"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # 模型配置
-        model_group = QGroupBox("🤖 模型配置")
+        # Model configuration
+        model_group = QGroupBox("🤖 Model Configuration")
         model_layout = QVBoxLayout(model_group)
 
-        # 模型选择
+        # Model selection
         model_select_layout = QHBoxLayout()
-        model_select_layout.addWidget(QLabel("选择模型:"))
+        model_select_layout.addWidget(QLabel("Select Model:"))
 
         self.model_combo = QComboBox()
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         self.init_model_combo()
         model_select_layout.addWidget(self.model_combo)
 
-        advanced_model_btn = QPushButton("🔧 高级")
+        advanced_model_btn = QPushButton("🔧")
         advanced_model_btn.clicked.connect(self.show_model_selection_dialog)
         advanced_model_btn.setMaximumWidth(80)
         model_select_layout.addWidget(advanced_model_btn)
 
         model_layout.addLayout(model_select_layout)
 
-        # 置信度配置
+        # Confidence Configuration
         conf_layout = QHBoxLayout()
-        conf_layout.addWidget(QLabel("置信度阈值:"))
+        conf_layout.addWidget(QLabel("Confidence Threshold:"))
 
         self.conf_slider = QSlider(Qt.Horizontal)
         self.conf_slider.setMinimum(1)
@@ -3689,23 +3666,23 @@ class EnhancedDetectionUI(QMainWindow):
         model_layout.addLayout(conf_layout)
         layout.addWidget(model_group)
 
-        # 检测源配置
-        source_group = QGroupBox("📁 检测源配置")
+        # Detection Source Configuration
+        source_group = QGroupBox("📁 Detection Source Configuration")
         source_layout = QVBoxLayout(source_group)
 
-        # 检测模式选择
+        # Detection Mode Selection
         mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("检测模式:"))
+        mode_layout.addWidget(QLabel("Detection Mode:"))
 
         self.source_combo = QComboBox()
-        self.source_combo.addItems(["📷 单张图片", "🎬 视频文件", "📹 摄像头", "📂 文件夹批量"])
+        self.source_combo.addItems(["📷 Single Image", "🎬 Video File", "📹 Camera", "📂 Batch Folder", "🧠 NIfTI File"])
         self.source_combo.currentTextChanged.connect(self.on_source_changed)
         mode_layout.addWidget(self.source_combo)
         source_layout.addLayout(mode_layout)
 
-        # 摄像头选择（仅摄像头模式显示）
+        # Camera Selection (only visible in camera mode)
         self.camera_select_layout = QHBoxLayout()
-        self.camera_select_layout.addWidget(QLabel("摄像头:"))
+        self.camera_select_layout.addWidget(QLabel("Camera:"))
 
         self.camera_combo = QComboBox()
         self.refresh_camera_list()
@@ -3718,53 +3695,53 @@ class EnhancedDetectionUI(QMainWindow):
 
         source_layout.addLayout(self.camera_select_layout)
 
-        # 文件选择
+        # File Selection
         file_layout = QHBoxLayout()
-        self.select_file_btn = QPushButton("📁 选择文件/文件夹")
+        self.select_file_btn = QPushButton("📁 Select File/Folder")
         self.select_file_btn.clicked.connect(self.select_file)
         file_layout.addWidget(self.select_file_btn)
         source_layout.addLayout(file_layout)
 
-        # 当前文件显示
-        self.current_file_label = QLabel("未选择文件")
+        # Current File Display
+        self.current_file_label = QLabel("No file selected")
         self.current_file_label.setWordWrap(True)
         self.current_file_label.setStyleSheet("color: #7f8c8d; font-size: 11px; padding: 5px;")
         source_layout.addWidget(self.current_file_label)
 
         layout.addWidget(source_group)
 
-        # 检测控制
-        control_group = QGroupBox("🎮 检测控制")
+        # Detection Control
+        control_group = QGroupBox("🎮 Detection Control")
         control_layout = QVBoxLayout(control_group)
 
-        # 控制按钮
+        # Control Buttons
         btn_layout = QHBoxLayout()
 
-        self.start_btn = QPushButton("▶️ 开始检测")
+        self.start_btn = QPushButton("▶️ Start")
         self.start_btn.clicked.connect(self.start_detection)
         self.start_btn.setEnabled(False)
         btn_layout.addWidget(self.start_btn)
 
-        self.pause_btn = QPushButton("⏸️ 暂停")
+        self.pause_btn = QPushButton("⏸️ Pause")
         self.pause_btn.clicked.connect(self.pause_detection)
         self.pause_btn.setEnabled(False)
         btn_layout.addWidget(self.pause_btn)
 
-        self.stop_btn = QPushButton("⏹️ 停止")
+        self.stop_btn = QPushButton("⏹️ Stop")
         self.stop_btn.clicked.connect(self.stop_detection)
         self.stop_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_btn)
         self.video_is_auto_saving = False
-        self.kuaizhao_btn = QPushButton("🎬 快照")
+        self.kuaizhao_btn = QPushButton("🎬 Snapshot")
         self.kuaizhao_btn.clicked.connect(self.kuaizhao_detection)
         self.kuaizhao_btn.setEnabled(False)
         btn_layout.addWidget(self.kuaizhao_btn)
 
         control_layout.addLayout(btn_layout)
 
-        # 进度条
+        # Progress Bar
         progress_layout = QHBoxLayout()
-        progress_layout.addWidget(QLabel("进度:"))
+        progress_layout.addWidget(QLabel("Progress:"))
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -3775,8 +3752,8 @@ class EnhancedDetectionUI(QMainWindow):
 
         layout.addWidget(control_group)
 
-        # 日志区域
-        log_group = QGroupBox("📋 运行日志")
+        # Log Area
+        log_group = QGroupBox("📋 Running Log")
         log_layout = QVBoxLayout(log_group)
 
         self.log_text.setMinimumHeight(180)
@@ -3786,7 +3763,7 @@ class EnhancedDetectionUI(QMainWindow):
         log_btn_layout = QHBoxLayout()
         log_btn_layout.addStretch()
 
-        self.clear_log_btn = QPushButton("🗑️ 清除")
+        self.clear_log_btn = QPushButton("🗑️ Clear")
         self.clear_log_btn.clicked.connect(self.clear_log)
         self.clear_log_btn.setMaximumWidth(100)
         log_btn_layout.addWidget(self.clear_log_btn)
@@ -3798,64 +3775,410 @@ class EnhancedDetectionUI(QMainWindow):
         return widget
 
     def create_display_area(self):
-        """创建显示区域"""
+        """Create display area"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # 创建标签页
+        # Create tabs
         self.tab_widget = QTabWidget()
 
-        # 实时检测标签页
+        # Real-time detection tab
         realtime_tab = self.create_realtime_tab
-        self.tab_widget.addTab(realtime_tab, "🎯 实时检测")
-
-        # 批量结果标签页
+        self.tab_widget.addTab(realtime_tab, "🎯 Real-time Detection")
+        # Create NIfTI tumor detection tab
+        niigz_detection_tab = self.create_niigz_detection_tab()
+        self.tab_widget.addTab(niigz_detection_tab, "🧠 NIfTI Detection")
+        # Batch results tab
         batch_tab = self.create_batch_tab()
-        self.tab_widget.addTab(batch_tab, "📊 批量结果")
+        self.tab_widget.addTab(batch_tab, "📊 Batch Results")
 
-        # 监控页面标签页
+        # Monitoring page tab
         monitor_tab = MonitoringWidget(self.model_manager, self.camera_manager)
-        self.tab_widget.addTab(monitor_tab, "🖥️ 实时监控")
+        self.tab_widget.addTab(monitor_tab, "🖥️ Real-time Monitoring")
 
-        # 监控快照标签页
+        # Monitoring snapshot tab
         self.snapshot_widget = SnapshotWidget()
-        self.tab_widget.addTab(self.snapshot_widget, "🎬 监控快照")
+        self.tab_widget.addTab(self.snapshot_widget, "🎬 Monitoring Snapshot")
 
-        # 创建 NIfTI 格式转换标签页
+        # Create NIfTI format conversion tab
         nifti_tab = self.create_nifti_conversion_tab()
-        self.tab_widget.addTab(nifti_tab, " NIfTI 转换")
+        self.tab_widget.addTab(nifti_tab, " NIfTI Conversion")
+
+
 
         layout.addWidget(self.tab_widget)
         return widget
 
+    def create_niigz_detection_tab(self):
+        """Create NIfTI tumor detection tab"""
+        tab = QWidget()
+        tab.setMaximumWidth(1200)
+        layout = QVBoxLayout(tab)
+
+        # Three-axis display area
+        axes_layout = QHBoxLayout()
+        axes_layout.setSpacing(2)
+        axes_layout.setContentsMargins(0, 5, 0, 8)
+        # Axial view
+        axial_widget = QWidget()
+        axial_vlayout = QVBoxLayout(axial_widget)
+        axial_vlayout.setContentsMargins(0, 0, 0, 0)
+        axial_label = QLabel("Axial")
+        axial_label.setAlignment(Qt.AlignCenter)
+        axial_label.setStyleSheet("font-weight: bold;")
+        axial_vlayout.addWidget(axial_label)
+        self.axial_display = QLabel("Not detected")
+        self.axial_display.setAlignment(Qt.AlignCenter)
+        self.axial_display.setStyleSheet(StyleManager.get_image_niigz_label_style())
+        self.axial_display.setMinimumHeight(300)
+        axial_vlayout.addWidget(self.axial_display)
+        axes_layout.addWidget(axial_widget)
+
+        # Sagittal view
+        sagittal_widget = QWidget()
+        sagittal_vlayout = QVBoxLayout(sagittal_widget)
+        sagittal_vlayout.setContentsMargins(0, 0, 0, 0)
+        sagittal_label = QLabel("Sagittal")
+        sagittal_label.setAlignment(Qt.AlignCenter)
+        sagittal_label.setStyleSheet("font-weight: bold;")
+        sagittal_vlayout.addWidget(sagittal_label)
+        self.sagittal_display = QLabel("Not detected")
+        self.sagittal_display.setAlignment(Qt.AlignCenter)
+        self.sagittal_display.setStyleSheet(StyleManager.get_image_niigz_label_style())
+        self.sagittal_display.setMinimumHeight(300)
+        sagittal_vlayout.addWidget(self.sagittal_display)
+        axes_layout.addWidget(sagittal_widget)
+
+        # Coronal view
+        coronal_widget = QWidget()
+        coronal_vlayout = QVBoxLayout(coronal_widget)
+        coronal_vlayout.setContentsMargins(0, 0, 0, 0)
+        coronal_label = QLabel("Coronal")
+        coronal_label.setAlignment(Qt.AlignCenter)
+        coronal_label.setStyleSheet("font-weight: bold;")
+        coronal_vlayout.addWidget(coronal_label)
+        self.coronal_display = QLabel("Not detected")
+        self.coronal_display.setAlignment(Qt.AlignCenter)
+        self.coronal_display.setStyleSheet(StyleManager.get_image_niigz_label_style())
+        self.coronal_display.setMinimumHeight(300)
+        coronal_vlayout.addWidget(self.coronal_display)
+        axes_layout.addWidget(coronal_widget)
+
+        layout.addLayout(axes_layout)
+
+        # Detection Information Table
+        table_layout = QVBoxLayout()
+        title = QLabel("🎯 Detection Results Detail Table")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; margin-bottom: 5px;")
+        table_layout.addWidget(title)
+        self.niigz_table = QTableWidget()
+        self.niigz_table.setColumnCount(6)
+        self.niigz_table.setHorizontalHeaderLabels(["Slice", "Class", "Confidence", "Coordinates", "Diameter(mm)", "Area(mm²)"])
+        self.niigz_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.niigz_table.horizontalHeader().setStyleSheet("""
+            QHeaderView::section {
+                background-color: white;  /* Deep blue background */
+                color: #2c3e50;               
+                font-size: 8pt;
+                font-weight: bold;
+                height: 12px;
+                border: 1px solid #d0d0d0;       /* Border */
+            }
+        """)
+        table_layout.addWidget(self.niigz_table)
+
+        layout.addLayout(table_layout)
+
+        # Detection Summary
+        self.niigz_summary_label = QLabel("Detection Summary")
+        self.niigz_summary_label.setMinimumHeight(80)
+        # self.niigz_summary_label.setAlignment(Qt.AlignCenter)
+        self.niigz_summary_label.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 rgba(236, 240, 241, 0.9), stop:1 rgba(189, 195, 199, 0.9));
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #2c3e50;
+            font-weight: bold;
+        """)
+        layout.addWidget(self.niigz_summary_label)
+
+        bututton_layout = QHBoxLayout()
+        bututton_layout.addStretch()
+        self.select_target_btn = QPushButton("📤 Select Target")
+        self.select_target_btn.setMaximumWidth(120)
+        self.select_target_btn.clicked.connect(self.select_target_action)  # Bind click event
+        bututton_layout.addWidget(self.select_target_btn)
+        # Create export report button
+        self.export_niigz_report_btn = QPushButton("📤 Export Report")
+        self.export_niigz_report_btn.setMaximumWidth(120)
+        bututton_layout.addWidget(self.export_niigz_report_btn)
+
+        # Create clear results button
+        self.clear_niigz_result_btn = QPushButton("🗑️ Clear Results")
+        self.clear_niigz_result_btn.setMaximumWidth(120)
+        bututton_layout.addWidget(self.clear_niigz_result_btn)
+        self.clear_niigz_result_btn.clicked.connect(self.clear_niigz_results)
+
+        # 将按钮布局添加到主布局的右侧
+        layout.addLayout(bututton_layout)
+
+        return tab
+
+    def clear_niigz_results(self):
+        """Clear NIfTI detection results"""
+        self.log_message("🗑️ Clearing NIfTI detection results")
+        self.axial_display.setText("Not detected")
+        self.sagittal_display.setText("Not detected")
+        self.coronal_display.setText("Not detected")
+        self.niigz_table.setRowCount(0)
+        self.niigz_summary_label.setText("Detection Summary")
+
+    def start_niigz_detection(self):
+        """Start NIfTI detection"""
+        self.log_message("🧠 Starting NIfTI file detection")
+        # Get currently selected file
+        current_file = self.current_source_path
+        if not current_file:
+            self.log_message("❌ Error: No NIfTI file selected")
+            QMessageBox.warning(self, "Warning", "Please select a NIfTI file first")
+            return
+
+        # Check if file is in niigz format
+        if not (current_file.endswith('.nii.gz') or current_file.endswith('.nii')):
+            self.log_message(f"❌ Error: Unsupported file format: {current_file}")
+            QMessageBox.warning(self, "Warning", "Please select a .nii.gz or .nii format file")
+            return
+
+        # Check if model is loaded
+        if not self.model:
+            self.log_message("❌ Error: Model not loaded")
+            QMessageBox.warning(self, "Warning", "Please load the model first")
+            return
+
+        # Update UI state
+        self.start_btn.setEnabled(False)
+        self.niigz_summary_label.setText("Detecting...")
+
+        # Start detection thread
+        thread = threading.Thread(target=self._process_niigz_file, args=(current_file,))
+        thread.daemon = True
+        thread.start()
+
+    def _process_niigz_file(self, file_path):
+        """Process NIfTI file"""
+        self.log_message(f"🧠 Starting to process NIfTI file: {os.path.basename(file_path)}")
+        # Get current model path
+        model_path = self.model_combo.currentData()
+        if not model_path:
+            # If no model selected, use default model
+            self.log_message("🔍 No model selected, using default model")
+            models = self.model_manager.scan_models()
+            if models:
+                model_path = models[0]['path']
+                self.log_message(f"✅ Using default model: {os.path.basename(model_path)}")
+            else:
+                self.log_message("❌ Error: No model files found")
+                self._update_niigz_status("Error: No model files found")
+                return
+
+        # Create TumorSliceFinder instance
+        output_dir = os.path.join(os.path.dirname(file_path), "niigz_results")
+        finder = TumorSliceFinder(
+            model_path='pt_models/best.pt',
+            nii_path=file_path,
+            output_project=output_dir,
+            conf=0.65
+        )
+
+        # Find optimal slice
+        self.log_message("🔍 Finding optimal tumor slice...")
+        results = finder.find_best_slices()
+
+        if not results['has_tumor']:
+            self.log_message("⚠️  No tumor detected")
+            self._update_niigz_status("No tumor detected")
+            return
+
+        # Get indices for three planes
+        axial_slice = results['axial_slice']
+        sagittal_slice = results['sagittal_slice']
+        coronal_slice = results['coronal_slice']
+        self.log_message(f"✅ Tumor found, slice positions: Axial={axial_slice}, Sagittal={sagittal_slice}, Coronal={coronal_slice}")
+
+        # Load NIfTI data
+        self.log_message("📊 Loading NIfTI data...")
+        img = nib.load(file_path)
+        data = img.get_fdata()
+        self.log_message(f"📊 Data shape: {data.shape}, Data type: {data.dtype}")
+
+        # Normalize to uint8
+        if data.dtype != np.uint8:
+            self.log_message("🔄 Normalizing data to uint8...")
+            data = np.clip(data, 0, np.percentile(data, 99))
+            data = ((data - data.min()) / (data.max() - data.min()) * 255).astype(np.uint8)
+
+        # Get images for three planes
+        axial_img = data[:, :, axial_slice].T
+        sagittal_img = data[sagittal_slice, :, :]
+        coronal_img = data[:, coronal_slice, :]
+
+        # Use model to detect each slice
+        model = self.model
+        # class_names = list(model.names.values())
+
+        # Detection results list
+        self.detection_results = []
+
+        # Detect axial slice
+        axial_results = self._detect_slice(axial_img, "Axial")
+        self.detection_results.extend(axial_results)
+
+        # Detect sagittal slice
+        sagittal_results = self._detect_slice(sagittal_img, "Sagittal")
+        self.detection_results.extend(sagittal_results)
+
+        # Detect coronal slice
+        coronal_results = self._detect_slice(coronal_img, "Coronal")
+        self.detection_results.extend(coronal_results)
+
+        # Update UI
+        self.log_message(f"📋 Detection completed, found {len(self.detection_results)} targets")
+        self._update_niigz_ui(axial_img, sagittal_img, coronal_img, self.detection_results, results)
+
+        # Restore UI state
+        self.start_btn.setEnabled(True)
+        self.log_message("✅ NIfTI file processing completed")
+
+    def _detect_slice(self, slice_img, slice_name):
+        """Detect single slice"""
+        self.log_message(f"🔍 Detecting {slice_name} slice...")
+        results = []
+        # Convert 2D slice to 3-channel RGB
+        slice_rgb = np.stack([slice_img] * 3, axis=-1)
+        # Ensure image data is contiguous in memory
+        slice_rgb = np.ascontiguousarray(slice_rgb)
+        # Model prediction
+        predictions = self.model.predict(source=slice_rgb, conf=self.conf_slider.value() / 100, verbose=False)
+        for pred in predictions:
+            if pred.boxes:
+                boxes = pred.boxes.cpu().numpy()
+                self.log_message(f"✅ {slice_name} slice detected {len(boxes)} targets")
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0]
+                    conf = box.conf[0]
+                    cls = int(box.cls[0])
+                    class_name = self.model.names[cls] if cls < len(self.model.names) else f"Class{cls}"
+                    # Calculate diameter and area (using pixel values for now, actual calculation requires voxel spacing)
+                    width = x2 - x1
+                    height = y2 - y1
+                    diameter = np.sqrt(width**2 + height**2)
+                    area = width * height
+                    self.log_message(f"📌 {slice_name} slice: {class_name} (Confidence: {conf:.2f}, Coordinates: ({int(x1)}, {int(y1)}, {int(x2)}, {int(y2)}))")
+                    results.append({
+                        'slice': slice_name,
+                        'class': class_name,
+                        'confidence': conf,
+                        'coordinates': f"({int(x1)}, {int(y1)}, {int(x2)}, {int(y2)})",
+                        'diameter': diameter,
+                        'area': area,
+                        'result_img':predictions[0].plot()
+
+                    })
+            else:
+                self.log_message(f"⚠️  No targets detected in {slice_name} slice")
+        return results
+
+    def _update_niigz_ui(self, axial_img, sagittal_img, coronal_img, detection_results, finder_results):
+        """Update NIfTI detection UI"""
+        self.log_message("🖥️ Updating NIfTI detection UI...")
+        # Update display for three slices
+        self._update_slice_display(self.axial_display, axial_img)
+        self._update_slice_display(self.sagittal_display, sagittal_img)
+        self._update_slice_display(self.coronal_display, coronal_img)
+
+        # Update table
+        self.niigz_table.setRowCount(0)
+        for i, result in enumerate(detection_results):
+            self.niigz_table.insertRow(i)
+            self.niigz_table.setItem(i, 0, QTableWidgetItem(result['slice']))
+            self.niigz_table.setItem(i, 1, QTableWidgetItem(result['class']))
+            self.niigz_table.setItem(i, 2, QTableWidgetItem(f"{result['confidence']:.2f}"))
+            self.niigz_table.setItem(i, 3, QTableWidgetItem(result['coordinates']))
+            self.niigz_table.setItem(i, 4, QTableWidgetItem(f"{result['diameter']:.2f}"))
+            self.niigz_table.setItem(i, 5, QTableWidgetItem(f"{result['area']:.2f}"))
+
+        # Update summary
+        tumor_center = finder_results['tumor_center']
+        summary = f"🧠 Tumor detected | Center: {tumor_center} | Axial: {finder_results['axial_slice']} | Sagittal: {finder_results['sagittal_slice']} | Coronal: {finder_results['coronal_slice']} | Targets: {len(detection_results)}"
+        self.niigz_summary_label.setText(summary)
+        self.log_message(f"📊 Detection summary: {summary}")
+
+    def _update_slice_display(self, label, img):
+        """Update slice display"""
+        # Ensure array is C-contiguous
+        img_contiguous = np.ascontiguousarray(img)
+        # Convert numpy array to QImage
+        if len(img_contiguous.shape) == 2:
+            # Grayscale image
+            height, width = img_contiguous.shape
+            bytes_per_line = width
+            q_img = QImage(img_contiguous.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+        else:
+            # RGB image
+            height, width, channels = img_contiguous.shape
+            bytes_per_line = channels * width
+            q_img = QImage(img_contiguous.data, width, height, bytes_per_line, QImage.Format_RGB888)
+
+        # Scale image to fit label
+        scaled_img = q_img.scaled(label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        pixmap = QPixmap.fromImage(scaled_img)
+        label.setPixmap(pixmap)
+
+    def _update_niigz_status(self, message):
+        """Update NIfTI detection status"""
+        self.log_message(f"📢 Updating NIfTI detection status: {message}")
+        self.niigz_summary_label.setText(message)
+        self.start_btn.setEnabled(True)
+
+
+    def select_target_action(self):
+        self._update_slice_display(self.axial_display, self.detection_results[0]['result_img'])
+        self._update_slice_display(self.sagittal_display, self.detection_results[1]['result_img'])
+        self._update_slice_display(self.coronal_display, self.detection_results[2]['result_img'])
+        """Handle select target button click event"""
+        self.log_message(f"✅ Target selected")
+
+        # Add specific target selection logic here
     def create_nifti_conversion_tab(self):
-        """创建NIfTI格式转换标签页"""
+        """Create NIfTI format conversion tab"""
         nifti_tab = QWidget()
         layout = QVBoxLayout(nifti_tab)
 
-        # 文件选择区域
-        file_group = QGroupBox("📁 文件选择")
+        # File selection area
+        file_group = QGroupBox("📁 File Selection")
         file_layout = QVBoxLayout(file_group)
 
         file_select_layout = QHBoxLayout()
         self.nii_file_edit = QLineEdit()
-        self.nii_file_edit.setPlaceholderText("选择NIfTI文件或目录...")
+        self.nii_file_edit.setPlaceholderText("Select NIfTI file or directory...")
         file_select_layout.addWidget(self.nii_file_edit)
 
-        self.browse_nii_btn = QPushButton("浏览")
+        self.browse_nii_btn = QPushButton("Browse")
         self.browse_nii_btn.clicked.connect(self.browse_nii_file)
         file_select_layout.addWidget(self.browse_nii_btn)
 
         file_layout.addLayout(file_select_layout)
 
-        # 输出目录设置
+        # Output directory settings
         output_layout = QHBoxLayout()
-        output_layout.addWidget(QLabel("📤 输出目录:"))
+        output_layout.addWidget(QLabel("📤 Output Directory:"))
         self.output_dir_edit = QLineEdit()
-        self.output_dir_edit.setPlaceholderText("自动设置为输入目录 + '_swift_normal'")
+        self.output_dir_edit.setPlaceholderText("Automatically set to input directory + '_swift_normal'")
         output_layout.addWidget(self.output_dir_edit)
 
-        self.browse_output_btn = QPushButton("浏览")
+        self.browse_output_btn = QPushButton("Browse")
         self.browse_output_btn.clicked.connect(self.browse_output_dir)
         output_layout.addWidget(self.browse_output_btn)
 
@@ -3863,32 +4186,32 @@ class EnhancedDetectionUI(QMainWindow):
 
         layout.addWidget(file_group)
 
-        # 切片设置和文件信息横向布局区域
+        # Slice settings and file information horizontal layout area
         settings_layout = QHBoxLayout()
-        # 切片设置区域
-        slice_group = QGroupBox("🔪 切片设置")
+        # Slice settings area
+        slice_group = QGroupBox("🔪 Slice Settings")
         slice_layout = QVBoxLayout(slice_group)
 
-        # 切片方向选择
+        # Slice direction selection
         direction_layout = QHBoxLayout()
-        direction_layout.addWidget(QLabel("🧭 切片方向:"))
+        direction_layout.addWidget(QLabel("🧭 Slice Direction:"))
         self.slice_direction_combo = QComboBox()
-        self.slice_direction_combo.addItems(["矢状位 (Sagittal)", "冠状位 (Coronal)", "水平位 (Axial)"])
-        self.slice_direction_combo.setCurrentText("冠状位 (Coronal)")
+        self.slice_direction_combo.addItems(["Sagittal", "Coronal", "Axial"])
+        self.slice_direction_combo.setCurrentText("Coronal")
         self.slice_direction_combo.currentTextChanged.connect(self.update_slice_info)
         direction_layout.addWidget(self.slice_direction_combo)
         direction_layout.addStretch()
 
         slice_layout.addLayout(direction_layout)
 
-        # 切片范围设置
+        # Slice range settings
         range_layout = QHBoxLayout()
-        # 在创建切片范围设置的部分，为 QSpinBox 添加信号连接
-        range_layout.addWidget(QLabel("📏 切片范围:"))
+        # In the part where slice range settings are created, add signal connection for QSpinBox
+        range_layout.addWidget(QLabel("📏 Slice Range:"))
         self.start_slice_spin = QSpinBox()
         self.start_slice_spin.setMinimum(0)
         self.start_slice_spin.setValue(60)
-        self.start_slice_spin.valueChanged.connect(self.on_slice_range_changed)  # 添加这一行
+        self.start_slice_spin.valueChanged.connect(self.on_slice_range_changed)  # Add this line
         range_layout.addWidget(self.start_slice_spin)
 
         range_layout.addWidget(QLabel(" - "))
@@ -3897,23 +4220,23 @@ class EnhancedDetectionUI(QMainWindow):
         self.end_slice_spin.setMinimum(0)
         self.end_slice_spin.setMaximum(1000)
         self.end_slice_spin.setValue(150)
-        self.end_slice_spin.valueChanged.connect(self.on_slice_range_changed)  # 添加这一行
+        self.end_slice_spin.valueChanged.connect(self.on_slice_range_changed)  # Add this line
         range_layout.addWidget(self.end_slice_spin)
 
         range_layout.addStretch()
         slice_layout.addLayout(range_layout)
 
-        # 切片信息显示
+        # Slice information display
         info_layout = QHBoxLayout()
-        self.slice_info_label = QLabel("_slices: 0, 当前范围: 0-0")
+        self.slice_info_label = QLabel("_slices: 0, Current range: 0-0")
         info_layout.addWidget(self.slice_info_label)
         info_layout.addStretch()
         slice_layout.addLayout(info_layout)
 
         # layout.addWidget(slice_group)
 
-        # 文件信息显示区域
-        info_group = QGroupBox("📊 文件信息")
+        # File information display area
+        info_group = QGroupBox("📊 File Information")
         info_layout = QVBoxLayout(info_group)
 
         self.file_info_text = QTextEdit()
@@ -3922,18 +4245,18 @@ class EnhancedDetectionUI(QMainWindow):
         info_layout.addWidget(self.file_info_text)
 
         # layout.addWidget(info_group)
-        # 添加两个区域到水平布局
+        # Add two areas to horizontal layout
         settings_layout.addWidget(slice_group)
         settings_layout.addWidget(info_group)
-        slice_group.setMaximumHeight(150)  # 限制切片设置区域高度
-        info_group.setMaximumHeight(150)  # 限制文件信息区域高度
-        # 设置两个区域等宽
+        slice_group.setMaximumHeight(150)  # Limit slice settings area height
+        info_group.setMaximumHeight(150)  # Limit file information area height
+        # Set both areas to equal width
         settings_layout.setStretch(0, 1)
         settings_layout.setStretch(1, 1)
 
         layout.addLayout(settings_layout)
-        # 预览区域
-        preview_group = QGroupBox("🖼️ 切片预览")
+        # Preview area
+        preview_group = QGroupBox("🖼️ Slice Preview")
         preview_layout = QVBoxLayout(preview_group)
 
         self.preview_scroll = QScrollArea()
@@ -3945,38 +4268,38 @@ class EnhancedDetectionUI(QMainWindow):
         preview_layout.addWidget(self.preview_scroll)
         layout.addWidget(preview_group)
 
-        # 控制按钮
+        # Control buttons
         button_layout = QHBoxLayout()
-        self.convert_btn = QPushButton("🔄 转换")
+        self.convert_btn = QPushButton("🔄 Convert")
         self.convert_btn.clicked.connect(self.convert_nifti)
         self.convert_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }")
         button_layout.addWidget(self.convert_btn)
 
-        self.preview_btn = QPushButton("👀 预览")
+        self.preview_btn = QPushButton("👀 Preview")
         self.preview_btn.clicked.connect(self.generate_preview)
         button_layout.addWidget(self.preview_btn)
 
         layout.addLayout(button_layout)
 
-        # 初始化状态
+        # Initialize state
         self.current_nii_file = None
         self.nii_data = None
 
         return nifti_tab
 
     def on_slice_range_changed(self, value):
-        """当切片范围改变时更新预览图"""
-        # 设置标志位，表示切片范围已更改
+        """Update preview when slice range changes"""
+        # Set flag indicating slice range has changed
         self.slice_range_changed = True
 
-        # 重启定时器，延迟更新预览图
-        self.slice_update_timer.start(100)  # 300毫秒延迟，避免频繁更新
+        # Restart timer to delay preview update
+        self.slice_update_timer.start(100)  # 300ms delay to avoid frequent updates
 
     def browse_nii_file(self):
-        """浏览NIfTI文件或目录"""
+        """Browse NIfTI file or directory"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择NIfTI文件",
+            "Select NIfTI File",
             "",
             "NIfTI Files (*.nii *.nii.gz);;All Files (*)"
         )
@@ -3986,41 +4309,41 @@ class EnhancedDetectionUI(QMainWindow):
             self.load_nifti_file(file_path)
 
     def browse_output_dir(self):
-        """浏览输出目录"""
-        dir_path = QFileDialog.getExistingDirectory(self, "选择输出目录")
+        """Browse output directory"""
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if dir_path:
             self.output_dir_edit.setText(dir_path)
 
     def load_nifti_file(self, file_path):
-        """加载NIfTI文件并显示信息"""
+        """Load NIfTI file and display information"""
         try:
             import nibabel as nib
             self.current_nii_file = file_path
             nii = nib.load(file_path)
             self.nii_data = nii.get_fdata()
 
-            # 更新输出目录
+            # Update output directory
             if not self.output_dir_edit.text():
                 input_dir = Path(file_path).parent
                 output_dir = input_dir / f"{Path(file_path).stem}_swift_normal"
                 self.output_dir_edit.setText(str(output_dir))
 
-            # 更新切片范围
+            # Update slice range
             self.update_slice_range()
 
-            # 显示文件信息
+            # Display file information
             self.display_file_info(nii)
 
-            # 生成预览
+            # Generate preview
             self.generate_preview()
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载NIfTI文件失败: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load NIfTI file: {str(e)}")
 
     def update_slice_range(self):
-        """更新切片范围控件"""
+        """Update slice range controls"""
         if self.nii_data is not None:
-            # 根据切片方向确定最大切片数
+            # Determine maximum number of slices based on slice direction
             direction = self.slice_direction_combo.currentIndex()
             max_slices = self.nii_data.shape[direction] - 1
 
@@ -4031,17 +4354,17 @@ class EnhancedDetectionUI(QMainWindow):
             self.update_slice_info()
 
     def update_slice_info(self):
-        """更新切片信息显示"""
+        """Update slice information display"""
         if self.nii_data is not None:
             direction = self.slice_direction_combo.currentIndex()
             max_slices = self.nii_data.shape[direction]
             start = self.start_slice_spin.value()
             end = min(self.end_slice_spin.value(), max_slices - 1)
 
-            self.slice_info_label.setText(f"_slices: {max_slices}, 当前范围: {start}-{end}")
+            self.slice_info_label.setText(f"_slices: {max_slices}, Current range: {start}-{end}")
 
     def display_file_info(self, nii):
-        """显示NIfTI文件信息"""
+        """Display NIfTI file information"""
         try:
             import os
             from datetime import datetime
@@ -4055,21 +4378,21 @@ class EnhancedDetectionUI(QMainWindow):
             dtype = header.get_data_dtype()
             affine = nii.affine
 
-            # 计算空间分辨率
+            # Calculate spatial resolution
             voxel_sizes = header.get_zooms()
 
-            info_text = f"文件大小: {self.format_file_size(file_size)}\n"
-            info_text += f"修改日期: {mod_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            info_text += f"图像维度: {shape}\n"
-            info_text += f"数据类型: {dtype}\n"
-            info_text += f"空间分辨率: {voxel_sizes[:3] if len(voxel_sizes) >= 3 else voxel_sizes}\n"
+            info_text = f"File size: {self.format_file_size(file_size)}\n"
+            info_text += f"Modified date: {mod_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            info_text += f"Image dimensions: {shape}\n"
+            info_text += f"Data type: {dtype}\n"
+            info_text += f"Spatial resolution: {voxel_sizes[:3] if len(voxel_sizes) >= 3 else voxel_sizes}\n"
 
             self.file_info_text.setText(info_text)
         except Exception as e:
-            self.file_info_text.setText(f"无法读取文件信息: {str(e)}")
+            self.file_info_text.setText(f"Unable to read file information: {str(e)}")
 
     def format_file_size(self, size_bytes):
-        """格式化文件大小显示"""
+        """Format file size display"""
         if size_bytes == 0:
             return "0 B"
 
@@ -4082,11 +4405,11 @@ class EnhancedDetectionUI(QMainWindow):
         return f"{size_bytes:.1f} {size_names[i]}"
 
     def generate_preview(self):
-        """生成预览图像"""
+        """Generate preview images"""
         if self.nii_data is None:
             return
 
-        # 清除现有预览
+        # Clear existing preview
         for i in reversed(range(self.preview_layout.count())):
             widget = self.preview_layout.itemAt(i).widget()
             if widget:
@@ -4102,11 +4425,11 @@ class EnhancedDetectionUI(QMainWindow):
             start = self.start_slice_spin.value()
             end = min(self.end_slice_spin.value(), max_slices - 1)
 
-            # 选择5个代表性切片
+            # Select 5 representative slices
             indices = np.linspace(start, end, 5, dtype=int)
 
             for idx in indices:
-                # 提取切片
+                # Extract slice
                 if direction == 0:  # Sagittal
                     slice_data = self.nii_data[idx, :, :]
                 elif direction == 1:  # Coronal
@@ -4114,7 +4437,7 @@ class EnhancedDetectionUI(QMainWindow):
                 else:  # Axial
                     slice_data = self.nii_data[:, :, idx]
 
-                # 创建图像
+                # Create image
                 fig = plt.Figure(figsize=(2, 2), dpi=100)
                 ax = fig.add_subplot(111)
                 ax.imshow(slice_data, cmap='gray')
@@ -4122,9 +4445,9 @@ class EnhancedDetectionUI(QMainWindow):
                 ax.axis('off')
 
                 canvas = FigureCanvas(fig)
-                canvas.setToolTip(f"切片索引: {idx}")
+                canvas.setToolTip(f"Slice index: {idx}")
 
-                # 添加右键菜单功能
+                # Add right-click menu functionality
                 canvas.setContextMenuPolicy(Qt.CustomContextMenu)
                 canvas.customContextMenuRequested.connect(
                     lambda pos, c=canvas, index=idx, dir_=direction:
@@ -4135,15 +4458,15 @@ class EnhancedDetectionUI(QMainWindow):
             plt.close('all')
 
         except Exception as e:
-            error_label = QLabel(f"预览生成失败: {str(e)}")
+            error_label = QLabel(f"Failed to generate preview: {str(e)}")
             self.preview_layout.addWidget(error_label)
 
     def show_slice_context_menu(self, pos, canvas, slice_index, direction):
-        """显示切片右键菜单"""
+        """Show slice context menu"""
         context_menu = QMenu(self)
 
-        # 添加放大操作
-        zoom_action = QAction("🔍 放大查看", self)
+        # Add zoom action
+        zoom_action = QAction("🔍 Zoom In", self)
         zoom_action.triggered.connect(
             lambda: self.show_slice_detail(slice_index, direction)
         )
@@ -4152,31 +4475,31 @@ class EnhancedDetectionUI(QMainWindow):
         context_menu.exec(canvas.mapToGlobal(pos))
 
     def show_slice_detail(self, slice_index, direction):
-        """显示切片详细信息弹窗"""
+        """Show slice detail dialog"""
         dialog = SliceDetailDialog(self.nii_data, slice_index, direction, self)
         dialog.exec()
 
     def update_slice_preview(self):
-        """更新切片预览图"""
+        """Update slice preview"""
         if not self.slice_range_changed:
             return
-        # 重置标志位
+        # Reset flag
         self.slice_range_changed = False
-        # 更新切片信息显示
+        # Update slice information display
         self.update_slice_info()
-        # 重新生成预览图
+        # Regenerate preview
         if hasattr(self, 'current_nii_file') and self.current_nii_file:
             self.generate_preview()
 
     def convert_nifti(self):
-        """执行NIfTI转换"""
+        """Execute NIfTI conversion"""
         if not self.current_nii_file:
-            QMessageBox.warning(self, "警告", "请先选择NIfTI文件")
+            QMessageBox.warning(self, "Warning", "Please select a NIfTI file first")
             return
 
         output_dir = self.output_dir_edit.text()
         if not output_dir:
-            QMessageBox.warning(self, "警告", "请设置输出目录")
+            QMessageBox.warning(self, "Warning", "Please set output directory")
             return
 
         try:
@@ -4185,10 +4508,10 @@ class EnhancedDetectionUI(QMainWindow):
             from PIL import Image
             import os
 
-            # 创建输出目录
+            # Create output directory
             os.makedirs(output_dir, exist_ok=True)
 
-            # 加载NIfTI文件
+            # Load NIfTI file
             nii = nib.load(self.current_nii_file)
             data = nii.get_fdata()
 
@@ -4196,8 +4519,8 @@ class EnhancedDetectionUI(QMainWindow):
             start = self.start_slice_spin.value()
             end = min(self.end_slice_spin.value(), data.shape[direction] - 1)
 
-            # 转换切片
-            progress = QProgressDialog("正在转换...", "取消", 0, end - start + 1, self)
+            # Convert slices
+            progress = QProgressDialog("Converting...", "Cancel", 0, end - start + 1, self)
             progress.setWindowModality(Qt.WindowModal)
             progress.show()
 
@@ -4206,7 +4529,7 @@ class EnhancedDetectionUI(QMainWindow):
                 if progress.wasCanceled():
                     break
 
-                # 提取切片
+                # Extract slice
                 if direction == 0:  # Sagittal
                     slice_data = data[i, :, :]
                 elif direction == 1:  # Coronal
@@ -4214,11 +4537,11 @@ class EnhancedDetectionUI(QMainWindow):
                 else:  # Axial
                     slice_data = data[:, :, i]
 
-                # 标准化到0-255
+                # Normalize to 0-255
                 slice_data = ((slice_data - slice_data.min()) /
                               (slice_data.max() - slice_data.min()) * 255).astype(np.uint8)
 
-                # 保存为PNG
+                # Save as PNG
                 img = Image.fromarray(slice_data)
                 img.save(os.path.join(output_dir, f"slice_{i:04d}.png"))
 
@@ -4226,41 +4549,41 @@ class EnhancedDetectionUI(QMainWindow):
                 progress.setValue(count)
 
             progress.close()
-            QMessageBox.information(self, "成功", f"转换完成！共保存 {count} 张切片到:\n{output_dir}")
+            QMessageBox.information(self, "Success", f"Conversion completed! Saved {count} slices to:\n{output_dir}")
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"转换失败: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Conversion failed: {str(e)}")
 
     @property
     def create_realtime_tab(self):
-        """创建实时检测标签页"""
+        """Create real-time detection tab"""
         widget = QWidget()
         layout_top = QVBoxLayout(widget)
         layout = QHBoxLayout(widget)
 
-        # 原图显示
+        # Original image display
         original_container = QWidget()
         original_layout = QVBoxLayout(original_container)
 
-        original_title = QLabel("📷 源")
+        original_title = QLabel("📷 Source")
         original_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 0px;")
         original_layout.addWidget(original_title)
 
-        self.original_label = QLabel("等待加载源...")
+        self.original_label = QLabel("Waiting for source...")
         self.original_label.setAlignment(Qt.AlignCenter)
         self.original_label.setMinimumSize(500, 400)
         self.original_label.setStyleSheet(StyleManager.get_image_label_style())
         original_layout.addWidget(self.original_label)
 
-        # 结果图显示
+        # Result image display
         result_container = QWidget()
         result_layout = QVBoxLayout(result_container)
 
-        result_title = QLabel("🎯 检测结果")
+        result_title = QLabel("🎯 Detection Result")
         result_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin: 0px;")
         result_layout.addWidget(result_title)
 
-        self.result_label = QLabel("等待检测结果...")
+        self.result_label = QLabel("Waiting for detection result...")
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.setMinimumSize(500, 400)
         self.result_label.setStyleSheet(StyleManager.get_image_label_style())
@@ -4269,17 +4592,17 @@ class EnhancedDetectionUI(QMainWindow):
         layout.addWidget(original_container)
         layout.addWidget(result_container)
         layout_top.addLayout(layout)
-        # 检测结果详情
+        # Detection result details
         self.result_detail_widget = DetectionResultWidget()
         layout_top.addWidget(self.result_detail_widget)
 
-        # 创建一个水平布局来放置导出报告按钮，紧贴在DetectionResultWidget下方
+        # Create a horizontal layout to place the export report button,紧贴在DetectionResultWidget下方
         button_container = QWidget()
-        button_container.setMaximumHeight(40)  # 限制按钮容器的高度
+        button_container.setMaximumHeight(40)  # Limit button container height
         button_layout = QHBoxLayout(button_container)
-        button_layout.setContentsMargins(0, 0, 0, 0)  # 减少上下边距
-        button_layout.addStretch()  # 添加弹性空间推向右侧
-        self.export_report_btn = QPushButton("📤 导出报告")
+        button_layout.setContentsMargins(0, 0, 0, 0)  # Reduce top and bottom margins
+        button_layout.addStretch()  # Add elastic space to push to the right
+        self.export_report_btn = QPushButton("📤 Export Report")
         self.export_report_btn.setMaximumWidth(120)
         self.export_report_btn.clicked.connect(self.export_report)
         button_layout.addWidget(self.export_report_btn)
@@ -4287,17 +4610,17 @@ class EnhancedDetectionUI(QMainWindow):
         return widget
 
     def export_report(self):
-        """导出标准化MRI检查报告PDF"""
+        """Export standardized MRI examination report PDF"""
         if not hasattr(self, 'result_label') or not hasattr(self, 'result_detail_widget'):
-            QMessageBox.warning(self, "警告", "缺少必要的检测结果组件")
+            QMessageBox.warning(self, "Warning", "Missing required detection result components")
             return
 
-        # 选择保存路径 - 自动生成MRI诊断报告文件名
+        # Select save path - automatically generate MRI diagnostic report filename
         now = datetime.now()
         formatted_time = now.strftime("%Y%m%d_%H%M%S")
-        default_filename = f"MRI诊断报告_{formatted_time}.pdf"
+        default_filename = f"MRI_Diagnostic_Report_{formatted_time}.pdf"
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "保存报告", default_filename, "PDF Files (*.pdf);;All Files (*)"
+            self, "Save Report", default_filename, "PDF Files (*.pdf);;All Files (*)"
         )
 
         if not file_path:
@@ -4312,31 +4635,31 @@ class EnhancedDetectionUI(QMainWindow):
             from reportlab.pdfbase import pdfmetrics
             from reportlab.pdfbase.ttfonts import TTFont
 
-            # 注册字体
-            font_path = "C:\Windows\Fonts\msyh.ttc"  # 字体文件路径
+            # Register font
+            font_path = "C:\Windows\Fonts\msyh.ttc"  # Font file path
             if os.path.exists(font_path):
                 pdfmetrics.registerFont(TTFont('CustomFont', font_path))
                 font_name = 'CustomFont'
             else:
-                font_name = 'simhei'  # 备选字体
+                font_name = 'simhei'  # Alternative font
 
-            # 创建文档
+            # Create document
             doc = SimpleDocTemplate(file_path, pagesize=A4)
             story = []
 
-            # 样式定义
+            # Style definitions
             styles = getSampleStyleSheet()
 
-            # 自定义标题样式
+            # Custom title style
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
                 fontSize=18,
                 spaceAfter=30,
-                alignment=1,  # 居中
+                alignment=1,  # Center
                 fontName=font_name
             )
-            # 自定义标题样式
+            # Custom heading style
             big_style = ParagraphStyle(
                 'CustomNormal',
                 parent=styles['Heading4'],
@@ -4345,7 +4668,7 @@ class EnhancedDetectionUI(QMainWindow):
                 fontName=font_name
             )
 
-            # 自定义段落样式
+            # Custom paragraph style
             normal_style = ParagraphStyle(
                 'CustomNormal',
                 parent=styles['Normal'],
@@ -4355,25 +4678,25 @@ class EnhancedDetectionUI(QMainWindow):
                 fontName=font_name
             )
 
-            # 报告标题
-            title = Paragraph("MRI检查报告", title_style)
+            # Report title
+            title = Paragraph("MRI Examination Report", title_style)
             story.append(title)
             story.append(Spacer(1, 20))
 
-            # 基本信息表格
+            # Basic information table
             info_data = [
-                ["患者姓名:", "", "性别:", "", "年龄:", ""],
-                ["检查日期:", datetime.now().strftime("%Y-%m-%d"), "编号:", "", "科室:", ""],
-                ["检查部位:", "脑部", "序列:", "T1/T2", "型号:", "MRI Scanner"]
+                ["Name:", "", "Gender:", "", "Age:", ""],
+                ["Date:", datetime.now().strftime("%Y-%m-%d"), "ID:", "", "Department:", ""],
+                ["Site:", "Brain", "Sequence:", "T1/T2", "Model:", "MRI Scanner"]
             ]
 
-            info_table = Table(info_data, colWidths=[60, 100, 40, 80, 40, 80])
+            info_table = Table(info_data, colWidths=[60, 90, 60, 60, 80, 80])
             info_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (-1, -1), font_name),
                 ('FONTSIZE', (0, 0), (-1, -1), 10),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('SPAN', (1, 0), (1, 0)),  # 合并单元格
+                ('SPAN', (1, 0), (1, 0)),  # Merge cells
                 ('SPAN', (3, 0), (3, 0)),
                 ('SPAN', (5, 0), (5, 0)),
             ]))
@@ -4381,99 +4704,99 @@ class EnhancedDetectionUI(QMainWindow):
             story.append(info_table)
             story.append(Spacer(1, 10))
 
-            # 检测结果图
+            # Detection result image
             if hasattr(self, 'result_label') and self.result_label.pixmap():
-                # 保存当前显示的图像
+                # Save current displayed image
                 temp_img_path = "temp_result.png"
                 self.result_label.pixmap().save(temp_img_path)
 
                 img = Image(temp_img_path, width=2 * inch, height=2 * inch)
-                story.append(Paragraph("检测结果图:", big_style))
+                story.append(Paragraph("Detection Result Image:", big_style))
                 story.append(img)
                 story.append(Spacer(1, 10))
 
-            # MRI扫描所见
-            story.append(Paragraph("扫描所见:",big_style))
+            # MRI scan findings
+            story.append(Paragraph("Scan Findings:",big_style))
 
-            # 获取检测结果详细信息
-            findings_text = "未发现明显异常"  # 默认值
+            # Get detailed detection results
+            findings_text = "No obvious abnormalities found"  # Default value
 
-            # 从result_detail_widget获取检测信息
+            # Get detection information from result_detail_widget
             if hasattr(self, 'result_detail_widget'):
-                # 假设result_detail_widget是DetectionResultWidget
+                # Assume result_detail_widget is DetectionResultWidget
                 if hasattr(self.result_detail_widget, 'result_table'):
                     table = self.result_detail_widget.result_table
                     if table.rowCount() > 0:
                         findings_parts = []
                         for row in range(table.rowCount()):
-                            # 读取病变类型，读不到就显示“未知”
-                            class_name = table.item(row, 0).text() if table.item(row, 0) else "未知"
-                            # 读取置信度并替换为“可能性”表述，读不到就显示“未知”
-                            confidence = table.item(row, 1).text() if table.item(row, 1) else "未知"
-                            # 读取尺寸信息，读不到就显示“未知”
-                            size = table.item(row, 3).text() if table.item(row, 3) else "未知"
+                            # Read lesion type, show "Unknown" if not available
+                            class_name = table.item(row, 0).text() if table.item(row, 0) else "Unknown"
+                            # Read confidence and replace with "Possibility" description, show "Unknown" if not available
+                            confidence = table.item(row, 1).text() if table.item(row, 1) else "Unknown"
+                            # Read size information, show "Unknown" if not available
+                            size = table.item(row, 3).text() if table.item(row, 3) else "Unknown"
 
-                            # 初始化直径和体素大小的默认值
-                            diameter = "未知"
-                            voxel_size = "未知"
+                            # Initialize default values for diameter and voxel size
+                            diameter = "Unknown"
+                            voxel_size = "Unknown"
 
-                            # 仅当尺寸信息有效时，计算直径和体素大小（兼容常见的尺寸格式，比如“2cm×3cm”“20,30”等）
-                            if size != "未知":
+                            # Calculate diameter and voxel size only if size information is valid (compatible with common size formats like "2cm×3cm""20,30", etc.)
+                            if size != "Unknown":
                                 try:
-                                    # 处理常见的尺寸格式（比如“2×3”“20,30”“20 30”），提取数字
-                                    # 先替换特殊符号为分隔符，再拆分出宽度和高度
+                                    # Process common size formats (like "2×3""20,30""20 30"), extract numbers
+                                    # First replace special symbols with separators, then split into width and height
                                     size_clean = size.replace("cm", "").replace("mm", "").replace("×", ",").replace(" ",
                                                                                                                     ",")
                                     width, height = [float(num.strip()) for num in size_clean.split(",") if num.strip()]
-                                    diameter = (width+height)/2  # 直径取宽度和高度的最大值
-                                    voxel_size = 0.785*width * height  # 体素大小为宽度乘以高度
+                                    diameter = (width+height)/2  # Diameter is the average of width and height
+                                    voxel_size = 0.785*width * height  # Voxel size is width multiplied by height
                                 except:
-                                    # 如果尺寸格式解析失败，保持默认的“未知”
+                                    # If size format parsing fails, keep default "Unknown"
                                     pass
 
-                            # 拼接最终文本：去除位置/尺寸，置信度改可能性，只保留类型、可能性、直径、体素 f"{voxel_value:.2f}"
+                            # Concatenate final text: remove position/size, change confidence to possibility, only keep type, possibility, diameter, voxel f"{voxel_value:.2f}"
                             findings_parts.append(
-                                f"{class_name} 可能性: {confidence}, 最大直径约: {diameter}pixel, 像素面积估算值: {voxel_size:.2f}pixel²"
+                                f"{class_name} Possibility: {confidence}, Maximum diameter: {diameter}pixel, Estimated pixel area: {voxel_size:.2f}pixel²"
                             )
-                        findings_text = "；".join(findings_parts)
+                        findings_text = ". ".join(findings_parts)
 
             findings_para = Paragraph(findings_text, normal_style)
             story.append(findings_para)
             story.append(Spacer(1, 10))
 
-            # 诊断结论
-            story.append(Paragraph("诊断结论:",big_style))
-            conclusion_text = "根据影像学表现，考虑为脑部肿瘤病变，建议进一步检查确认。"  # 示例文本
+            # Diagnostic conclusion
+            story.append(Paragraph("Diagnostic Conclusion:",big_style))
+            conclusion_text = "Based on imaging findings, brain tumor lesion is considered. Further examination is recommended for confirmation."  # Example text
             conclusion_para = Paragraph(conclusion_text, normal_style)
             story.append(conclusion_para)
             story.append(Spacer(1, 10))
 
-            # 诊断建议
-            story.append(Paragraph("诊断建议:",big_style))
-            recommendation_text = "1. 建议进行增强扫描以进一步明确病灶性质<br/>" \
-                                  "2. 结合临床症状及实验室检查结果综合判断<br/>" \
-                                  "3. 定期复查，观察病灶变化情况"
+            # Diagnostic recommendations
+            story.append(Paragraph("Diagnostic Recommendations:",big_style))
+            recommendation_text = "1. Enhanced scan is recommended to further clarify the nature of the lesion<br/>" \
+                                  "2. Comprehensive judgment based on clinical symptoms and laboratory test results<br/>" \
+                                  "3. Regular follow-up to observe changes in the lesion"
             recommendation_para = Paragraph(recommendation_text, normal_style)
             story.append(recommendation_para)
             story.append(Spacer(1, 10))
 
-            # 注意事项
-            story.append(Paragraph("注意事项:",big_style))
-            notes_text = "1. 请结合临床症状进行综合分析<br/>" \
-                         "2. 如有不适，请及时就医<br/>" \
-                         "3. 建议定期复查以监测病情变化"
+            # Notes
+            story.append(Paragraph("Notes:",big_style))
+            notes_text = "1. Please conduct comprehensive analysis in combination with clinical symptoms<br/>" \
+                         "2. If you feel unwell, please seek medical attention promptly<br/>" \
+                         "3. Regular follow-up is recommended to monitor disease changes"
             notes_para = Paragraph(notes_text, normal_style)
             story.append(notes_para)
             story.append(Spacer(1, 10))
 
-            # 签名区域
+            # Signature area
             signature_data = [
-                ["报告医师:", "_______________", "审核医师:", "_______________"],
-                ["报告时间:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "", ""],
-                ["医院名称:", "XXX医院影像科", "", ""]
+                ["Reporting Physician:", "_______________", "Reviewing Physician:", "_______________"],
+                ["Report Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "", ""],
+                ["Hospital Name:", "XXX Hospital Imaging Department", "", ""]
             ]
 
-            signature_table = Table(signature_data, colWidths=[80, 150, 80, 150])
+            signature_table = Table(signature_data, colWidths=[120, 150, 120, 150])
             signature_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (-1, -1), font_name),
@@ -4486,32 +4809,32 @@ class EnhancedDetectionUI(QMainWindow):
                 '<para align=center spaceafter=8>This software is a prototype version and is not designed or intended for use in diagnosis or classification of any medical problems or other medical purposes. The user acknowledges and warrants that the software will not be used for such purposes. This prototype is for medical research purposes only. The software is provided "as is" without any warranty of any kind.</para>',
                 styles['Normal']
             )
-            disclaimer_paragraph.style.fontSize = 5  # 设置较小的字体
-            disclaimer_paragraph.style.leading = 15  # 行间距
+            disclaimer_paragraph.style.fontSize = 5  # Set smaller font
+            disclaimer_paragraph.style.leading = 15  # Line spacing
             story.append(disclaimer_paragraph)
-            # 构建PDF
+            # Build PDF
             doc.build(story)
 
-            # 清理临时文件
+            # Clean up temporary file
             if os.path.exists(temp_img_path):
                 os.remove(temp_img_path)
 
-            # 替换原有的这行代码：
+            # Replace the original line of code:
             # QMessageBox.information(self, "成功", f"报告已成功导出至: {file_path}")
 
-            # 修改为以下代码：
+            # Modified to the following code:
             msg_box = QMessageBox(self)
-            msg_box.setWindowTitle("成功")
-            msg_box.setText(f"报告已成功导出至: {file_path}")
+            msg_box.setWindowTitle("Success")
+            msg_box.setText(f"Report successfully exported to: {file_path}")
             msg_box.setIcon(QMessageBox.Information)
 
-            # 添加"打开文件"按钮
-            open_button = msg_box.addButton("打开文件", QMessageBox.ActionRole)
+            # Add "Open File" button
+            open_button = msg_box.addButton("Open File", QMessageBox.ActionRole)
             msg_box.addButton(QMessageBox.Ok)
 
-            msg_box.exec_()
+            msg_box.exec()
 
-            # 如果用户点击了"打开文件"按钮，则执行打开操作
+            # If user clicked "Open File" button, execute open operation
             if msg_box.clickedButton() == open_button:
                 import subprocess
                 import platform
@@ -4524,26 +4847,26 @@ class EnhancedDetectionUI(QMainWindow):
                     else:  # Linux
                         subprocess.run(["xdg-open", file_path])
                 except Exception as e:
-                    QMessageBox.warning(self, "错误", f"无法打开文件: {str(e)}")
+                    QMessageBox.warning(self, "Error", f"Unable to open file: {str(e)}")
 
 
         except ImportError:
-            QMessageBox.critical(self, "错误", "请安装reportlab库: pip install reportlab")
+            QMessageBox.critical(self, "Error", "Please install reportlab library: pip install reportlab")
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出报告时发生错误: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Error occurred while exporting report: {str(e)}")
 
     def create_batch_tab(self):
-        """创建批量结果标签页"""
+        """Create batch results tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # 控制栏
+        # Control Bar
         control_bar = QHBoxLayout()
-        control_bar.addWidget(QLabel("📊 批量检测结果:"))
+        control_bar.addWidget(QLabel("📊 Batch Detection Results:"))
         control_bar.addStretch()
 
-        # 导航按钮
-        self.prev_result_btn = QPushButton("⬅️ 上一个")
+        # Navigation Buttons
+        self.prev_result_btn = QPushButton("⬅️ Previous")
         self.prev_result_btn.clicked.connect(self.show_prev_result)
         self.prev_result_btn.setEnabled(False)
         control_bar.addWidget(self.prev_result_btn)
@@ -4552,34 +4875,34 @@ class EnhancedDetectionUI(QMainWindow):
         self.result_index_label.setStyleSheet("font-weight: bold; margin: 0 10px;")
         control_bar.addWidget(self.result_index_label)
 
-        self.next_result_btn = QPushButton("下一个 ➡️")
+        self.next_result_btn = QPushButton("Next ➡️")
         self.next_result_btn.clicked.connect(self.show_next_result)
         self.next_result_btn.setEnabled(False)
         control_bar.addWidget(self.next_result_btn)
 
-        # 保存按钮
-        self.save_results_btn = QPushButton("💾 保存结果")
+        # Save Button
+        self.save_results_btn = QPushButton("💾 Save Results")
         self.save_results_btn.clicked.connect(self.save_batch_results)
         self.save_results_btn.setEnabled(False)
         control_bar.addWidget(self.save_results_btn)
 
-        # 清空按钮
-        self.clear_results_btn = QPushButton("🗑️ 清空结果")
+        # Clear Button
+        self.clear_results_btn = QPushButton("🗑️ Clear Results")
         self.clear_results_btn.clicked.connect(self.clear_batch_results)
         self.clear_results_btn.setEnabled(False)
         control_bar.addWidget(self.clear_results_btn)
 
         layout.addLayout(control_bar)
 
-        # 图像显示
+        # Image Display
         image_layout = QHBoxLayout()
 
-        self.batch_original_label = QLabel("📷 批量检测: 原图")
+        self.batch_original_label = QLabel("📷 Batch Detection: Original Image")
         self.batch_original_label.setAlignment(Qt.AlignCenter)
         self.batch_original_label.setMinimumSize(500, 400)
         self.batch_original_label.setStyleSheet(StyleManager.get_image_label_style())
 
-        self.batch_result_label = QLabel("🎯 批量检测: 结果图")
+        self.batch_result_label = QLabel("🎯 Batch Detection: Result Image")
         self.batch_result_label.setAlignment(Qt.AlignCenter)
         self.batch_result_label.setMinimumSize(500, 400)
         self.batch_result_label.setStyleSheet(StyleManager.get_image_label_style())
@@ -4588,8 +4911,8 @@ class EnhancedDetectionUI(QMainWindow):
         image_layout.addWidget(self.batch_result_label)
         layout.addLayout(image_layout)
 
-        # 结果信息
-        self.batch_info_label = QLabel("📁 选择文件夹开始批量检测...")
+        # Result Information
+        self.batch_info_label = QLabel("📁 Select folder to start batch detection...")
         self.batch_info_label.setWordWrap(True)
         self.batch_info_label.setStyleSheet("""
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -4648,7 +4971,7 @@ class EnhancedDetectionUI(QMainWindow):
     def update_stats(self, fall_count=0, normal_count=0):
         """更新统计信息"""
         total = fall_count + normal_count
-        self.stats_label.setText(f"📊 今日检测: {total} | 跌倒: {fall_count} | 正常: {normal_count}")
+        self.stats_label.setText(f"📊 Total: {total} | Fall: {fall_count} | Normal: {normal_count}")
 
     def init_model_combo(self):
         """初始化模型下拉框"""
@@ -4656,7 +4979,7 @@ class EnhancedDetectionUI(QMainWindow):
         models = self.model_manager.scan_models()
 
         if not models:
-            self.model_combo.addItem("无可用模型")
+            self.model_combo.addItem("No models available")
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.addItems([model['name'] for model in models])
@@ -4664,7 +4987,7 @@ class EnhancedDetectionUI(QMainWindow):
 
     def try_load_default_model(self):
         """尝试加载默认模型"""
-        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "无可用模型":
+        if self.model_combo.count() > 0 and self.model_combo.itemText(0) != "No models available":
             first_model = self.model_combo.itemText(0)
             self.load_model_by_name(first_model)
 
@@ -4677,19 +5000,19 @@ class EnhancedDetectionUI(QMainWindow):
                 break
 
     def load_model(self, model_path):
-        """加载模型"""
+        """Load model"""
         try:
             self.model = YOLO(model_path)
-            self.log_message(f"✅ 模型加载成功: {Path(model_path).name}")
+            self.log_message(f"✅ Model loaded successfully: {Path(model_path).name}")
             # self.update_button_states()
             return True
         except Exception as e:
-            self.log_message(f"❌ 模型加载失败: {str(e)}")
+            self.log_message(f"❌ Model loading failed: {str(e)}")
             self.model = None
             return False
 
     def show_model_selection_dialog(self):
-        """显示模型选择对话框"""
+        """Show model selection dialog"""
         dialog = ModelSelectionDialog(self.model_manager, self)
         if dialog.exec() == QDialog.Accepted and dialog.selected_model:
             if self.load_model(dialog.selected_model):
@@ -4712,15 +5035,15 @@ class EnhancedDetectionUI(QMainWindow):
             for camera in cameras:
                 self.camera_combo.addItem(f"{camera['name']} ({camera['resolution']})", camera['id'])
         else:
-            self.camera_combo.addItem("未检测到摄像头", -1)
+            self.camera_combo.addItem("No cameras detected", -1)
 
     def on_model_changed(self, model_text):
-        """模型选择改变"""
-        if model_text != "无可用模型":
+        """Model selection changed"""
+        if model_text != "No models available":
             self.load_model_by_name(model_text)
 
     def on_confidence_changed(self, value):
-        """置信度滑块改变"""
+        """Confidence slider changed"""
         conf_value = value / 100.0
         self.confidence_threshold = conf_value
         self.conf_spinbox.blockSignals(True)
@@ -4728,7 +5051,7 @@ class EnhancedDetectionUI(QMainWindow):
         self.conf_spinbox.blockSignals(False)
 
     def on_confidence_spinbox_changed(self, value):
-        """置信度数值框改变"""
+        """Confidence spinbox changed"""
         self.confidence_threshold = value
         self.conf_slider.blockSignals(True)
         self.conf_slider.setValue(int(value * 100))
@@ -4737,10 +5060,11 @@ class EnhancedDetectionUI(QMainWindow):
     def on_source_changed(self, source_text):
         """检测源改变"""
         source_map = {
-            "📷 单张图片": "image",
-            "🎬 视频文件": "video",
-            "📹 摄像头": "camera",
-            "📂 文件夹批量": "batch"
+            "📷 Single Image": "image",
+            "🎬 Video File": "video",
+            "📹 Camera": "camera",
+            "📂 Batch Folder": "batch",
+            "🧠 NIfTI File": "nifti"
         }
         self.current_source_type = source_map.get(source_text)
 
@@ -4752,7 +5076,7 @@ class EnhancedDetectionUI(QMainWindow):
                 item.widget().setVisible(is_camera)
 
         self.current_source_path = None
-        self.current_file_label.setText("未选择文件")
+        self.current_file_label.setText("No file selected yet")
         self.clear_display_windows()
         self.update_button_states()
 
@@ -4770,33 +5094,38 @@ class EnhancedDetectionUI(QMainWindow):
         self.start_btn.setEnabled(has_model and has_source)
 
     def select_file(self):
-        """选择文件或文件夹"""
+        """Select file or folder"""
         if self.current_source_type == "image":
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "选择图片", "",
-                "图片文件 (*.jpg *.jpeg *.png *.bmp *.tiff *.webp);;所有文件 (*)"
+                self, "Select Image", "",
+                "Image Files (*.jpg *.jpeg *.png *.bmp *.tiff *.webp);;All Files (*)"
             )
         elif self.current_source_type == "video":
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "选择视频", "",
-                "视频文件 (*.mp4 *.avi *.mov *.mkv *.wmv *.flv);;所有文件 (*)"
+                self, "Select Video", "",
+                "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv);;All Files (*)"
             )
         elif self.current_source_type == "batch":
-            file_path = QFileDialog.getExistingDirectory(self, "选择包含图片的文件夹")
+            file_path = QFileDialog.getExistingDirectory(self, "Select Folder Containing Images")
+        elif self.current_source_type == "nifti":
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Select NIfTI File", "",
+                "NIfTI Files (*.nii.gz *.nii);;All Files (*)"
+            )
         else:
             return
 
         if file_path:
             self.current_source_path = file_path
-            self.current_file_label.setText(f"📁 已选择: {Path(file_path).name}")
-            self.log_message(f"📁 已选择: {file_path}")
+            self.current_file_label.setText(f"📁 Selected: {Path(file_path).name}")
+            self.log_message(f"📁 Selected: {file_path}")
             self.update_button_states()
 
             if self.current_source_type in ["image", "video"]:
                 self.preview_file(file_path)
 
     def preview_file(self, file_path):
-        """预览文件"""
+        """Preview file"""
         try:
             if self.current_source_type == "image":
                 img = cv2.imread(file_path)
@@ -4804,28 +5133,30 @@ class EnhancedDetectionUI(QMainWindow):
                     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     self.display_image(img_rgb, self.original_label)
                     self.result_label.clear()
-                    self.result_label.setText("等待检测结果...")
+                    self.result_label.setText("Waiting for detection result...")
         except Exception as e:
-            self.log_message(f"❌ 预览文件失败: {str(e)}")
+            self.log_message(f"❌ Failed to preview file: {str(e)}")
 
     def start_detection(self):
-        """开始检测"""
+        """Start detection"""
         if not self.model:
-            self.log_message("❌ 错误: 模型未加载")
+            self.log_message("❌ Error: Model not loaded")
             return
 
         if self.current_source_type == "batch":
             self.start_batch_detection()
+        elif self.current_source_type == "nifti":
+            self.start_niigz_detection()
         else:
             self.start_single_detection()
 
     def start_single_detection(self):
-        """开始单个检测"""
+        """Start single detection"""
         camera_id = 0
         if self.current_source_type == "camera":
             camera_id = self.camera_combo.currentData()
             if camera_id == -1:
-                self.log_message("❌ 错误: 没有可用的摄像头")
+                self.log_message("❌ Error: No available camera")
                 return
 
         self.detection_thread = DetectionThread(
@@ -4841,10 +5172,10 @@ class EnhancedDetectionUI(QMainWindow):
         self.tab_widget.setCurrentIndex(0)  # 切换到实时检测
 
         self.detection_thread.start()
-        self.log_message(f"🚀 开始{self.current_source_type}检测...")
+        self.log_message(f"🚀 Starting {self.current_source_type} detection...")
 
     def start_batch_detection(self):
-        """开始批量检测"""
+        """Start batch detection"""
         self.batch_results.clear()
 
         self.batch_detection_thread = BatchDetectionThread(
@@ -4856,36 +5187,36 @@ class EnhancedDetectionUI(QMainWindow):
         self.batch_detection_thread.finished.connect(self.on_batch_finished)
 
         self.update_detection_ui_state(True)
-        self.tab_widget.setCurrentIndex(1)  # 切换到批量结果
+        self.tab_widget.setCurrentIndex(1)  # Switch to batch results
 
         self.batch_detection_thread.start()
-        self.log_message("🚀 开始批量检测...")
+        self.log_message("🚀 Starting batch detection...")
 
     def update_detection_ui_state(self, detecting):
-        """更新检测状态的UI"""
+        """Update detection UI state"""
         self.start_btn.setEnabled(not detecting)
         self.pause_btn.setEnabled(detecting and self.current_source_type != "batch")
         self.stop_btn.setEnabled(detecting)
         self.source_combo.setEnabled(not detecting)
         self.select_file_btn.setEnabled(not detecting and self.current_source_type != "camera")
         self.model_combo.setEnabled(not detecting)
-        # 更新快照按钮状态
+        # Update snapshot button state
         self.kuaizhao_btn.setEnabled(detecting and self.current_source_type in ["camera", "video"])
 
     def pause_detection(self):
-        """暂停/恢复检测"""
+        """Pause/resume detection"""
         if self.detection_thread and self.detection_thread.is_running:
             if self.detection_thread.is_paused:
                 self.detection_thread.resume()
-                self.pause_btn.setText("⏸️ 暂停")
-                self.log_message("▶️ 检测已恢复")
+                self.pause_btn.setText("⏸️ Pause")
+                self.log_message("▶️ Detection resumed")
             else:
                 self.detection_thread.pause()
-                self.pause_btn.setText("▶️ 继续")
-                self.log_message("⏸️ 检测已暂停")
+                self.pause_btn.setText("▶️ Resume")
+                self.log_message("⏸️ Detection paused")
 
     def stop_detection(self):
-        """停止检测"""
+        """Stop detection"""
         if self.detection_thread and self.detection_thread.is_running:
             self.detection_thread.stop()
             self.detection_thread.wait()
@@ -4897,23 +5228,23 @@ class EnhancedDetectionUI(QMainWindow):
         self.on_detection_finished()
 
     def kuaizhao_detection(self):
-        """切换自动保存监控快照状态"""
+        """Toggle auto-save monitoring snapshot status"""
         if not self.video_is_auto_saving:
             self.start_auto_save()
         else:
             self.stop_auto_save()
 
     def start_auto_save(self):
-        """开始自动保存快照"""
+        """Start auto-saving snapshots"""
         if not self.model:
-            QMessageBox.warning(self, "警告", "请先选择模型")
+            QMessageBox.warning(self, "Warning", "Please select a model first")
             return
 
-        # 初始化视频录制器
-        source_name = "摄像头" if self.current_source_type == "camera" else "视频"
+        # Initialize video recorder
+        source_name = "Camera" if self.current_source_type == "camera" else "Video"
         if self.current_source_type == "camera":
             source_id = self.camera_combo.currentData()
-            source_name = f"摄像头{source_id}"
+            source_name = f"Camera{source_id}"
         elif self.current_source_type == "video":
             source_name = Path(self.current_source_path).stem
 
@@ -4923,29 +5254,29 @@ class EnhancedDetectionUI(QMainWindow):
         self.video_recorder.start_recording()
 
         self.video_is_auto_saving = True
-        self.kuaizhao_btn.setText("⏹️ 停止快照")
-        self.log_message("🎬 开始记录快照")
+        self.kuaizhao_btn.setText("⏹️ Stop Snapshot")
+        self.log_message("🎬 Started recording snapshots")
 
     def stop_auto_save(self):
-        """停止自动保存快照"""
+        """Stop auto-saving snapshots"""
         if self.video_recorder:
             self.video_recorder.stop_recording()
             self.video_recorder = None
 
         self.video_is_auto_saving = False
-        self.kuaizhao_btn.setText("🎬 快照")
-        self.log_message("⏹️ 停止记录快照")
+        self.kuaizhao_btn.setText("📸 Snapshot")
+        self.log_message("⏹️ Stopped recording snapshots")
 
     def on_detection_result(self, original_img, result_img, inference_time, results, class_names):
-        """检测结果回调"""
-        # 显示图像
+        """Detection result callback"""
+        # Display images
         self.display_image(original_img, self.original_label)
         self.display_image(result_img, self.result_label)
 
-        # 更新结果详情
+        # Update result details
         self.result_detail_widget.update_results(results, class_names, inference_time)
 
-        # 如果正在录制快照，添加帧
+        # If recording snapshots, add frame
         if self.video_is_auto_saving and self.video_recorder:
             detection_info = {
                 'results': results,
@@ -4955,47 +5286,47 @@ class EnhancedDetectionUI(QMainWindow):
 
             self.video_recorder.add_frame(result_img, detection_info)
 
-        # 记录日志（简化版，避免过多输出）
+        # Record log (simplified version to avoid excessive output)
         if results and results[0].boxes and len(results[0].boxes) > 0:
             object_count = len(results[0].boxes)
 
-            # 统计类别
+            # Count classes
             classes = results[0].boxes.cls.cpu().numpy().astype(int)
             class_counts = {}
             for cls in classes:
-                class_name = class_names[cls] if cls < len(class_names) else f"类别{cls}"
+                class_name = class_names[cls] if cls < len(class_names) else f"Class{cls}"
                 class_counts[class_name] = class_counts.get(class_name, 0) + 1
 
             class_summary = ", ".join([f"{name}:{count}" for name, count in class_counts.items()])
-            self.log_message(f"🎯 检测到 {object_count} 个目标: {class_summary} (耗时: {inference_time:.3f}s)")
+            self.log_message(f"🎯 Detected {object_count} objects: {class_summary} (Time: {inference_time:.3f}s)")
         else:
-            self.log_message(f"⚪ 未检测到目标 (耗时: {inference_time:.3f}s)")
+            self.log_message(f"⚪ No objects detected (Time: {inference_time:.3f}s)")
 
     def on_batch_result(self, file_path, original_img, result_img, inference_time, results, class_names):
-        """批量检测结果回调"""
-        # 计算目标数量
+        """Batch detection result callback"""
+        # Calculate object count
         object_count = len(results[0].boxes) if results and results[0].boxes else 0
 
-        # 计算直径和体素信息
+        # Calculate diameter and voxel information
         diameters = []
         voxels = []
         if results and results[0].boxes:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             for box in boxes:
-                # 计算宽度和高度
+                # Calculate width and height
                 width = box[2] - box[0]
                 height = box[3] - box[1]
 
-                # 计算直径 (假设是圆形肿瘤，直径等于平均尺寸)
-                diameter = (width + height) / 2  # 像素为单位
+                # Calculate diameter (assuming circular tumor, diameter equals average size)
+                diameter = (width + height) / 2  # in pixels
                 diameters.append(diameter)
 
-                # 计算体素 (简化为0.785 * w * h * 体素单位，默认体素单位为1mm)
-                voxel_size = 1.0  # 默认体素单位为1mm
+                # Calculate voxel (simplified as 0.785 * w * h * voxel unit, default voxel unit is 1mm)
+                voxel_size = 1.0  # default voxel unit is 1mm
                 voxel_value = 0.785 * width * height * voxel_size
                 voxels.append(voxel_value)
 
-        # 保存结果
+        # Save result
         result_data = {
             'file_path': file_path,
             'original_img': original_img,
@@ -5010,27 +5341,27 @@ class EnhancedDetectionUI(QMainWindow):
 
         self.batch_results.append(result_data)
 
-        # 显示第一个结果
+        # Display first result
         if len(self.batch_results) == 1:
             self.current_batch_index = 0
             self.show_batch_result(0)
 
         self.update_batch_navigation()
 
-        # 记录日志
+        # Record log
         filename = Path(file_path).name
         if object_count > 0:
-            self.log_message(f"✅ {filename}: {object_count} 个目标 ({inference_time:.3f}s)")
+            self.log_message(f"✅ {filename}: {object_count} objects ({inference_time:.3f}s)")
         else:
-            self.log_message(f"⚪ {filename}: 无目标 ({inference_time:.3f}s)")
+            self.log_message(f"⚪ {filename}: No objects ({inference_time:.3f}s)")
 
     def on_batch_finished(self):
-        """批量检测完成"""
+        """Batch detection finished"""
         total_count = len(self.batch_results)
         total_objects = sum(result['object_count'] for result in self.batch_results)
 
-        self.log_message(f"🎉 批量检测完成! 处理了 {total_count} 张图片，检测到 {total_objects} 个目标")
-        self.statusBar().showMessage(f"批量检测完成 - {total_count} 张图片，{total_objects} 个目标")
+        self.log_message(f"🎉 Batch detection completed! Processed {total_count} images, detected {total_objects} objects")
+        self.statusBar().showMessage(f"Batch detection completed - {total_count} images, {total_objects} objects")
 
         self.save_results_btn.setEnabled(True)
         self.clear_results_btn.setEnabled(True)
@@ -5038,17 +5369,17 @@ class EnhancedDetectionUI(QMainWindow):
         self.on_detection_finished()
 
     def on_detection_finished(self):
-        """检测完成回调"""
+        """Detection finished callback"""
         self.update_detection_ui_state(False)
-        self.pause_btn.setText("⏸️ 暂停")
+        self.pause_btn.setText("⏸️ Pause")
         self.progress_bar.setValue(0)
 
-        # 停止快照录制
+        # Stop snapshot recording
         if self.video_is_auto_saving:
             self.stop_auto_save()
 
     def show_batch_result(self, index):
-        """显示批量结果"""
+        """Show batch result"""
         if 0 <= index < len(self.batch_results):
             result = self.batch_results[index]
 
@@ -5059,86 +5390,86 @@ class EnhancedDetectionUI(QMainWindow):
             object_count = result['object_count']
             inference_time = result['inference_time']
 
-            info_text = f"📁 文件: {filename}\n"
-            info_text += f"🎯 检测目标: {object_count} 个\n"
-            info_text += f"⏱️ 推理耗时: {inference_time:.3f} 秒\n"
+            info_text = f"📁 File: {filename}\n"
+            info_text += f"🎯 Detected objects: {object_count}\n"
+            info_text += f"⏱️ Inference time: {inference_time:.3f} seconds\n"
 
             if result['results'] and result['results'][0].boxes and len(result['results'][0].boxes) > 0:
-                # 显示类别统计
+                # Display class statistics
                 classes = result['results'][0].boxes.cls.cpu().numpy().astype(int)
                 confidences = result['results'][0].boxes.conf.cpu().numpy()
 
                 class_counts = {}
                 for cls in classes:
-                    class_name = result['class_names'][cls] if cls < len(result['class_names']) else f"类别{cls}"
+                    class_name = result['class_names'][cls] if cls < len(result['class_names']) else f"Class{cls}"
                     class_counts[class_name] = class_counts.get(class_name, 0) + 1
 
-                info_text += "📊 类别统计: " + ", ".join(
+                info_text += "📊 Class statistics: " + ", ".join(
                     [f"{name}:{count}" for name, count in class_counts.items()]) + ""
 
-                # 根据检测目标数量决定显示方式
+                # Determine display method based on number of detected objects
                 if len(result['results'][0].boxes) == 1:
-                    # 单个目标：显示具体置信度
-                    info_text += f"🎯 置信度: {confidences[0]:.3f}"
+                    # Single object: display specific confidence
+                    info_text += f"🎯 Confidence: {confidences[0]:.3f}"
                 else:
-                    # 多个目标：显示平均置信度和置信度范围
-                    info_text += f"🎯 平均置信度: {np.mean(confidences):.3f}"
-                    info_text += f"\n📈 置信度范围: {np.min(confidences):.3f} - {np.max(confidences):.3f}"
+                    # Multiple objects: display average confidence and confidence range
+                    info_text += f"🎯 Average confidence: {np.mean(confidences):.3f}"
+                    info_text += f"\n📈 Confidence range: {np.min(confidences):.3f} - {np.max(confidences):.3f}"
 
-                # 添加直径和体素信息
+                # Add diameter and voxel information
                 if 'diameters' in result and 'voxels' in result:
                     if len(result['results'][0].boxes) == 1:
-                        # 单个目标：显示具体直径(mm)和体素(mm²)
+                        # Single object: display specific diameter(mm) and voxel(mm²)
                         diameter = result['diameters'][0] if result['diameters'] else 0
                         voxel = result['voxels'][0] if result['voxels'] else 0
 
-                        # 假设像素与毫米的转换比例为1:1 (实际应用中可能需要校准)
-                        diameter_mm = diameter  # 这里简化处理，实际应用需要根据相机标定或已知参考物进行转换
+                        # Assume 1:1 pixel to mm conversion ratio (calibration may be needed in actual application)
+                        diameter_mm = diameter  # Simplified processing here, actual application needs conversion based on camera calibration or known reference object
 
-                        info_text += f"\n📏 估算直径: {diameter_mm:.2f} pixel"
-                        info_text += f"\n🧩 像素面积估算值: {voxel:.2f} pixel²"
+                        info_text += f"\n📏 Estimated diameter: {diameter_mm:.2f} pixel"
+                        info_text += f"\n🧩 Estimated pixel area: {voxel:.2f} pixel²"
                     else:
-                        # 多个目标：显示平均直径和体素，以及每个目标的信息
+                        # Multiple objects: display average diameter and voxel, and information for each object
                         avg_diameter = np.mean(result['diameters']) if result['diameters'] else 0
                         avg_voxel = np.mean(result['voxels']) if result['voxels'] else 0
 
-                        # 假设像素与毫米的转换比例为1:1
+                        # Assume 1:1 pixel to mm conversion ratio
                         avg_diameter_mm = avg_diameter
 
-                        info_text += f"\n📏 平均直径: {avg_diameter_mm:.2f} pixel"
-                        info_text += f"\n🧩 平均像素: {avg_voxel:.2f} pixel²"
+                        info_text += f"\n📏 Average diameter: {avg_diameter_mm:.2f} pixel"
+                        info_text += f"\n🧩 Average pixel: {avg_voxel:.2f} pixel²"
 
-                        info_text += "\n📏 各目标直径(pixel): " + ", ".join([f"{d:.2f}" for d in result['diameters']])
-                        info_text += "\n🧩 各像素(pixel²): " + ", ".join([f"{v:.2f}" for v in result['voxels']])
+                        info_text += "\n📏 Each object diameter (pixel): " + ", ".join([f"{d:.2f}" for d in result['diameters']])
+                        info_text += "\n🧩 Each pixel (pixel²): " + ", ".join([f"{v:.2f}" for v in result['voxels']])
 
             self.batch_info_label.setText(info_text)
             self.result_index_label.setText(f"{index + 1}/{len(self.batch_results)}")
 
     def show_prev_result(self):
-        """显示上一个结果"""
+        """Show previous result"""
         if self.current_batch_index > 0:
             self.current_batch_index -= 1
             self.show_batch_result(self.current_batch_index)
             self.update_batch_navigation()
 
     def show_next_result(self):
-        """显示下一个结果"""
+        """Show next result"""
         if self.current_batch_index < len(self.batch_results) - 1:
             self.current_batch_index += 1
             self.show_batch_result(self.current_batch_index)
             self.update_batch_navigation()
 
     def update_batch_navigation(self):
-        """更新批量结果导航"""
+        """Update batch result navigation"""
         has_results = len(self.batch_results) > 0
         self.prev_result_btn.setEnabled(has_results and self.current_batch_index > 0)
         self.next_result_btn.setEnabled(has_results and self.current_batch_index < len(self.batch_results) - 1)
 
     def clear_batch_results(self):
         self.batch_results.clear()
-        self.batch_result_label.setText('🎯 批量检测: 结果图')
-        self.batch_original_label.setText('📷 批量检测: 原图')
-        self.batch_info_label.setText('📁 选择文件夹开始批量检测...')
+        self.batch_result_label.setText('🎯 Batch detection: Result image')
+        self.batch_original_label.setText('📷 Batch detection: Original image')
+        self.batch_info_label.setText('📁 Select folder to start batch detection...')
         self.result_index_label.setText("0/0")
         self.save_results_btn.setEnabled(False)
         self.next_result_btn.setEnabled(False)
@@ -5146,12 +5477,12 @@ class EnhancedDetectionUI(QMainWindow):
         self.clear_results_btn.setEnabled(False)
 
     def save_batch_results(self):
-        """保存批量检测结果"""
+        """Save batch detection results"""
         if not self.batch_results:
-            QMessageBox.information(self, "提示", "没有可保存的结果")
+            QMessageBox.information(self, "Information", "No results to save")
             return
 
-        save_dir = QFileDialog.getExistingDirectory(self, "选择保存目录")
+        save_dir = QFileDialog.getExistingDirectory(self, "Select Save Directory")
         if not save_dir:
             return
 
@@ -5161,80 +5492,80 @@ class EnhancedDetectionUI(QMainWindow):
             result_dir = save_path / f"detection_results_{timestamp}"
             result_dir.mkdir(exist_ok=True)
 
-            # 保存检测结果图片
+            # Save detection result images
             for i, result in enumerate(self.batch_results):
                 file_name = Path(result['file_path']).stem
                 result_img = cv2.cvtColor(result['result_img'], cv2.COLOR_RGB2BGR)
                 result_save_path = result_dir / f"{file_name}_result.jpg"
                 cv2.imwrite(str(result_save_path), result_img)
 
-            # 保存检测报告
+            # Save detection report
             self.save_detection_report(result_dir)
 
-            QMessageBox.information(self, "成功", f"结果已保存到:\n{result_dir}")
-            self.log_message(f"💾 结果已保存到: {result_dir}")
+            QMessageBox.information(self, "Success", f"Results saved to:\n{result_dir}")
+            self.log_message(f"💾 Results saved to: {result_dir}")
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
-            self.log_message(f"❌ 保存失败: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Save failed: {str(e)}")
+            self.log_message(f"❌ Save failed: {str(e)}")
 
     def save_detection_report(self, result_dir):
-        """保存检测报告"""
+        """Save detection report"""
         report_path = result_dir / "detection_report.txt"
 
         with open(report_path, 'w', encoding='utf-8') as f:
-            f.write("🎯 基于YOLO的脑部肿瘤检测系统 - 批量检测报告\n")
+            f.write("🎯 YOLO-based Brain Tumor Detection System - Batch Detection Report\n")
             f.write("=" * 60 + "\n")
-            f.write(f"📅 处理时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"🎚️ 置信度阈值: {self.confidence_threshold}\n")
-            f.write(f"📂 处理图片数量: {len(self.batch_results)}\n")
-            f.write(f"🎯 总检测目标数: {sum(r['object_count'] for r in self.batch_results)}\n")
-            f.write("\n📊 详细结果:\n")
+            f.write(f"📅 Processing time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"🎚️ Confidence threshold: {self.confidence_threshold}\n")
+            f.write(f"📂 Number of images processed: {len(self.batch_results)}\n")
+            f.write(f"🎯 Total detected objects: {sum(r['object_count'] for r in self.batch_results)}\n")
+            f.write("\n📊 Detailed results:\n")
             f.write("-" * 60 + "\n")
 
             for i, result in enumerate(self.batch_results, 1):
                 f.write(f"{i}. 📁 {Path(result['file_path']).name}\n")
-                f.write(f"   🎯 检测目标: {result['object_count']} 个\n")
-                f.write(f"   ⏱️ 推理耗时: {result['inference_time']:.3f} 秒\n")
+                f.write(f"   🎯 Detected objects: {result['object_count']}\n")
+                f.write(f"   ⏱️ Inference time: {result['inference_time']:.3f} seconds\n")
 
                 if result['results'] and result['results'][0].boxes and len(result['results'][0].boxes) > 0:
                     confidences = result['results'][0].boxes.conf.cpu().numpy()
                     classes = result['results'][0].boxes.cls.cpu().numpy().astype(int)
 
-                    # 根据检测目标数量决定显示方式
+                    # Determine display method based on number of detected objects
                     if len(result['results'][0].boxes) == 1:
 
-                        f.write(f"   📈 置信度: {confidences[0]:.3f}\n")
+                        f.write(f"   📈 Confidence: {confidences[0]:.3f}\n")
                     else:
-                        # 多个目标：显示置信度范围
-                        f.write(f"   📈 置信度范围: {np.min(confidences):.3f} - {np.max(confidences):.3f}\n")
+                        # Multiple objects: display confidence range
+                        f.write(f"   📈 Confidence range: {np.min(confidences):.3f} - {np.max(confidences):.3f}\n")
 
-                    # 类别统计
+                    # Class statistics
                     class_counts = {}
                     for cls in classes:
-                        class_name = result['class_names'][cls] if cls < len(result['class_names']) else f"类别{cls}"
+                        class_name = result['class_names'][cls] if cls < len(result['class_names']) else f"Class{cls}"
                         class_counts[class_name] = class_counts.get(class_name, 0) + 1
 
-                    f.write("   📊 类别分布: " + ", ".join(
+                    f.write("   📊 Class distribution: " + ", ".join(
                         [f"{name}:{count}" for name, count in class_counts.items()]) + "\n")
 
-                    # 添加直径和体素信息
+                    # Add diameter and voxel information
                     if 'diameters' in result and 'voxels' in result:
                         if len(result['results'][0].boxes) == 1:
 
                             diameter = result['diameters'][0] if result['diameters'] else 0
                             voxel = result['voxels'][0] if result['voxels'] else 0
 
-                            # 假设像素与毫米的转换比例为1:1 (实际应用中可能需要校准)
-                            diameter_mm = diameter  # 这里简化处理，实际应用需要根据相机标定或已知参考物进行转换
+                            # Assume 1:1 pixel to mm conversion ratio (calibration may be needed in actual application)
+                            diameter_mm = diameter  # Simplified processing here, actual application needs conversion based on camera calibration or known reference object
 
-                            f.write(f"   📏 直径: {diameter_mm:.2f} pixel\n")
-                            f.write(f"   🧩 像素: {voxel:.2f} pixel²\n")
+                            f.write(f"   📏 Diameter: {diameter_mm:.2f} pixel\n")
+                            f.write(f"   🧩 Pixel: {voxel:.2f} pixel²\n")
                         else:
 
-                            f.write("   📏 各目标直径(pixel): ")
+                            f.write("   📏 Each object diameter (pixel): ")
                             for i, diameter in enumerate(result['diameters']):
-                                # 假设像素与毫米的转换比例为1:1
+                                # Assume 1:1 pixel to mm conversion ratio
                                 diameter_mm = diameter
                                 if i == len(result['diameters']) - 1:
                                     f.write(f"{diameter_mm:.2f}")
@@ -5242,7 +5573,7 @@ class EnhancedDetectionUI(QMainWindow):
                                     f.write(f"{diameter_mm:.2f}, ")
                             f.write("\n")
 
-                            f.write("   🧩 各像素(pixel²): ")
+                            f.write("   🧩 Each pixel (pixel²): ")
                             for i, voxel in enumerate(result['voxels']):
                                 if i == len(result['voxels']) - 1:
                                     f.write(f"{voxel:.2f}")
@@ -5253,14 +5584,14 @@ class EnhancedDetectionUI(QMainWindow):
                 f.write("\n")
 
     def clear_display_windows(self):
-        """清空显示窗口"""
+        """Clear display windows"""
         self.original_label.clear()
-        self.original_label.setText("等待加载源...")
+        self.original_label.setText("Waiting for source...")
         self.result_label.clear()
-        self.result_label.setText("等待检测结果...")
+        self.result_label.setText("Waiting for detection result...")
 
     def display_image(self, img_array, label):
-        """显示图像"""
+        """Display image"""
         if img_array is None:
             return
 
@@ -5275,28 +5606,28 @@ class EnhancedDetectionUI(QMainWindow):
         pass
 
     def log_message(self, message):
-        """添加日志消息"""
+        """Add log message"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
 
-        # 限制日志行数
+        # Limit log lines
         max_lines = 1000
         lines = self.log_text.toPlainText().split('\n')
         if len(lines) > max_lines:
             keep_lines = lines[-500:]
             self.log_text.setPlainText('\n'.join(keep_lines))
 
-        # 自动滚动到底部
+        # Auto scroll to bottom
         scrollbar = self.log_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def clear_log(self):
-        """清除日志"""
+        """Clear log"""
         self.log_text.clear()
-        self.log_message("🗑️ 日志已清除")
+        self.log_message("🗑️ Log cleared")
 
     def create_enhanced_icon(self, size=64):
-        """创建增强的应用图标"""
+        """Create enhanced application icon"""
         icon = QIcon()
 
         for s in [16, 32, 48, 64, 128, 256]:
@@ -5306,7 +5637,7 @@ class EnhancedDetectionUI(QMainWindow):
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
 
-            # 渐变背景
+            # Gradient background
             gradient = QRadialGradient(s / 2, s / 2, s / 2)
             gradient.setColorAt(0, QColor("#3498db"))
             gradient.setColorAt(1, QColor("#2c3e50"))
@@ -5315,7 +5646,7 @@ class EnhancedDetectionUI(QMainWindow):
             painter.setPen(Qt.NoPen)
             painter.drawEllipse(0, 0, s, s)
 
-            # 十字准星
+            # Crosshair
             painter.setPen(QPen(QColor("white"), max(1, s // 32), Qt.SolidLine))
             center = s / 2
             arm_len = s * 0.25
@@ -5323,16 +5654,16 @@ class EnhancedDetectionUI(QMainWindow):
             painter.drawLine(center - arm_len, center, center + arm_len, center)
             painter.drawLine(center, center - arm_len, center, center + arm_len)
 
-            # 中心圆点
+            # Center dot
             painter.setBrush(QBrush(QColor("white")))
             r = max(2, s // 16)
             painter.drawEllipse(center - r, center - r, 2 * r, 2 * r)
 
-            # AI 眼睛效果
+            # AI eye effect
             painter.setPen(QPen(QColor("#e74c3c"), max(1, s // 64), Qt.SolidLine))
             painter.setBrush(Qt.NoBrush)
 
-            # 外圈
+            # Outer circle
             outer_r = s * 0.35
             painter.drawEllipse(center - outer_r, center - outer_r, 2 * outer_r, 2 * outer_r)
 
@@ -5343,7 +5674,7 @@ class EnhancedDetectionUI(QMainWindow):
 
 
 class DetectionVideoRecorder:
-    """检测视频录制器，用于记录实时检测的快照"""
+    """Detection video recorder for recording real-time detection snapshots"""
 
     def __init__(self, source_name, output_dir, fps=20):
         self.source_name = source_name
@@ -5356,10 +5687,10 @@ class DetectionVideoRecorder:
         self.total_detections = 0
         self.start_time = None
         self.end_time = None
-        self.max_frames_per_file = fps * 60 * 60 * 24  # 24小时的视频
+        self.max_frames_per_file = fps * 60 * 60 * 24  # 24 hours of video
 
     def start_recording(self):
-        """开始录制"""
+        """Start recording"""
         if self.is_recording:
             return
 
@@ -5369,34 +5700,34 @@ class DetectionVideoRecorder:
         self.detection_stats.clear()
         self.total_detections = 0
 
-        # 生成文件名
+        # Generate filename
         timestamp = int(self.start_time)
         self.filename_base = f"{self.source_name}_{timestamp}"
         self.mp4_path = self.output_dir / f"{self.filename_base}.mp4"
         self.json_path = self.output_dir / f"{self.filename_base}.json"
 
-        # 初始化视频写入器（稍后在添加第一帧时设置）
+        # Initialize video writer (set later when adding first frame)
         self.video_writer = None
 
     def add_frame(self, frame, detection_info):
-        """添加帧"""
+        """Add frame"""
         if not self.is_recording:
             return
-        # 检查是否有检测结果
+        # Check if there are detection results
         if not detection_info or not detection_info.get('results'):
             return
 
         results = detection_info['results']
         if not hasattr(results[0], 'boxes') or not results[0].boxes or len(results[0].boxes) == 0:
             return
-        # 如果是第一帧，初始化视频写入器
+        # If it's the first frame, initialize video writer
         if self.video_writer is None:
             height, width = frame.shape[:2]
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             self.video_writer = cv2.VideoWriter(str(self.mp4_path), fourcc, self.fps, (width, height))
 
-        # 写入帧 - 解决色差问题：将RGB转换为BGR
-        if frame.shape[2] == 3:  # 确保是3通道彩色图像
+        # Write frame - Fix color difference: convert RGB to BGR
+        if frame.shape[2] == 3:  # Ensure it's a 3-channel color image
             bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             self.video_writer.write(bgr_frame)
         else:
@@ -5404,13 +5735,13 @@ class DetectionVideoRecorder:
 
         self.frames.append(frame.copy())
 
-        # 更新检测统计
+        # Update detection statistics
         if detection_info and detection_info.get('results'):
             results = detection_info['results']
             if hasattr(results[0], 'boxes') and results[0].boxes and len(results[0].boxes) > 0:
                 self.total_detections += len(results[0].boxes)
 
-                # 统计类别
+                # Count classes
                 if hasattr(results[0].boxes, 'cls'):
                     classes = results[0].boxes.cls.cpu().numpy().astype(int)
                     class_names = detection_info.get('class_names', [])
@@ -5420,13 +5751,13 @@ class DetectionVideoRecorder:
                             class_name = class_names[cls]
                             self.detection_stats[class_name] = self.detection_stats.get(class_name, 0) + 1
 
-        # 检查是否需要保存文件
+        # Check if need to save file
         if len(self.frames) >= self.max_frames_per_file:
             self.save_recording()
-            self.start_recording()  # 开始新的录制
+            self.start_recording()  # Start new recording
 
     def stop_recording(self):
-        """停止录制"""
+        """Stop recording"""
         if not self.is_recording:
             return
 
@@ -5437,21 +5768,21 @@ class DetectionVideoRecorder:
             self.video_writer.release()
             self.video_writer = None
 
-        # 保存录制
+        # Save recording
         if self.frames:
             self.save_recording()
 
     def save_recording(self):
-        """保存录制"""
+        """Save recording"""
         if not self.frames or not self.start_time:
             return
 
-        # 确保视频写入器已释放
+        # Ensure video writer is released
         if self.video_writer:
             self.video_writer.release()
             self.video_writer = None
 
-        # 保存JSON元数据
+        # Save JSON metadata
         metadata = {
             'camera_id': self.source_name,
             'source_name': self.source_name,
@@ -5468,30 +5799,30 @@ class DetectionVideoRecorder:
         with open(self.json_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-        print(f"保存检测快照: {self.source_name} - {len(self.frames)} 帧, {self.total_detections} 次检测")
-        print(f"文件路径: {self.mp4_path}")
-        print(f"JSON路径: {self.json_path}")
+        print(f"Saved detection snapshot: {self.source_name} - {len(self.frames)} frames, {self.total_detections} detections")
+        print(f"File path: {self.mp4_path}")
+        print(f"JSON path: {self.json_path}")
 
 
 def main():
     app = QApplication(sys.argv)
 
-    # 设置应用程序信息
-    app.setApplicationName("基于YOLO的脑部肿瘤检测系统")
+    # Set application information
+    app.setApplicationName("YOLO-based Brain Tumor Detection System")
     app.setApplicationVersion("2.0")
     app.setOrganizationName("AI Vision Lab")
 
-    # 设置高DPI缩放
+    # Set high DPI scaling
     # app.setAttribute(Qt.AA_EnableHighDpiScaling)
     # app.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
-    # 创建主窗口
+    # Create main window
     window = EnhancedDetectionUI()
     window.show()
 
-    # 启动消息
-    window.log_message("🚀 基于YOLO的脑部肿瘤检测系统 已启动")
-    window.log_message("✨ 新功能: 渐变UI、多摄像头支持、实时监控、增强日志等")
+    # Startup messages
+    window.log_message("🚀 MediScreen-Brain Tumor Detection System started")
+    window.log_message("✨ New features: Gradient UI, multi-camera support, real-time monitoring, enhanced logging, etc.")
 
     sys.exit(app.exec())
 
