@@ -1,17 +1,26 @@
 
 import sys
+import os
 import threading
 from datetime import datetime
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
-
+from pathlib import Path
 
 from ultralytics import YOLO
 
 from utils.TumorSliceFinder import TumorSliceFinder
 import nibabel as nib
 
+
+# 处理打包环境
+if getattr(sys, 'frozen', False):
+    # 打包环境
+    base_dir = Path(sys._MEIPASS)
+else:
+    # 开发环境
+    base_dir = Path(__file__).parent
 
 class StyleManager:
     """Style Manager - Provides gradient and modern UI styles"""
@@ -3910,9 +3919,17 @@ class EnhancedDetectionUI(QMainWindow):
         self.select_target_btn.setMaximumWidth(120)
         self.select_target_btn.clicked.connect(self.select_target_action)  # Bind click event
         bututton_layout.addWidget(self.select_target_btn)
+        
+        # Create remove target box button
+        self.remove_target_btn = QPushButton("❌ Remove Target")
+        self.remove_target_btn.setMaximumWidth(140)
+        self.remove_target_btn.clicked.connect(self.remove_target_action)  # Bind click event
+        bututton_layout.addWidget(self.remove_target_btn)
+        
         # Create export report button
         self.export_niigz_report_btn = QPushButton("📤 Export Report")
         self.export_niigz_report_btn.setMaximumWidth(120)
+        self.export_niigz_report_btn.clicked.connect(self.export_niigz_report)  # Bind click event
         bututton_layout.addWidget(self.export_niigz_report_btn)
 
         # Create clear results button
@@ -3934,6 +3951,355 @@ class EnhancedDetectionUI(QMainWindow):
         self.coronal_display.setText("Not detected")
         self.niigz_table.setRowCount(0)
         self.niigz_summary_label.setText("Detection Summary")
+
+    def export_niigz_report(self):
+        """Export NIfTI detection report"""
+        self.log_message("📤 Exporting NIfTI detection report")
+        
+        # Check if there are detection results
+        if not hasattr(self, 'detection_results') or not self.detection_results:
+            self.log_message("❌ No detection results to export")
+            QMessageBox.warning(self, "Warning", "No detection results available. Please run detection first.")
+            return
+        
+        # Generate file name with timestamp
+        now = datetime.now()
+        formatted_time = now.strftime("%Y%m%d_%H%M%S")
+        default_filename = f"MRI_Diagnostic_Report_{formatted_time}.pdf"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save Report", default_filename, "PDF Files (*.pdf);;All Files (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.lib import colors
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            import tempfile
+            import os
+
+            # Register font
+            font_path = "C:\Windows\Fonts\msyh.ttc"  # Font file path
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('CustomFont', font_path))
+                font_name = 'CustomFont'
+            else:
+                font_name = 'simhei'  # Alternative font
+
+            # Create document
+            doc = SimpleDocTemplate(file_path, pagesize=A4)
+            story = []
+
+            # Style definitions
+            styles = getSampleStyleSheet()
+
+            # Custom title style
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                spaceAfter=30,
+                alignment=1,  # Center
+                fontName=font_name
+            )
+            # Custom heading style
+            big_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Heading4'],
+                fontSize=12,
+                spaceAfter=10,
+                fontName=font_name
+            )
+
+            # Custom paragraph style
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontSize=8,
+                spaceAfter=8,
+                leading=12,
+                fontName=font_name
+            )
+
+            # Report title
+            title = Paragraph("MRI Examination Report", title_style)
+            story.append(title)
+            story.append(Spacer(1, 20))
+
+            # Basic information table
+            info_data = [
+                ["Name:", "", "Gender:", "", "Age:", ""],
+                ["Date:", datetime.now().strftime("%Y-%m-%d"), "ID:", "", "Department:", ""],
+                ["Site:", "Brain", "Sequence:", "T1/T2", "Model:", "MRI Scanner"]
+            ]
+
+            info_table = Table(info_data, colWidths=[60, 90, 60, 60, 80, 80])
+            info_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('SPAN', (1, 0), (1, 0)),  # Merge cells
+                ('SPAN', (3, 0), (3, 0)),
+                ('SPAN', (5, 0), (5, 0)),
+            ]))
+
+            story.append(info_table)
+            story.append(Spacer(1, 10))
+
+            # Organize results by slice
+            slice_results = {}
+            for result in self.detection_results:
+                slice_name = result['slice']
+                if slice_name not in slice_results:
+                    slice_results[slice_name] = []
+                slice_results[slice_name].append(result)
+
+            # Get images for each slice
+            slice_images = {}
+            temp_files = []
+            
+            for slice_name in ['Axial', 'Sagittal', 'Coronal']:
+                if slice_name in slice_results and slice_results[slice_name]:
+                    # Get the first result for each slice
+                    result = slice_results[slice_name][0]
+                    img_array = result['result_img']
+                    
+                    # Save image to temporary file
+                    temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                    temp_files.append(temp_file.name)
+                    
+                    # Convert numpy array to PIL Image and save
+                    from PIL import Image as PILImage
+                    import cv2
+                    
+                    # Convert BGR to RGB if needed
+                    if img_array.shape[2] == 3:
+                        img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
+                    
+                    pil_img = PILImage.fromarray(img_array)
+                    pil_img.save(temp_file.name)
+                    
+                    slice_images[slice_name] = temp_file.name
+
+            # Add slice images in a row
+            if slice_images:
+                story.append(Paragraph("Detection Results :", big_style))
+                
+                # Create a table for images with spacing
+                img_data = []
+                img_row = []
+                col_widths = []
+                
+                # Calculate optimal image size while maintaining aspect ratio
+                max_img_width = 6 * inch
+                max_img_height = 6 * inch
+                spacing = 0.2 * inch  # Space between images
+                
+                from PIL import Image as PILImage
+                
+                for slice_name, img_path in slice_images.items():
+                    # Get original image size
+                    with PILImage.open(img_path) as pil_img:
+                        orig_width, orig_height = pil_img.size
+                    
+                    # Calculate aspect ratio
+                    aspect_ratio = orig_width / orig_height
+                    
+                    # Calculate display size while maintaining aspect ratio
+                    if aspect_ratio > 1:  # Landscape
+                        display_width = min(max_img_width, orig_width * 0.6)
+                        display_height = display_width / aspect_ratio
+                    else:  # Portrait or square
+                        display_height = min(max_img_height, orig_height * 0.6)
+                        display_width = display_height * aspect_ratio
+                    
+                    # Ensure all images have the same height for alignment
+                    display_height = min(display_height, max_img_height)
+                    display_width = display_height * aspect_ratio
+                    
+                    # Add image to row
+                    img = Image(img_path, width=display_width, height=display_height)
+                    img_row.append(img)
+                    col_widths.append(display_width)
+                    
+                    # Add spacing between images (except after last image)
+                    if slice_name != list(slice_images.keys())[-1]:
+                        img_row.append(Paragraph("", normal_style))
+                        col_widths.append(spacing)
+                
+                if img_row:
+                    img_table = Table([img_row], colWidths=col_widths)
+                    img_table.setStyle(TableStyle([
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                        ('TOPPADDING', (0, 0), (-1, -1), 0),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                    ]))
+                    story.append(img_table)
+                    story.append(Spacer(1, 10))
+
+            # Calculate measurements for each slice
+            slice_measurements = {}
+            for slice_name in ['Axial', 'Sagittal', 'Coronal']:
+                if slice_name in slice_results and slice_results[slice_name]:
+                    # Get the largest tumor in each slice
+                    largest_tumor = max(slice_results[slice_name], key=lambda x: x['area'])
+                    slice_measurements[slice_name] = {
+                        'max_diameter': largest_tumor['diameter'],
+                        'area': largest_tumor['area'],
+                        'class': largest_tumor['class'],
+                        'confidence': largest_tumor['confidence']
+                    }
+
+            # Estimate volume based on measurements
+            volume_estimate = 0
+            if all(slice_name in slice_measurements for slice_name in ['Axial', 'Sagittal', 'Coronal']):
+                # Simple volume estimation using the product of diameters
+                axial_dia = slice_measurements['Axial']['max_diameter']
+                sagittal_dia = slice_measurements['Sagittal']['max_diameter']
+                coronal_dia = slice_measurements['Coronal']['max_diameter']
+                
+                # Assuming ellipsoid shape: V = (4/3) * π * (a/2) * (b/2) * (c/2)
+                volume_estimate = (4/3) * 3.14159 * (axial_dia/2) * (sagittal_dia/2) * (coronal_dia/2)
+
+            # Add measurements table
+            story.append(Paragraph("Measurements:", big_style))
+            
+            measurement_data = [['Slice', 'Lesion Type', 'Confidence', 'Max Diameter', 'Area']]
+            
+            for slice_name in ['Axial', 'Sagittal', 'Coronal']:
+                if slice_name in slice_measurements:
+                    meas = slice_measurements[slice_name]
+                    measurement_data.append([
+                        slice_name,
+                        meas['class'],
+                        f"{meas['confidence']:.2f}",
+                        f"{meas['max_diameter']:.2f} mm",
+                        f"{meas['area']:.2f} mm²"
+                    ])
+                else:
+                    measurement_data.append([slice_name, "No lesion detected", "-", "-", "-"])
+
+            # Add volume estimate (only if tumor detected)
+            if volume_estimate > 0:
+                measurement_data.append(['', '', '', '', ''])  # Empty row for spacing
+                measurement_data.append(['Volume Estimate:', f"{volume_estimate:.2f} mm³", '', '', ''])
+            
+            measurement_table = Table(measurement_data, colWidths=[90, 80, 60, 80, 80])
+            measurement_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -2), 1, colors.black),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ]))
+            
+            story.append(measurement_table)
+            story.append(Spacer(1, 10))
+
+            # Scan findings
+            story.append(Paragraph("Scan Findings:", big_style))
+            
+            findings_parts = []
+            for slice_name in ['Axial', 'Sagittal', 'Coronal']:
+                if slice_name in slice_measurements:
+                    meas = slice_measurements[slice_name]
+                    findings_parts.append(
+                        f"{slice_name} slice: {meas['class']} lesion detected with confidence {meas['confidence']:.2f}. Maximum diameter: {meas['max_diameter']:.2f} mm. Area: {meas['area']:.2f} mm²."
+                    )
+                else:
+                    findings_parts.append(
+                        f"{slice_name} slice: No obvious abnormalities found."
+                    )
+            
+            if volume_estimate > 0:
+                findings_parts.append(f"Estimated lesion volume: {volume_estimate:.2f} mm³.")
+            
+            findings_text = " ".join(findings_parts)
+            findings_para = Paragraph(findings_text, normal_style)
+            story.append(findings_para)
+            story.append(Spacer(1, 10))
+
+            # Diagnostic conclusion
+            story.append(Paragraph("Diagnostic Conclusion:", big_style))
+            
+            if slice_measurements:
+                lesion_types = set([meas['class'] for meas in slice_measurements.values()])
+                conclusion_text = f"Multiple lesions detected in brain MRI. {', '.join(lesion_types)} lesion(s) identified with varying confidence levels. Further clinical correlation recommended."
+            else:
+                conclusion_text = "No obvious abnormalities detected in brain MRI."
+            
+            conclusion_para = Paragraph(conclusion_text, normal_style)
+            story.append(conclusion_para)
+            story.append(Spacer(1, 10))
+
+            # Add report footer
+            footer_style = ParagraphStyle(
+                'CustomFooter',
+                parent=styles['Normal'],
+                fontSize=8,
+                alignment=1,  # Center
+                fontName=font_name
+            )
+            
+            footer = Paragraph("This report is generated by AI-assisted diagnostic system. For clinical reference only.", footer_style)
+            story.append(Spacer(1, 10))
+            story.append(footer)
+
+            # Build PDF
+            doc.build(story)
+            
+            # Clean up temporary files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    try:
+                        os.unlink(temp_file)
+                    except:
+                        pass
+            
+            self.log_message(f"✅ Report exported successfully: {file_path}")
+            
+            # Create message box with Open button
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setWindowTitle("Success")
+            msg_box.setText(f"Report exported successfully to:\n{file_path}")
+            msg_box.addButton(QMessageBox.Ok)
+            
+            # Add Open button
+            open_button = msg_box.addButton("Open PDF", QMessageBox.ActionRole)
+            
+            # Show dialog and get user choice
+            msg_box.exec()
+            
+            # If user clicked Open button, open the PDF file
+            if msg_box.clickedButton() == open_button:
+                try:
+                    import os
+                    import sys
+                    if sys.platform.startswith('darwin'):  # macOS
+                        os.system(f'open "{file_path}"')
+                    elif sys.platform.startswith('win'):  # Windows
+                        os.startfile(file_path)
+                    else:  # Linux/Unix
+                        os.system(f'xdg-open "{file_path}"')
+                    self.log_message(f"📄 Opening PDF: {file_path}")
+                except Exception as e:
+                    self.log_message(f"❌ Failed to open PDF: {str(e)}")
+                    QMessageBox.warning(self, "Warning", f"Failed to open PDF file:\n{str(e)}")
+            
+        except Exception as e:
+            self.log_message(f"❌ Error exporting report: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to export report:\n{str(e)}")
 
     def start_niigz_detection(self):
         """Start NIfTI detection"""
@@ -4060,7 +4426,9 @@ class EnhancedDetectionUI(QMainWindow):
         # Ensure image data is contiguous in memory
         slice_rgb = np.ascontiguousarray(slice_rgb)
         # Model prediction
-        predictions = self.model.predict(source=slice_rgb, conf=self.conf_slider.value() / 100, verbose=False)
+        private_path = base_dir / "pt_models" / "Brain_Tumor.pt"
+        private_model = YOLO(private_path)
+        predictions = private_model.predict(source=slice_rgb, conf=self.conf_slider.value() / 100, verbose=False,show_conf=False)
         for pred in predictions:
             if pred.boxes:
                 boxes = pred.boxes.cpu().numpy()
@@ -4069,7 +4437,7 @@ class EnhancedDetectionUI(QMainWindow):
                     x1, y1, x2, y2 = box.xyxy[0]
                     conf = box.conf[0]
                     cls = int(box.cls[0])
-                    class_name = self.model.names[cls] if cls < len(self.model.names) else f"Class{cls}"
+                    class_name = private_model.names[cls] if cls < len(private_model.names) else f"Class{cls}"
                     # Calculate diameter and area (using pixel values for now, actual calculation requires voxel spacing)
                     width = x2 - x1
                     height = y2 - y1
@@ -4093,6 +4461,12 @@ class EnhancedDetectionUI(QMainWindow):
     def _update_niigz_ui(self, axial_img, sagittal_img, coronal_img, detection_results, finder_results):
         """Update NIfTI detection UI"""
         self.log_message("🖥️ Updating NIfTI detection UI...")
+        
+        # Save original images for later removal of target boxes
+        self.original_axial_img = axial_img
+        self.original_sagittal_img = sagittal_img
+        self.original_coronal_img = coronal_img
+        
         # Update display for three slices
         self._update_slice_display(self.axial_display, axial_img)
         self._update_slice_display(self.sagittal_display, sagittal_img)
@@ -4144,13 +4518,24 @@ class EnhancedDetectionUI(QMainWindow):
 
 
     def select_target_action(self):
-        self._update_slice_display(self.axial_display, self.detection_results[0]['result_img'])
-        self._update_slice_display(self.sagittal_display, self.detection_results[1]['result_img'])
-        self._update_slice_display(self.coronal_display, self.detection_results[2]['result_img'])
         """Handle select target button click event"""
-        self.log_message(f"✅ Target selected")
+        if hasattr(self, 'detection_results') and self.detection_results:
+            self._update_slice_display(self.axial_display, self.detection_results[0]['result_img'])
+            self._update_slice_display(self.sagittal_display, self.detection_results[1]['result_img'])
+            self._update_slice_display(self.coronal_display, self.detection_results[2]['result_img'])
+            self.log_message(f"✅ Target selected")
+        else:
+            self.log_message(f"⚠️  No detection results available")
 
-        # Add specific target selection logic here
+    def remove_target_action(self):
+        """Handle remove target button click event - display original images without bounding boxes"""
+        if hasattr(self, 'original_axial_img') and hasattr(self, 'original_sagittal_img') and hasattr(self, 'original_coronal_img'):
+            self._update_slice_display(self.axial_display, self.original_axial_img)
+            self._update_slice_display(self.sagittal_display, self.original_sagittal_img)
+            self._update_slice_display(self.coronal_display, self.original_coronal_img)
+            self.log_message(f"✅ Target boxes removed, displaying original images")
+        else:
+            self.log_message(f"⚠️  No original images available")
     def create_nifti_conversion_tab(self):
         """Create NIfTI format conversion tab"""
         nifti_tab = QWidget()
