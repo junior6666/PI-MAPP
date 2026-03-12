@@ -7,9 +7,9 @@ import os
 # ----------------------------
 # 配置
 # ----------------------------
-model_path = r'H:\pycharm_project\PI-MAPP\project\detection_train\tumor\runs\detect\train_yolo12_try_owndata2\weights\best.pt'
+model_path = r'../pt_models/best.pt'
 nii_path = '../data_test/MRBrainTumor2.nii.gz'
-output_project = '../best_slices_results_test'
+output_project = '../best_slices_results_test12'
 os.makedirs(output_project, exist_ok=True)
 conf = 0.65
 

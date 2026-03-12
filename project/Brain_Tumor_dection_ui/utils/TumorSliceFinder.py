@@ -365,7 +365,7 @@ if __name__ == "__main__":
     # 配置
     model_path = r'H:\pycharm_project\PI-MAPP\project\detection_train\tumor\runs\detect\train_yolo12_try_owndata2\weights\best.pt'
     nii_path = '../data_test/MRBrainTumor2.nii.gz'
-    output_project = '../best_slices_results_test2213'
+    output_project = '../best_slices_results_test2214'
 
     # 创建查找器实例
     finder = TumorSliceFinder(
