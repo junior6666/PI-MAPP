@@ -2,12 +2,55 @@
 
 一个全面优化的通用目标检测系统，基于YOLO，具有现代化渐变UI和强大功能。
 [视频介绍](https://www.bilibili.com/video/BV1FVtwz8EZB/?vd_source=ea444bcb59e16e58cfdca990f3514384)
-
 ![Enhanced Detection System](https://img.shields.io/badge/Version-2.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+---
+## 软件下载
+可执行包 3GB左右 下载即用 无需再配置环境 内置了运行目标检测所有的一切环境
+<div align="center">
+<img src="utils/img/%E8%BD%AF%E4%BB%B6%E8%8E%B7%E5%8F%96.png" alt="软件获取" width="150"/>
+</div>
+
+## 源码运行
+由于该项目是PI-MPP下的子项目，如您直接clone整个源码，会有不需要的项目存在
+如您在意这个可使用下列相关操作
+```commandline
+git clone --no-checkout https://github.com/JingW-ui/PI-MAPP.git
+cd PI-MAPP
+git sparse-checkout init --cone
+git sparse-checkout set project/universal_object_detection_plus
+git checkout main  # 或者你需要的分支名称，如 master
+```
+如您需要PI-MAPP项目的整个源码，请使用以下命令 [该项目的相关介绍](https://github.com/JingW-ui/PI-MAPP)
+```commandline
+git clone https://github.com/JingW-ui/PI-MAPP.git
+```
+
+
 ## 👿 界面预览
 ![UI初始化界面.png](ui_predict_results/UI%E5%88%9D%E5%A7%8B%E5%8C%96%E7%95%8C%E9%9D%A2.png)
+
+---
+## 交流群
+<div align="center">
+<img src="utils/img/QQ%E7%BE%A4.jpg" alt="QQ 群" width="150"/>
+<img src="utils/img/%E4%B8%AA%E4%BA%BA%E5%BE%AE%E4%BF%A1.png" alt="个人微信" width="150"/>
+<img src="utils/img/%E5%BE%AE%E4%BF%A1%E7%BE%A421.png" alt="微信群" width="150"/>
+</div>
+
+## 🚀 快速开始
+
+### 1. 准备或下载模型文件
+
+* 您可以使用自己数据集训练的YOLO权重（没改变模型结构）
+* 也可以直接从软件中下载权重，私有权重有40多个，官方权重有30多个，还在持续更新中
+![download_pt.png](utils/img/download_pt.png)
+###  权重和数据获取技巧
+kaggle: https://www.kaggle.com
+该网页中有非常多的公开数据集，可以说没有你找不到的 只有你想不到的。
+找到数据集后，可以在网页中下载数据集在本地训练（可直接在kaggle中训练），也可找到数据集相关的code,查看其output 运气好可直接下载对应数据集的权重
+---
 ## ✨ 主要特性
 
 ### 🎨 现代化UI设计
@@ -45,153 +88,8 @@
 - **内存优化**: 智能的内存使用和释放机制
 - **异常处理**: 完善的错误处理和用户提示系统
 - **资源管理**: 自动管理摄像头等硬件资源
-
-
-
-## 🛠️ 系统要求
-
-### 基础环境
-- **Python**: 3.8 或更高版本
-- **操作系统**: Windows 10+, macOS 10.15+, Ubuntu 18.04+
-- **内存**: 建议 4GB 以上
-- **显卡**: 支持CUDA的NVIDIA显卡（可选，用于GPU加速）
-
-### 依赖包
-```bash
-# 核心依赖
-ultralytics>=8.0.0    # YOLO模型库
-PySide6>=6.0.0       # Qt6界面框架
-opencv-python>=4.5.0  # 图像处理
-numpy>=1.21.0        # 数值计算
-
-# 可选依赖
-torch>=1.12.0        # PyTorch（如果需要GPU加速）
-torchvision>=0.13.0  # 计算机视觉工具
-```
-
-## 📦 安装指南
-
-### 方法一：使用 pip 安装
-```bash
-# 创建虚拟环境（推荐）
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# 或
-venv\Scripts\activate     # Windows
-
-# 安装依赖
-pip install ultralytics PySide6 opencv-python numpy
-```
-
-### 方法二：使用 conda 安装
-```bash
-# 创建conda环境
-conda create -n detection python=3.9
-conda activate detection
-
-# 安装依赖
-conda install pytorch torchvision -c pytorch
-pip install ultralytics PySide6 opencv-python
-```
-
-### 方法三：从源码安装
-```bash
-# 克隆项目
-git clone <repository-url>
-cd enhanced-detection-system
-
-# 安装依赖
-pip install -r requirements.txt
-```
-
-## 🚀 快速开始
-
-### 1. 准备模型文件
-将YOLO模型文件（.pt格式）放置在以下任一目录：
-```
-pt_models/          # 项目根目录下
-models/             # 通用模型目录
-weights/            # 权重文件目录
-~/yolo_models/      # 用户主目录
-```
-## YOLOv8 - YOLOv12 权重下载链接 🚀
-
-### 代码自动下载 🧑‍💻
-```python
-from ultralytics import YOLO
-# 下面任意一行代码都可以自动从对应链接下载权重到当前目录，你也可以手动从链接中下载权重（需要科学上网）;经测试，目前该UI支持以下所有权重
-
-# YOLOv8
-model = YOLO('yolov8s.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov8m.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov8l.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov8x.pt')  # 🌟 你可以选择 s/m/l/x 版本
-
-# YOLOv9
-model = YOLO('yolov9s.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov9m.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov9l.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov9x.pt')  # 🌟 你可以选择 s/m/l/x 版本
-
-# YOLOv10
-model = YOLO('yolov10s.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov10m.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov10l.pt')  # 🌟 你可以选择 s/m/l/x 版本
-model = YOLO('yolov10x.pt')  # 🌟 你可以选择 s/m/l/x 版本
-
-# YOLOv11
-model = YOLO('yolo11n.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo11m.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo11l.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo11x.pt')  # 🌟 你可以选择 n/m/l/x 版本
-
-# YOLOv12
-model = YOLO('yolo12n.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo12m.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo12l.pt')  # 🌟 你可以选择 n/m/l/x 版本
-model = YOLO('yolo12x.pt')  # 🌟 你可以选择 n/m/l/x 版本
-```
-
-## 🌐 手动下载链接（需访问 GitHub）
-
-您可以复制以下链接，在浏览器中直接下载对应模型权重：
-
-### YOLOv8
-- `yolov8s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8s.pt) 🔗
-- `yolov8m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8m.pt) 🔗
-- `yolov8l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8l.pt) 🔗
-- `yolov8x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8x.pt) 🔗
-
-### YOLOv9
-- `yolov9s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9s.pt) 🔗
-- `yolov9m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9m.pt) 🔗
-- `yolov9l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9l.pt) 🔗
-- `yolov9x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov9x.pt) 🔗
-
-### YOLOv10
-- `yolov10s.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10s.pt) 🔗
-- `yolov10m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10m.pt) 🔗
-- `yolov10l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10l.pt) 🔗
-- `yolov10x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov10x.pt) 🔗
-
-### YOLOv11
-- `yolo11n.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt) 🔗
-- `yolo11m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11m.pt) 🔗
-- `yolo11l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11l.pt) 🔗
-- `yolo11x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt) 🔗
-
-### YOLOv12
-- `yolo12n.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12n.pt) 🔗
-- `yolo12m.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12m.pt) 🔗
-- `yolo12l.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12l.pt) 🔗
-- `yolo12x.pt` → [下载链接](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo12x.pt) 🔗
 ---
-###  权重和数据获取技巧
-kaggle: https://www.kaggle.com
-该网页中有非常多的公开数据集，可以说没有你找不到的 只有你想不到的。
-找到数据集后，可以在网页中下载数据集在本地训练（可直接在kaggle中训练），也可找到数据集相关的code,查看其output 运气好可直接下载对应数据集的权重
----
-## 我目前所整理的权重介绍及获取方式 
+## 我目前所整理的权重介绍 均可在软件中直接下载
 
 ### 垃圾检测 (Garbage Detection)
 - **权重名**：`garbage_detection.pt` (垃圾检测权重)
@@ -467,8 +365,8 @@ kaggle: https://www.kaggle.com
 
 
 🔗 **打赏支付方式**：
-- 微信支付 <img src="donate/donate.png" alt="描述" width="" height="200">
-支付宝  <img src="donate/zhifubao.jpg" alt="描述" width="" height="200">
+- 微信支付 <img src="donate/donate.png" alt="微信支付" width="200" height="200"/>
+- 支付宝 <img src="donate/zhifubao.jpg" alt="支付宝" width="200" height="200"/>
 
 
 
