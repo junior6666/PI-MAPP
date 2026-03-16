@@ -8,7 +8,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ---
-## 无脑软件运行
+## 无脑软件运行（windows）
 可执行包 3GB左右 下载即用 无需再配置环境 内置了运行目标检测所有的一切环境
 <div align="center">
 <img src="utils/img/%E8%BD%AF%E4%BB%B6%E8%8E%B7%E5%8F%96.png" alt="软件获取" width="150"/>
