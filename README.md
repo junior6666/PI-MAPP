@@ -234,7 +234,7 @@
 
 ---
 
-### 🖼️ [图片转ICO图标工具](project/picture_tools/png2ico/README.md)  
+### 🖼️ [图片转ICO图标工具](project/picture_tools/ImgToIco/README.md)  
 > 🖱️ 一键生成网站/应用图标 | 小巧却强大  
 - 支持将PNG图片快速转换为ICO格式  
 - 适配网页favicon、桌面快捷方式等场景  
