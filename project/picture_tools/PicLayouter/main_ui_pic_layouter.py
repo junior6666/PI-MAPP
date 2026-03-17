@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QColorDialog, QFormLayout, QRadioButton, QButtonGroup
 )
 
-
 def resource_path(relative_path):
     """获取资源的绝对路径，支持开发和打包后两种模式"""
     if hasattr(sys, '_MEIPASS'):
@@ -1278,6 +1277,7 @@ def main():
     app.setOrganizationName("PI-MAPP")
     
     window = PicLayouterWindow()
+    window.setWindowIcon(QIcon(resource_path("app.ico")))
     window.show()
     
     sys.exit(app.exec())

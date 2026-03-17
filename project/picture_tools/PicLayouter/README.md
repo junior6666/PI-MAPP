@@ -35,6 +35,9 @@ python main_ui_pic_layouter.py
 
 # 方式 2：使用启动脚本（Windows）
 run.bat
+
+# 打包
+pyinstaller -F -w -i app.ico --add-data "app.ico;." --name="PicLayouter" main_ui_pic_layouter.py
 ```
 
 ## 📖 使用说明
