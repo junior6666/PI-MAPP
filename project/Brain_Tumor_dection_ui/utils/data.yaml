@@ -1,0 +1,5 @@
+path: H:\YOLO_Datasets\BrainTumor\MRI_2D_DATA_USE_3
+train: Train/images
+val: val/images
+nc: 3
+names: [glioma, meningioma, pituitary]
