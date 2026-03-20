@@ -293,11 +293,72 @@ class UndoStack:
         return len(self.redo_stack) > 0
 
 
+class AppState:
+    """应用状态（包含配置和图片列表）"""
+    def __init__(self):
+        self.config: Optional[LayoutConfig] = None
+        self.image_paths: List[str] = []
+        
+    def copy(self) -> 'AppState':
+        """创建深拷贝"""
+        new_state = AppState()
+        if self.config:
+            new_state.config = self.config.copy()
+        new_state.image_paths = self.image_paths.copy()
+        return new_state
+
+
+class AdvancedUndoStack:
+    """高级撤销/重做栈，支持图片和配置"""
+    def __init__(self, max_size: int = 20):
+        self.undo_stack: List[AppState] = []
+        self.redo_stack: List[AppState] = []
+        self.max_size = max_size
+        
+    def push(self, state: AppState):
+        """保存状态到撤销栈"""
+        self.undo_stack.append(state.copy())
+        if len(self.undo_stack) > self.max_size:
+            self.undo_stack.pop(0)
+        self.redo_stack.clear()
+        
+    def undo(self) -> Optional[AppState]:
+        """撤销"""
+        if not self.undo_stack:
+            return None
+        self.redo_stack.append(self.undo_stack[-1].copy())
+        self.undo_stack.pop()
+        if self.undo_stack:
+            return self.undo_stack[-1].copy()
+        return None
+        
+    def redo(self) -> Optional[AppState]:
+        """重做"""
+        if not self.redo_stack:
+            return None
+        state = self.redo_stack.pop()
+        self.undo_stack.append(state.copy())
+        return state
+        
+    def can_undo(self) -> bool:
+        return len(self.undo_stack) > 1
+        
+    def can_redo(self) -> bool:
+        return len(self.redo_stack) > 0
+        
+    def clear(self):
+        """清空栈"""
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+
+
 # -------------------- View - Canvas --------------------
 class ImageCanvas(QFrame):
     """图片画布组件，支持拖拽和实时预览"""
     images_dropped = Signal(list)
     layout_changed = Signal()
+    selection_changed = Signal()
+    images_swapped = Signal()
     
     def __init__(self):
         super().__init__()
@@ -316,6 +377,11 @@ class ImageCanvas(QFrame):
         self.pan_offset = QPointF(0, 0)
         self.is_panning = False
         self.pan_start_pos = None
+        
+        # 图片拖拽交换相关
+        self.is_dragging_image = False
+        self.dragged_image_index = -1
+        self.drag_current_index = -1
         self.setMouseTracking(True)
         
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -384,14 +450,260 @@ class ImageCanvas(QFrame):
                 self.setCursor(Qt.ClosedHandCursor)
                 event.accept()
             else:
-                super().mousePressEvent(event)
+                # 普通左键点击，尝试选中图片或开始拖拽
+                if event.button() == Qt.LeftButton:
+                    if self._start_image_drag(event):
+                        # 成功开始拖拽图片
+                        return
+                    else:
+                        # 没有点击到图片，处理选中逻辑
+                        self._handle_image_selection(event)
         else:
             super().mousePressEvent(event)
             
+    def _handle_image_selection(self, event):
+        """处理图片选中逻辑"""
+        if not self.image_items:
+            return
+            
+        # 获取点击位置
+        click_pos = event.position()
+        
+        # 计算点击位置在画布坐标系中的位置
+        painter = QPainter(self)
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.scale(self.zoom_scale, self.zoom_scale)
+        painter.translate(-self.width() / 2, -self.height() / 2)
+        painter.translate(self.pan_offset)
+        
+        # 逆向变换，将屏幕坐标转换为画布坐标
+        transform = painter.transform().inverted()[0]
+        canvas_pos = transform.map(click_pos)
+        
+        config = self.layout_config
+        
+        # 计算布局参数
+        if config.auto_fit_content and self.image_items:
+            total_width = sum([img.original_size.width() for img in self.image_items[:config.columns]])
+            total_height = sum([img.original_size.height() for img in self.image_items[:config.rows]])
+            canvas_width = (config.padding_left + config.padding_right + 
+                          total_width + (config.columns - 1) * config.horizontal_gap)
+            canvas_height = (config.padding_top + config.padding_bottom + 
+                           total_height + (config.rows - 1) * config.vertical_gap)
+        else:
+            canvas_width = config.canvas_width
+            canvas_height = config.canvas_height
+            
+        available_width = canvas_width - config.padding_left - config.padding_right
+        available_height = canvas_height - config.padding_top - config.padding_bottom
+        
+        if config.columns > 0 and config.rows > 0:
+            cell_width = (available_width - (config.columns - 1) * config.horizontal_gap) / config.columns
+            cell_height = (available_height - (config.rows - 1) * config.vertical_gap) / config.rows
+        else:
+            cell_width = 100
+            cell_height = 100
+            
+        start_x = config.padding_left
+        start_y = config.padding_top
+        
+        # 检查点击是否在任何图片上
+        clicked_on_image = False
+        for idx, image_item in enumerate(self.image_items):
+            row = idx // config.columns
+            col = idx % config.columns
+            
+            x = start_x + col * (cell_width + config.horizontal_gap)
+            y = start_y + row * (cell_height + config.vertical_gap)
+            
+            # 对齐处理
+            if config.alignment in ['center', 'top', 'bottom']:
+                if config.alignment == 'center':
+                    x_offset = (canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap)) / 2
+                    x += x_offset
+                elif config.alignment == 'right':
+                    x_offset = canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap) - config.padding_right
+                    x = x_offset
+                    
+            # 计算图片实际绘制尺寸
+            scaled_pixmap = image_item.pixmap.scaled(
+                int(cell_width), int(cell_height),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            
+            # 检查点击是否在图片矩形内
+            image_rect = QRect(int(x), int(y), scaled_pixmap.width(), scaled_pixmap.height())
+            if image_rect.contains(canvas_pos.toPoint()):
+                # 切换选中状态
+                image_item.selected = not image_item.selected
+                clicked_on_image = True
+                break
+                
+        # 如果没有点击在任何图片上，取消所有选中
+        if not clicked_on_image:
+            for image_item in self.image_items:
+                image_item.selected = False
+                
+        self.update()
+        self.selection_changed.emit()
+        
+    def _start_image_drag(self, event) -> bool:
+        """开始拖拽图片，返回是否成功开始"""
+        if not self.image_items:
+            return False
+            
+        click_pos = event.position()
+        canvas_pos = self._screen_to_canvas(click_pos)
+        config = self.layout_config
+        
+        # 计算布局参数
+        if config.auto_fit_content and self.image_items:
+            total_width = sum([img.original_size.width() for img in self.image_items[:config.columns]])
+            total_height = sum([img.original_size.height() for img in self.image_items[:config.rows]])
+            canvas_width = (config.padding_left + config.padding_right + 
+                          total_width + (config.columns - 1) * config.horizontal_gap)
+            canvas_height = (config.padding_top + config.padding_bottom + 
+                           total_height + (config.rows - 1) * config.vertical_gap)
+        else:
+            canvas_width = config.canvas_width
+            canvas_height = config.canvas_height
+            
+        available_width = canvas_width - config.padding_left - config.padding_right
+        available_height = canvas_height - config.padding_top - config.padding_bottom
+        
+        if config.columns > 0 and config.rows > 0:
+            cell_width = (available_width - (config.columns - 1) * config.horizontal_gap) / config.columns
+            cell_height = (available_height - (config.rows - 1) * config.vertical_gap) / config.rows
+        else:
+            cell_width = 100
+            cell_height = 100
+            
+        start_x = config.padding_left
+        start_y = config.padding_top
+        
+        # 检查点击是否在任何图片上
+        for idx, image_item in enumerate(self.image_items):
+            row = idx // config.columns
+            col = idx % config.columns
+            
+            x = start_x + col * (cell_width + config.horizontal_gap)
+            y = start_y + row * (cell_height + config.vertical_gap)
+            
+            # 对齐处理
+            if config.alignment in ['center', 'top', 'bottom']:
+                if config.alignment == 'center':
+                    x_offset = (canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap)) / 2
+                    x += x_offset
+                elif config.alignment == 'right':
+                    x_offset = canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap) - config.padding_right
+                    x = x_offset
+                    
+            # 计算图片实际绘制尺寸
+            scaled_pixmap = image_item.pixmap.scaled(
+                int(cell_width), int(cell_height),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            
+            # 检查点击是否在图片矩形内
+            image_rect = QRect(int(x), int(y), scaled_pixmap.width(), scaled_pixmap.height())
+            if image_rect.contains(canvas_pos.toPoint()):
+                # 开始拖拽
+                self.is_dragging_image = True
+                self.dragged_image_index = idx
+                self.drag_current_index = idx
+                self.setCursor(Qt.ClosedHandCursor)
+                return True
+                
+        return False
+        
+    def _screen_to_canvas(self, screen_pos):
+        """将屏幕坐标转换为画布坐标"""
+        painter = QPainter(self)
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.scale(self.zoom_scale, self.zoom_scale)
+        painter.translate(-self.width() / 2, -self.height() / 2)
+        painter.translate(self.pan_offset)
+        
+        transform = painter.transform().inverted()[0]
+        return transform.map(screen_pos)
+        
+    def _get_image_index_at_pos(self, canvas_pos) -> int:
+        """获取指定位置的图片索引"""
+        config = self.layout_config
+        
+        # 计算布局参数
+        if config.auto_fit_content and self.image_items:
+            total_width = sum([img.original_size.width() for img in self.image_items[:config.columns]])
+            total_height = sum([img.original_size.height() for img in self.image_items[:config.rows]])
+            canvas_width = (config.padding_left + config.padding_right + 
+                          total_width + (config.columns - 1) * config.horizontal_gap)
+            canvas_height = (config.padding_top + config.padding_bottom + 
+                           total_height + (config.rows - 1) * config.vertical_gap)
+        else:
+            canvas_width = config.canvas_width
+            canvas_height = config.canvas_height
+            
+        available_width = canvas_width - config.padding_left - config.padding_right
+        available_height = canvas_height - config.padding_top - config.padding_bottom
+        
+        if config.columns > 0 and config.rows > 0:
+            cell_width = (available_width - (config.columns - 1) * config.horizontal_gap) / config.columns
+            cell_height = (available_height - (config.rows - 1) * config.vertical_gap) / config.rows
+        else:
+            cell_width = 100
+            cell_height = 100
+            
+        start_x = config.padding_left
+        start_y = config.padding_top
+        
+        # 遍历所有图片位置
+        for idx, image_item in enumerate(self.image_items):
+            row = idx // config.columns
+            col = idx % config.columns
+            
+            x = start_x + col * (cell_width + config.horizontal_gap)
+            y = start_y + row * (cell_height + config.vertical_gap)
+            
+            # 对齐处理
+            if config.alignment in ['center', 'top', 'bottom']:
+                if config.alignment == 'center':
+                    x_offset = (canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap)) / 2
+                    x += x_offset
+                elif config.alignment == 'right':
+                    x_offset = canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap) - config.padding_right
+                    x = x_offset
+                    
+            # 计算图片实际绘制尺寸
+            scaled_pixmap = image_item.pixmap.scaled(
+                int(cell_width), int(cell_height),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            
+            # 检查位置是否在图片矩形内
+            image_rect = QRect(int(x), int(y), scaled_pixmap.width(), scaled_pixmap.height())
+            if image_rect.contains(canvas_pos.toPoint()):
+                return idx
+                
+        return -1
+            
     def mouseMoveEvent(self, event):
-        """处理鼠标移动事件（拖动画布）"""
-        if self.is_panning and self.pan_start_pos is not None:
-            # 计算偏移量
+        """处理鼠标移动事件（拖动画布或拖拽图片）"""
+        if self.is_dragging_image:
+            # 拖拽图片中
+            canvas_pos = self._screen_to_canvas(event.position())
+            target_index = self._get_image_index_at_pos(canvas_pos)
+            if target_index != -1 and target_index != self.drag_current_index:
+                self.drag_current_index = target_index
+                self.update()
+            event.accept()
+        elif self.is_panning and self.pan_start_pos is not None:
+            # 拖动画布中
             delta = event.position() - self.pan_start_pos
             self.pan_offset += QPointF(delta)
             self.pan_start_pos = event.position()
@@ -402,16 +714,36 @@ class ImageCanvas(QFrame):
             
     def mouseReleaseEvent(self, event):
         """处理鼠标释放事件"""
-        if event.button() == Qt.LeftButton or event.button() == Qt.RightButton:
-            if self.is_panning:
-                self.is_panning = False
-                self.pan_start_pos = None
-                self.setCursor(Qt.ArrowCursor)
-                event.accept()
-            else:
-                super().mouseReleaseEvent(event)
+        if self.is_dragging_image:
+            # 释放拖拽的图片
+            if self.dragged_image_index != -1 and self.drag_current_index != -1:
+                if self.dragged_image_index != self.drag_current_index:
+                    # 交换两张图片
+                    self._swap_images(self.dragged_image_index, self.drag_current_index)
+                    
+            # 重置拖拽状态
+            self.is_dragging_image = False
+            self.dragged_image_index = -1
+            self.drag_current_index = -1
+            self.setCursor(Qt.ArrowCursor)
+            self.update()
+            event.accept()
+        elif self.is_panning:
+            self.is_panning = False
+            self.pan_start_pos = None
+            self.setCursor(Qt.ArrowCursor)
+            event.accept()
         else:
             super().mouseReleaseEvent(event)
+            
+    def _swap_images(self, index1: int, index2: int):
+        """交换两张图片的位置"""
+        if 0 <= index1 < len(self.image_items) and 0 <= index2 < len(self.image_items):
+            # 交换列表中的图片
+            self.image_items[index1], self.image_items[index2] = \
+                self.image_items[index2], self.image_items[index1]
+            self.update()
+            self.images_swapped.emit()
             
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -499,6 +831,10 @@ class ImageCanvas(QFrame):
                 Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             
+            # 如果是拖拽中的图片，跳过（最后单独绘制）
+            if self.is_dragging_image and idx == self.dragged_image_index:
+                continue
+            
             # 绘制图片
             painter.drawPixmap(int(x), int(y), scaled_pixmap)
             
@@ -508,6 +844,43 @@ class ImageCanvas(QFrame):
                 painter.setPen(pen)
                 painter.setBrush(Qt.NoBrush)
                 painter.drawRect(int(x), int(y), scaled_pixmap.width(), scaled_pixmap.height())
+                
+            # 如果是拖拽目标位置，绘制高亮框
+            if self.is_dragging_image and idx == self.drag_current_index:
+                pen = QPen(QColor(46, 204, 113), 4)
+                painter.setPen(pen)
+                painter.setBrush(QColor(46, 204, 113, 50))
+                painter.drawRect(int(x), int(y), scaled_pixmap.width(), scaled_pixmap.height())
+        
+        # 绘制拖拽中的图片（半透明，在最上层）
+        if self.is_dragging_image and 0 <= self.dragged_image_index < len(self.image_items):
+            dragged_item = self.image_items[self.dragged_image_index]
+            row = self.dragged_image_index // config.columns
+            col = self.dragged_image_index % config.columns
+            
+            x = start_x + col * (cell_width + config.horizontal_gap)
+            y = start_y + row * (cell_height + config.vertical_gap)
+            
+            # 对齐处理
+            if config.alignment in ['center', 'top', 'bottom']:
+                if config.alignment == 'center':
+                    x_offset = (canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap)) / 2
+                    x += x_offset
+                elif config.alignment == 'right':
+                    x_offset = canvas_width - (config.columns * cell_width + 
+                              (config.columns - 1) * config.horizontal_gap) - config.padding_right
+                    x = x_offset
+                    
+            scaled_pixmap = dragged_item.pixmap.scaled(
+                int(cell_width), int(cell_height),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            
+            # 半透明效果绘制拖拽中的图片
+            painter.setOpacity(0.6)
+            painter.drawPixmap(int(x), int(y), scaled_pixmap)
+            painter.setOpacity(1.0)
 
 
 # -------------------- View - Control Panel --------------------
@@ -518,6 +891,7 @@ class LayoutControlPanel(QWidget):
     add_images_requested = Signal()
     clear_requested = Signal()
     reset_view_requested = Signal()
+    delete_selected_requested = Signal()
     
     def __init__(self):
         super().__init__()
@@ -554,6 +928,11 @@ class LayoutControlPanel(QWidget):
         self.add_btn = QPushButton("📁 添加图片")
         self.add_btn.clicked.connect(self.add_images_requested.emit)
         layout.addWidget(self.add_btn,stretch=4)
+        
+        self.delete_selected_btn = QPushButton("🗑️ 删除选中")
+        self.delete_selected_btn.clicked.connect(self._on_delete_selected_clicked)
+        self.delete_selected_btn.setEnabled(False)
+        layout.addWidget(self.delete_selected_btn,stretch=4)
         
         self.clear_btn = QPushButton("🗑️ 清空所有")
         self.clear_btn.clicked.connect(self._on_clear_clicked)
@@ -919,16 +1298,16 @@ class LayoutControlPanel(QWidget):
             self.config_changed.emit(self.layout_config)
             
     def _on_undo_clicked(self):
-        config = self.undo_stack.undo()
-        if config:
-            self._update_ui_from_config(config)
-            self.config_changed.emit(config)
+        state = self.undo_stack.undo()
+        if state:
+            self._restore_state(state)
+            self.status_bar.showMessage("已撤销")
             
     def _on_redo_clicked(self):
-        config = self.undo_stack.redo()
-        if config:
-            self._update_ui_from_config(config)
-            self.config_changed.emit(config)
+        state = self.undo_stack.redo()
+        if state:
+            self._restore_state(state)
+            self.status_bar.showMessage("已重做")
             
     def _update_ui_from_config(self, config: LayoutConfig):
         """从配置更新 UI"""
@@ -953,9 +1332,18 @@ class LayoutControlPanel(QWidget):
         if reply == QMessageBox.Yes:
             self.clear_requested.emit()
             
+    def _on_delete_selected_clicked(self):
+        """删除选中的图片"""
+        self.delete_selected_requested.emit()
+        
     def update_image_count(self, count: int):
         """更新图片数量显示"""
         self.image_count_label.setText(f"图片数量：{count}")
+        
+    def update_delete_button_state(self, image_items: List):
+        """更新删除选中按钮的状态"""
+        has_selected = any(img.selected for img in image_items)
+        self.delete_selected_btn.setEnabled(has_selected)
         
     def save_state(self):
         """保存当前状态到撤销栈"""
@@ -972,8 +1360,11 @@ class PicLayouterWindow(QMainWindow):
         super().__init__()
         self.image_items: List[ImageItem] = []
         self.layout_config = LayoutConfig()
+        self.undo_stack = AdvancedUndoStack()
         self._init_ui()
         self._setup_connections()
+        # 保存初始状态
+        self._save_state()
         
     def _init_ui(self):
         self.setWindowTitle("图片布局管理器 - PicLayouter")
@@ -1025,6 +1416,17 @@ class PicLayouterWindow(QMainWindow):
         # 应用样式
         self.setStyleSheet(StyleManager.get_main_stylesheet())
         
+        # 设置快捷键
+        self._setup_shortcuts()
+        
+    def _setup_shortcuts(self):
+        """设置快捷键"""
+        from PySide6.QtGui import QKeySequence, QShortcut
+        
+        # Delete 键删除选中的图片
+        self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
+        self.delete_shortcut.activated.connect(self._on_delete_selected)
+        
     def _setup_connections(self):
         """设置信号槽连接"""
         # 添加图片
@@ -1032,6 +1434,9 @@ class PicLayouterWindow(QMainWindow):
         
         # 清空图片
         self.control_panel.clear_requested.connect(self._on_clear_images)
+        
+        # 删除选中图片
+        self.control_panel.delete_selected_requested.connect(self._on_delete_selected)
         
         # 重置视图
         self.control_panel.reset_view_requested.connect(self._on_reset_view)
@@ -1044,6 +1449,21 @@ class PicLayouterWindow(QMainWindow):
         
         # 画布图片放置
         self.canvas.images_dropped.connect(self._on_images_dropped)
+        
+        # 画布选中状态变化
+        self.canvas.selection_changed.connect(self._on_selection_changed)
+        
+        # 画布图片交换
+        self.canvas.images_swapped.connect(self._on_images_swapped)
+        
+    def _on_selection_changed(self):
+        """处理图片选中状态变化"""
+        self.control_panel.update_delete_button_state(self.image_items)
+        
+    def _on_images_swapped(self):
+        """处理图片交换"""
+        self._save_state()
+        self.status_bar.showMessage("已交换图片位置")
         
     def _on_add_images(self):
         """添加图片"""
@@ -1061,20 +1481,84 @@ class PicLayouterWindow(QMainWindow):
         
     def _on_clear_images(self):
         """清空所有图片"""
+        if not self.image_items:
+            return
+            
+        # 保存当前状态到撤销栈
+        self._save_state()
+            
         self.image_items.clear()
         self.control_panel.update_image_count(0)
+        self.control_panel.update_delete_button_state(self.image_items)
         self.canvas.set_images(self.image_items)
         self.canvas.reset_zoom_pan()
         self.status_bar.showMessage("已清空所有图片")
-        self.control_panel.save_state()
         
     def _on_reset_view(self):
         """重置视图（缩放和平移）"""
         self.canvas.reset_zoom_pan()
         self.status_bar.showMessage("视图已重置")
         
+    def _save_state(self):
+        """保存当前状态到撤销栈"""
+        state = AppState()
+        state.config = self.layout_config.copy()
+        state.image_paths = [img.path for img in self.image_items]
+        self.undo_stack.push(state)
+        self._update_undo_redo_buttons()
+        
+    def _restore_state(self, state: AppState):
+        """从状态恢复"""
+        if state.config:
+            self.layout_config = state.config
+            self.control_panel._update_ui_from_config(state.config)
+            self.canvas.set_layout_config(state.config)
+            
+        # 恢复图片列表
+        self.image_items.clear()
+        for path in state.image_paths:
+            if os.path.isfile(path):
+                try:
+                    image_item = ImageItem(path)
+                    self.image_items.append(image_item)
+                except Exception as e:
+                    print(f"恢复图片失败 {path}: {e}")
+                    
+        self.control_panel.update_image_count(len(self.image_items))
+        self.control_panel.update_delete_button_state(self.image_items)
+        self.canvas.set_images(self.image_items)
+        self.canvas.reset_zoom_pan()
+        
+    def _update_undo_redo_buttons(self):
+        """更新撤销/重做按钮状态"""
+        self.control_panel.undo_btn.setEnabled(self.undo_stack.can_undo())
+        self.control_panel.redo_btn.setEnabled(self.undo_stack.can_redo())
+        
+    def _on_delete_selected(self):
+        """删除选中的图片"""
+        selected_count = sum(1 for img in self.image_items if img.selected)
+        if selected_count == 0:
+            self.status_bar.showMessage("没有选中的图片")
+            return
+            
+        # 保存当前状态到撤销栈
+        self._save_state()
+            
+        # 从后往前删除，避免索引问题
+        for i in range(len(self.image_items) - 1, -1, -1):
+            if self.image_items[i].selected:
+                del self.image_items[i]
+                
+        self.control_panel.update_image_count(len(self.image_items))
+        self.control_panel.update_delete_button_state(self.image_items)
+        self.canvas.set_images(self.image_items)
+        self.status_bar.showMessage(f"已删除 {selected_count} 张选中的图片")
+        
     def _add_images(self, paths: List[str]):
         """添加图片到列表"""
+        # 保存当前状态到撤销栈
+        self._save_state()
+            
         for path in paths:
             if os.path.isfile(path):
                 try:
@@ -1084,12 +1568,14 @@ class PicLayouterWindow(QMainWindow):
                     print(f"加载图片失败 {path}: {e}")
                     
         self.control_panel.update_image_count(len(self.image_items))
+        self.control_panel.update_delete_button_state(self.image_items)
         self.canvas.set_images(self.image_items)
         self.status_bar.showMessage(f"已添加 {len(paths)} 张图片")
-        self.control_panel.save_state()
         
     def _on_config_changed(self, config: LayoutConfig):
         """配置变更处理"""
+        # 保存当前状态到撤销栈
+        self._save_state()
         self.layout_config = config
         self.canvas.set_layout_config(config)
         
