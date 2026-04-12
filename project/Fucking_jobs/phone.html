@@ -186,11 +186,50 @@
             transform: scale(0.95);
         }
         
+        /* 底部触发条 */
+        .drawer-trigger {
+            background: #16213e;
+            padding: 3px;
+            border-top: 1px solid #2a2a4a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-height: 18px;
+        }
+        
+        .drawer-trigger:active {
+            background: #1a2744;
+        }
+        
+        .drawer-trigger-icon {
+            font-size: 10px;
+            color: #4ecca3;
+            transition: transform 0.3s;
+        }
+        
+        .drawer-trigger.open .drawer-trigger-icon {
+            transform: rotate(180deg);
+        }
+        
+        /* 抽屉容器 */
+        .drawer {
+            background: #16213e;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            border-top: 1px solid #2a2a4a;
+        }
+        
+        .drawer.open {
+            max-height: 100px;
+        }
+        
         /* 底部控制栏 */
         .controls {
-            background: #16213e;
+            background: transparent;
             padding: 6px;
-            border-top: 1px solid #2a2a4a;
             display: flex;
             gap: 4px;
             justify-content: center;
@@ -358,12 +397,19 @@
     </div>
 </div>
 
-<!-- 底部控制栏 -->
-<div class="controls">
-    <button onclick="openConfig()">⚙️</button>
-    <button class="primary" onclick="connectLocal()">🖥️本地</button>
-    <button onclick="connect()">连接</button>
-    <button class="danger" onclick="disconnect()">断开</button>
+<!-- 底部触发条 -->
+<div class="drawer-trigger" onclick="toggleDrawer()">
+    <span class="drawer-trigger-icon">▲</span>
+</div>
+
+<!-- 抽屉容器 -->
+<div class="drawer" id="controlDrawer">
+    <div class="controls">
+        <button onclick="openConfig()">⚙️</button>
+        <button class="primary" onclick="connectLocal()">🖥️本地</button>
+        <button onclick="connect()">连接</button>
+        <button class="danger" onclick="disconnect()">断开</button>
+    </div>
 </div>
 
 <!-- 配置弹窗 -->
@@ -386,11 +432,36 @@
 
 <script>
     let ws;
+    let drawerOpen = false;  // 抽屉状态
 
     // 页面加载时自动读配置
     window.onload = function () {
         loadConfig();
     };
+    
+    // 切换抽屉展开/收纳
+    function toggleDrawer() {
+        drawerOpen = !drawerOpen;
+        const drawer = document.getElementById('controlDrawer');
+        const trigger = document.querySelector('.drawer-trigger');
+        
+        if (drawerOpen) {
+            drawer.classList.add('open');
+            trigger.classList.add('open');
+        } else {
+            drawer.classList.remove('open');
+            trigger.classList.remove('open');
+        }
+    }
+    
+    // 操作按钮点击后自动收纳抽屉
+    function closeDrawerAfterAction() {
+        setTimeout(() => {
+            if (drawerOpen) {
+                toggleDrawer();
+            }
+        }, 300);
+    }
 
     function openConfig() {
         document.getElementById('configModal').classList.add('show');
@@ -431,6 +502,7 @@
         document.getElementById('portInput').value = '8765';
         // 直接连接
         connect();
+        closeDrawerAfterAction();
     }
 
     function connect() {
@@ -440,6 +512,7 @@
             alert('请先填写 IP 和端口');
             return;
         }
+        closeDrawerAfterAction();
             
         // 关闭已有连接
         if (ws) {
@@ -604,6 +677,7 @@
         if (ws) {
             ws.close();
         }
+        closeDrawerAfterAction();
     }
 </script>
 
