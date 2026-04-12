@@ -5,6 +5,7 @@
 
 import sys
 import os
+import time
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                 QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                 QGroupBox, QFormLayout, QLineEdit, QSpinBox,
@@ -34,6 +35,11 @@ class MainWindow(QMainWindow):
         self.current_image_path = None
         self.ocr_result = ""
         self.llm_result = ""
+        
+        # 时间记录
+        self.screenshot_timestamp = None  # 快捷键触发时间
+        self.ocr_elapsed = 0.0
+        self.llm_elapsed = 0.0
         
         # 初始化 UI
         self.init_ui()
@@ -218,6 +224,14 @@ class MainWindow(QMainWindow):
         self.ocr_result_text.setPlaceholderText("OCR 识别结果将显示在这里...")
         ocr_result_layout.addWidget(self.ocr_result_text)
         
+        # OCR 耗时标签（右下角）
+        ocr_timing_layout = QHBoxLayout()
+        ocr_timing_layout.addStretch()
+        self.ocr_time_label = QLabel("")
+        self.ocr_time_label.setStyleSheet("color: #888; font-size: 11px; padding: 2px 4px;")
+        ocr_timing_layout.addWidget(self.ocr_time_label)
+        ocr_result_layout.addLayout(ocr_timing_layout)
+        
         ocr_result_group.setLayout(ocr_result_layout)
         layout.addWidget(ocr_result_group)
         
@@ -229,6 +243,14 @@ class MainWindow(QMainWindow):
         self.llm_result_text.setReadOnly(True)
         self.llm_result_text.setPlaceholderText("LLM 分析结果将显示在这里...")
         llm_result_layout.addWidget(self.llm_result_text)
+        
+        # LLM 耗时标签（右下角）
+        llm_timing_layout = QHBoxLayout()
+        llm_timing_layout.addStretch()
+        self.llm_time_label = QLabel("")
+        self.llm_time_label.setStyleSheet("color: #888; font-size: 11px; padding: 2px 4px;")
+        llm_timing_layout.addWidget(self.llm_time_label)
+        llm_result_layout.addLayout(llm_timing_layout)
         
         llm_result_group.setLayout(llm_result_layout)
         layout.addWidget(llm_result_group)
@@ -275,10 +297,16 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def on_screenshot_taken(self, image_path):
         """截图完成回调"""
+        from datetime import datetime
         self.current_image_path = image_path
+        self.screenshot_timestamp = time.time()  # 记录快捷键触发时间
         filename = os.path.basename(image_path)
         self.screenshot_info_label.setText(f"✅ 截图成功!\n{filename}")
         self.btn_ocr.setEnabled(True)
+        
+        # 清空之前的耗时显示
+        self.ocr_time_label.setText("")
+        self.llm_time_label.setText("")
         
         self.statusBar().showMessage(f"截图已保存: {filename}")
         
@@ -309,17 +337,21 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage("正在进行 OCR 识别...")
     
-    @Slot(str)
-    def on_ocr_completed(self, ocr_text):
+    @Slot(str, float)
+    def on_ocr_completed(self, ocr_text, elapsed_time):
         """OCR 完成回调"""
         self.ocr_result = ocr_text
         self.ocr_result_text.setText(ocr_text)
+        self.ocr_elapsed = elapsed_time
         
         self.btn_ocr.setEnabled(True)
         self.btn_ocr.setText("开始 OCR 识别")
         self.btn_llm.setEnabled(True)
         
-        self.statusBar().showMessage("OCR 识别完成")
+        # 显示 OCR 耗时
+        self.ocr_time_label.setText(f"⏱️ {elapsed_time:.2f}s")
+        
+        self.statusBar().showMessage(f"OCR 识别完成 (耗时: {elapsed_time:.2f}s)")
         
         # 如果启用了自动 LLM
         if self.auto_llm_check.isChecked():
@@ -355,22 +387,40 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage("正在调用 LLM 分析...")
     
-    @Slot(str)
-    def on_llm_completed(self, llm_text):
+    @Slot(str, float)
+    def on_llm_completed(self, llm_text, elapsed_time):
         """LLM 完成回调"""
         self.llm_result = llm_text
         self.llm_result_text.setText(llm_text)
+        self.llm_elapsed = elapsed_time
         
         self.btn_llm.setEnabled(True)
         self.btn_llm.setText("调用 LLM 分析")
+        
+        # 显示 LLM 耗时
+        self.llm_time_label.setText(f"⏱️ {elapsed_time:.2f}s")
+        
+        # 计算整体耗时
+        total_elapsed = 0.0
+        if self.screenshot_timestamp:
+            from datetime import datetime
+            total_elapsed = time.time() - self.screenshot_timestamp
         
         # 如果 WebSocket 已启动且有客户端连接，自动发送结果
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             # 自动发送到手机
             self.send_to_phone()
-            self.statusBar().showMessage("LLM 分析完成，已自动发送到手机")
+            
+            # 显示整体耗时
+            if total_elapsed > 0:
+                self.statusBar().showMessage(f"LLM 分析完成 (总耗时: {total_elapsed:.2f}s)，已自动发送到手机")
+            else:
+                self.statusBar().showMessage("LLM 分析完成，已自动发送到手机")
         else:
-            self.statusBar().showMessage("LLM 分析完成")
+            if total_elapsed > 0:
+                self.statusBar().showMessage(f"LLM 分析完成 (总耗时: {total_elapsed:.2f}s)")
+            else:
+                self.statusBar().showMessage("LLM 分析完成")
     
     @Slot()
     def toggle_websocket(self, checked):

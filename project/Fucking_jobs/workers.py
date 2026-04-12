@@ -95,7 +95,7 @@ class ScreenshotWorker(QThread):
 class OCRWorker(QThread):
     """OCR 工作线程 - 文字识别"""
     
-    ocr_completed = Signal(str)   # OCR 完成信号，参数为识别文本
+    ocr_completed = Signal(str, float)   # OCR 完成信号，参数为识别文本和耗时（秒）
     error_occurred = Signal(str)   # 错误信号
     
     def __init__(self, image_path):
@@ -110,6 +110,8 @@ class OCRWorker(QThread):
                 self.error_occurred.emit(f"图片文件不存在: {self.image_path}")
                 return
             
+            start_time = time.time()
+            
             # 初始化 OCR 阅读器
             reader = easyocr.Reader(['ch_sim', 'en'])
             
@@ -120,8 +122,10 @@ class OCRWorker(QThread):
             texts = [text for bbox, text, prob in result]
             full_text = '\n'.join(texts)
             
+            elapsed_time = time.time() - start_time
+            
             # 发送信号
-            self.ocr_completed.emit(full_text)
+            self.ocr_completed.emit(full_text, elapsed_time)
             
         except Exception as e:
             self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
@@ -130,7 +134,7 @@ class OCRWorker(QThread):
 class LLMWorker(QThread):
     """LLM 工作线程 - 调用大语言模型 API"""
     
-    llm_completed = Signal(str)   # LLM 完成信号，参数为响应文本
+    llm_completed = Signal(str, float)   # LLM 完成信号，参数为响应文本和耗时（秒）
     error_occurred = Signal(str)   # 错误信号
     
     def __init__(self, api_key, model, prompt):
@@ -142,6 +146,8 @@ class LLMWorker(QThread):
     def run(self):
         """调用 LLM API"""
         try:
+            start_time = time.time()
+            
             url = "https://api.longcat.chat/openai/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -162,10 +168,12 @@ class LLMWorker(QThread):
             
             result = response.json()
             
+            elapsed_time = time.time() - start_time
+            
             # 提取回复内容
             if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0]['message']['content']
-                self.llm_completed.emit(content)
+                self.llm_completed.emit(content, elapsed_time)
             else:
                 self.error_occurred.emit("LLM API 返回格式异常")
                 
