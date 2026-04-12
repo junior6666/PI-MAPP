@@ -1,0 +1,7 @@
+PySide6==6.6.2
+mss==9.0.1
+Pillow==10.2.0
+pynput==1.7.6
+easyocr==1.7.1
+requests==2.31.0
+websockets==12.0

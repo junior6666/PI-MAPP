@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PC 消息接收器</title>
+    <!-- 引入 marked.js 用于 Markdown 解析 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
+    <!-- 引入 highlight.js 用于代码高亮 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #0f0f23;
+            color: #e0e0e0;
+            height: 100vh;
+            height: 100dvh; /* 移动端动态视口高度 */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        /* 顶部状态栏 */
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 6px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2a2a4a;
+            min-height: 38px;
+        }
+        
+        .header h2 {
+            font-size: 14px;
+            color: #4ecca3;
+            font-weight: 600;
+        }
+        
+        #status {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: rgba(78, 204, 163, 0.1);
+            color: #4ecca3;
+            font-weight: 500;
+        }
+        
+        #status.disconnected {
+            background: rgba(233, 69, 96, 0.1);
+            color: #e94560;
+        }
+        
+        #messages {
+            flex: 1;
+            background: #1a1a2e;
+            padding: 5px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+            line-height: 1.4;
+            -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+        }
+        
+        /* Markdown 样式增强 */
+        #messages h1, #messages h2, #messages h3, #messages h4 {
+            color: #4ecca3;
+            margin: 3px 0 1px 0;
+            font-weight: 600;
+        }
+        
+        #messages h1 { font-size: 14px; border-bottom: 1px solid #2a2a4a; padding-bottom: 2px; }
+        #messages h2 { font-size: 13px; }
+        #messages h3 { font-size: 12.5px; }
+        
+        #messages p {
+            margin: 1px 0;
+            line-height: 1.4;
+        }
+        
+        #messages strong {
+            color: #4ecca3;
+            font-weight: 600;
+        }
+        
+        #messages ul, #messages ol {
+            margin: 1px 0;
+            padding-left: 16px;
+        }
+        
+        #messages li {
+            margin: 0.5px 0;
+            line-height: 1.4;
+        }
+        
+        #messages blockquote {
+            border-left: 2px solid #4ecca3;
+            background: rgba(78, 204, 163, 0.05);
+            padding: 2px 5px;
+            margin: 2px 0;
+            border-radius: 0 2px 2px 0;
+        }
+        
+        #messages hr {
+            border: none;
+            border-top: 1px solid #2a2a4a;
+            margin: 2px 0;
+        }
+        
+        /* Markdown 代码块样式 */
+        #messages code {
+            background: rgba(255, 121, 198, 0.15);
+            padding: 0.5px 3px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #ff79c6;
+        }
+        
+        #messages pre {
+            background: #1e1e2e;
+            border: 1px solid #3a3a5e;
+            border-radius: 3px;
+            padding: 15px 10px 8px 10px;
+            margin: 5px 0;
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        /* 让 highlight.js 完全控制代码块内样式 */
+        #messages pre code {
+            background: none !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            color: inherit !important;
+            font-size: 10.5px !important;
+            line-height: 1.38 !important;
+            display: block;
+        }
+        
+        /* 代码块语言标签 */
+        .code-language {
+            position: absolute;
+            top: 2px;
+            left: 5px;
+            background: #4ecca3;
+            color: #0f0f23;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 9px;
+            font-weight: 600;
+        }
+        
+        /* 代码块复制按钮 */
+        .copy-btn {
+            position: absolute;
+            top: 2px;
+            right: 5px;
+            background: #4ecca3;
+            color: #0f0f23;
+            border: none;
+            padding: 1px 5px;
+            border-radius: 2px;
+            font-size: 9px;
+            cursor: pointer;
+            opacity: 0.9;
+            transition: all 0.2s;
+            font-weight: 600;
+        }
+        
+        .copy-btn:hover {
+            opacity: 1;
+            background: #5fffc8;
+        }
+        
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 底部控制栏 */
+        .controls {
+            background: #16213e;
+            padding: 6px;
+            border-top: 1px solid #2a2a4a;
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: #0f3460;
+            color: white;
+            border: none;
+            padding: 5px 9px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            min-width: 45px;
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        button.primary {
+            background: #4ecca3;
+            color: #0f0f23;
+            font-weight: 600;
+        }
+        
+        button.danger {
+            background: #e94560;
+        }
+        
+        /* 配置弹窗遮罩 */
+        #configModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        #configModal.show {
+            display: flex;
+        }
+        
+        /* 配置弹窗内容 */
+        .modal-content {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 350px;
+            border: 1px solid #2a2a4a;
+        }
+        
+        .modal-content h3 {
+            margin-bottom: 16px;
+            text-align: center;
+            color: #4ecca3;
+            font-size: 18px;
+        }
+        
+        .modal-content label {
+            display: block;
+            margin: 12px 0 6px;
+            font-size: 13px;
+            color: #b0b0d0;
+        }
+        
+        .modal-content input[type=text],
+        .modal-content input[type=number] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            background: #0f0f23;
+            color: #e0e0e0;
+            font-size: 15px;
+        }
+        
+        .modal-content input:focus {
+            outline: none;
+            border-color: #4ecca3;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        
+        .modal-buttons button {
+            flex: 1;
+        }
+        
+        /* 空状态提示 */
+        .empty-state {
+            text-align: center;
+            color: #666;
+            padding: 40px 20px;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        
+        /* 适配小屏幕手机 */
+        @media (max-width: 375px) {
+            .header h2 {
+                font-size: 14px;
+            }
+            
+            #messages {
+                font-size: 13px;
+                padding: 10px;
+            }
+            
+            button {
+                padding: 7px 12px;
+                font-size: 12px;
+            }
+        }
+        
+        /* 适配平板 */
+        @media (min-width: 768px) {
+            #messages {
+                padding: 20px;
+                font-size: 15px;
+                max-width: 900px;
+                margin: 0 auto;
+            }
+            
+            .controls {
+                padding: 10px;
+            }
+            
+            button {
+                padding: 10px 18px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 顶部状态栏 -->
+<div class="header">
+    <h2>📡 消息接收器</h2>
+    <span id="status">未连接</span>
+</div>
+
+<!-- 主消息显示区 -->
+<div id="messages">
+    <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <div>等待接收消息...</div>
+    </div>
+</div>
+
+<!-- 底部控制栏 -->
+<div class="controls">
+    <button onclick="openConfig()">⚙️</button>
+    <button class="primary" onclick="connectLocal()">🖥️本地</button>
+    <button onclick="connect()">连接</button>
+    <button class="danger" onclick="disconnect()">断开</button>
+</div>
+
+<!-- 配置弹窗 -->
+<div id="configModal">
+    <div class="modal-content">
+        <h3>⚙️ 网络配置</h3>
+        <label>服务器 IP 地址：</label>
+        <input type="text" id="ipInput" placeholder="如 192.168.1.100">
+        <label>端口号：</label>
+        <input type="number" id="portInput" placeholder="如 8765">
+        <div class="modal-buttons">
+            <button onclick="loadConfig()">读取配置</button>
+            <button onclick="saveConfig()">保存配置</button>
+        </div>
+        <div class="modal-buttons" style="justify-content:center; margin-top:10px;">
+            <button onclick="closeConfig()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let ws;
+
+    // 页面加载时自动读配置
+    window.onload = function () {
+        loadConfig();
+    };
+
+    function openConfig() {
+        document.getElementById('configModal').classList.add('show');
+    }
+
+    function closeConfig() {
+        document.getElementById('configModal').classList.remove('show');
+    }
+
+    // 从 localStorage 读取配置
+    function loadConfig() {
+        const savedIP = localStorage.getItem('pc_ip');
+        const savedPort = localStorage.getItem('pc_port');
+        if (savedIP) {
+            document.getElementById('ipInput').value = savedIP;
+        }
+        if (savedPort) {
+            document.getElementById('portInput').value = savedPort;
+        }
+    }
+
+    // 保存配置到 localStorage
+    function saveConfig() {
+        const ip = document.getElementById('ipInput').value.trim();
+        const port = document.getElementById('portInput').value.trim();
+        if (!ip || !port) {
+            alert('请填写 IP 和端口');
+            return;
+        }
+        localStorage.setItem('pc_ip', ip);
+        localStorage.setItem('pc_port', port);
+        alert('配置已保存，下次打开自动加载');
+    }
+
+    function connectLocal() {
+        // 自动填充本地地址
+        document.getElementById('ipInput').value = '127.0.0.1';
+        document.getElementById('portInput').value = '8765';
+        // 直接连接
+        connect();
+    }
+
+    function connect() {
+        const ip = document.getElementById('ipInput').value.trim();
+        const port = document.getElementById('portInput').value.trim();
+        if (!ip || !port) {
+            alert('请先填写 IP 和端口');
+            return;
+        }
+            
+        // 关闭已有连接
+        if (ws) {
+            ws.close();
+        }
+            
+        const url = `ws://${ip}:${port}`;
+        console.log('尝试连接到:', url);
+        document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔄</div><div>正在连接...</div></div>';
+            
+        try {
+            ws = new WebSocket(url);
+    
+            ws.onopen = () => {
+                console.log('WebSocket 连接成功');
+                updateStatus(true);
+                document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><div>已连接！等待接收消息...</div></div>';
+            };
+    
+            ws.onmessage = (event) => {
+                console.log('收到消息:', event.data);
+                displayMessage(event.data);
+            };
+    
+            ws.onclose = (event) => {
+                console.log('连接关闭:', event.code, event.reason);
+                updateStatus(false);
+                showMessage('❌ 连接已断开', 'error');
+            };
+    
+            ws.onerror = (error) => {
+                console.error('WebSocket 错误:', error);
+                updateStatus(false);
+                showMessage('❌ 连接失败，请检查网络和配置', 'error');
+            };
+        } catch (error) {
+            console.error('创建 WebSocket 失败:', error);
+            alert('创建连接失败：' + error.message);
+        }
+    }
+    
+    function updateStatus(connected) {
+        const statusEl = document.getElementById('status');
+        if (connected) {
+            statusEl.textContent = '✅ 已连接';
+            statusEl.classList.remove('disconnected');
+        } else {
+            statusEl.textContent = '❌ 未连接';
+            statusEl.classList.add('disconnected');
+        }
+    }
+    
+    function displayMessage(text) {
+        const messagesEl = document.getElementById('messages');
+        
+        // 使用 marked.js 渲染 Markdown
+        try {
+            // 配置 marked
+            marked.setOptions({
+                breaks: true,  // 支持 GFM 换行
+                gfm: true,     // 启用 GitHub Flavored Markdown
+                headerIds: false,
+                mangle: false
+            });
+            
+            // 自定义渲染器以添加代码块功能
+            const renderer = new marked.Renderer();
+            
+            // 自定义代码块渲染
+            renderer.code = function(code, language) {
+                const lang = (language || 'text').toLowerCase();
+                let highlightedCode;
+                
+                // 使用 highlight.js 进行语法高亮
+                try {
+                    if (language && hljs.getLanguage(language)) {
+                        highlightedCode = hljs.highlight(code, { language: language }).value;
+                    } else {
+                        highlightedCode = hljs.highlightAuto(code).value;
+                    }
+                } catch (e) {
+                    highlightedCode = escapeHtml(code);
+                }
+                
+                return `<pre><span class="code-language">${lang}</span><button class="copy-btn" onclick="copyCode(this)">📋 复制</button><code>${highlightedCode}</code></pre>`;
+            };
+            
+            // 渲染 Markdown
+            let html = marked.parse(text, { renderer: renderer });
+            messagesEl.innerHTML = html;
+            
+            // 滚动到底部
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        } catch (error) {
+            console.error('Markdown 渲染失败:', error);
+            messagesEl.textContent = text;
+        }
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function copyCode(btn) {
+        // 找到代码块内容
+        const pre = btn.parentElement;
+        const codeBlock = pre.querySelector('code');
+        const text = codeBlock.textContent;
+        
+        // 复制到剪贴板
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                showCopySuccess(btn);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                fallbackCopy(btn, text);
+            });
+        } else {
+            fallbackCopy(btn, text);
+        }
+    }
+    
+    function fallbackCopy(btn, text) {
+        // 备用复制方法
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        
+        try {
+            document.execCommand('copy');
+            showCopySuccess(btn);
+        } catch (err) {
+            console.error('复制失败:', err);
+            alert('复制失败，请手动选择复制');
+        }
+        
+        document.body.removeChild(textarea);
+    }
+    
+    function showCopySuccess(btn) {
+        const originalText = btn.textContent;
+        btn.textContent = '✅ 已复制';
+        btn.style.background = '#5fffc8';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = '#4ecca3';
+        }, 2000);
+    }
+    
+    function showMessage(text, type = 'info') {
+        const messagesEl = document.getElementById('messages');
+        const icon = type === 'error' ? '❌' : 'ℹ️';
+        messagesEl.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon}</div><div>${text}</div></div>`;
+    }
+
+    function disconnect() {
+        if (ws) {
+            ws.close();
+        }
+    }
+</script>
+
+</body>
+</html>
