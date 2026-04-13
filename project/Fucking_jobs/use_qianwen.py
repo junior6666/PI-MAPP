@@ -16,10 +16,10 @@ encode_start = time.time()
 image_url = f"data:image/{os.path.splitext(image_path)[1].lstrip('.')};base64,{base64.b64encode(image_data).decode('utf-8')}"
 encode_elapsed = time.time() - encode_start
 print(f"📸 图片编码耗时: {encode_elapsed:.4f}秒")
-model_list = ['Qwen/Qwen3.5-27B','Qwen/Qwen3.5-35B-A3B','Pro/moonshotai/Kimi-K2.5','Qwen/Qwen3.5-397B-A17B','Qwen/Qwen3.5-122B-A10B','Qwen/Qwen3.5-27B','Qwen/Qwen3.5-9B','Qwen/Qwen3.5-4B','zai-org/GLM-4.6V','Qwen/Qwen3-VL-32B-Instruct','Qwen/Qwen3-VL-8B-Instruct','Qwen/Qwen3-VL-30B-A3B-Instruct','Qwen/Qwen3-VL-235B-A22B-Instruct','Qwen/Qwen3-Omni-30B-A3B-Instruct','Qwen/Qwen3-Omni-30B-A3B-Captioner','zai-org/GLM-4.5V','Qwen/Qwen2.5-VL-32B-Instruct','Qwen/Qwen2-VL-72B-Instruct']
+model_backup_list = ['Qwen/Qwen3-Omni-30B-A3B-Instruct','Qwen/Qwen3-VL-8B-Instruct','Qwen/Qwen3-VL-32B-Instruct','Qwen/Qwen3-VL-235B-A22B-Instruct','zai-org/GLM-4.5V','Pro/moonshotai/Kimi-K2.5']
 start_time = time.time()
 response = client.chat.completions.create(
-    model="Qwen/Qwen3-VL-8B-Instruct",
+    model="Qwen/Qwen3-Omni-30B-A3B-Instruct",
     messages=[
         {
             "role": "user",
