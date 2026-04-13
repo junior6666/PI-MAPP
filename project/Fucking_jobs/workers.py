@@ -392,19 +392,45 @@ class WebSocketServerWorker(QThread):
         """停止服务器"""
         self.is_running = False
         
-        if self.server:
-            self.server.close()
-        
         if self.loop and self.loop.is_running():
-            self.loop.call_soon_threadsafe(self.loop.stop)
-        
-        # 关闭所有客户端连接
-        for client in self.clients:
+            # 在事件循环中执行关闭操作
+            async def cleanup():
+                # 关闭所有客户端连接
+                if self.clients:
+                    close_tasks = []
+                    for client in self.clients:
+                        try:
+                            close_tasks.append(asyncio.ensure_future(client.close()))
+                        except:
+                            pass
+                    if close_tasks:
+                        await asyncio.gather(*close_tasks, return_exceptions=True)
+                    self.clients.clear()
+                
+                # 关闭服务器
+                if self.server:
+                    self.server.close()
+                    await self.server.wait_closed()
+                
+                # 停止事件循环
+                self.loop.stop()
+            
             try:
-                self.loop.call_soon_threadsafe(
-                    lambda: asyncio.ensure_future(client.close())
-                )
+                # 在线程安全的上下文中执行清理
+                future = asyncio.run_coroutine_threadsafe(cleanup(), self.loop)
+                future.result(timeout=3)  # 等待最多3秒
+            except Exception as e:
+                print(f"WebSocket 清理警告: {e}")
+                # 强制停止
+                try:
+                    self.loop.call_soon_threadsafe(self.loop.stop)
+                except:
+                    pass
+        
+        # 关闭事件循环
+        if self.loop:
+            try:
+                if not self.loop.is_closed():
+                    self.loop.close()
             except:
                 pass
-        
-        self.clients.clear()
