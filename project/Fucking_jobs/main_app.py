@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                 QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
                                 QTableWidget, QTableWidgetItem, QHeaderView)
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QEvent
-from PySide6.QtGui import QFont, QTextCursor, QIcon
+from PySide6.QtGui import QFont, QTextCursor, QIcon, QPalette, QColor
 
 # 导入工作线程类
 from workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
@@ -24,12 +24,23 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        
+        # 启用双缓冲和优化渲染
+        self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, False)
+        self.setAutoFillBackground(True)
+        
+        # 设置窗口最小尺寸，防止频繁重绘
+        self.setMinimumSize(800, 600)
+        
         self.setWindowTitle("💻 系统资源管理器")
         self.setGeometry(100, 100, 1200, 800)
         
-        # 设置窗口图标
-        if os.path.exists("icon.ico"):
-            self.setWindowIcon(QIcon("icon.ico"))
+        # 设置窗口图标（兼容打包环境）
+        icon_path = self._get_resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         
         # 工作线程实例
         self.screenshot_worker = None
@@ -68,8 +79,8 @@ class MainWindow(QMainWindow):
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
         
-        # 初始化系统托盘
-        self.init_system_tray()
+        # 初始化系统托盘（在UI完全加载后）
+        QTimer.singleShot(2000, self.init_system_tray)
         
     def init_ui(self):
         """初始化用户界面 - 伪装成系统资源管理器"""
@@ -103,10 +114,11 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(self.tab_widget)
         
-        # 启动资源监控定时器
-        self.resource_timer = QTimer()
-        self.resource_timer.timeout.connect(self.update_resource_info)
-        self.resource_timer.start(2000)  # 每2秒更新一次
+        # 禁用资源监控定时器（避免打包后闪烁）
+        # 如需启用，将下面一行注释去掉
+        # self.resource_timer = QTimer()
+        # self.resource_timer.timeout.connect(self.update_resource_info)
+        # self.resource_timer.start(10000)
         
     def create_system_overview_tab(self):
         """创建系统概览标签页（显示真实硬件信息）"""
@@ -359,8 +371,16 @@ class MainWindow(QMainWindow):
         
         layout.addStretch()
         
-        # 初始化时获取硬件信息
-        QTimer.singleShot(500, self.get_hardware_info)
+        # 初始化时获取硬件信息（只获取一次）
+        QTimer.singleShot(1000, self.get_hardware_info)
+        
+        # 设置初始使用率为0
+        self.cpu_usage_label.setText("CPU 使用率: 0%")
+        self.cpu_usage_progress.setValue(0)
+        self.gpu_usage_label.setText("GPU 使用率: N/A")
+        self.gpu_usage_progress.setValue(0)
+        self.mem_usage_label.setText("内存使用率: 0%")
+        self.mem_usage_progress.setValue(0)
         
         return widget
     
@@ -479,6 +499,16 @@ class MainWindow(QMainWindow):
         
         return widget
     
+    def _get_resource_path(self, relative_path):
+        """获取资源文件的绝对路径（兼容打包环境）"""
+        if getattr(sys, 'frozen', False):
+            # 打包后的环境
+            base_path = sys._MEIPASS
+        else:
+            # 开发环境
+            base_path = os.path.abspath(".")
+        return os.path.join(base_path, relative_path)
+    
     def get_hardware_info(self):
         """获取真实硬件信息"""
         try:
@@ -568,7 +598,7 @@ class MainWindow(QMainWindow):
             import psutil
             
             # 更新 CPU 使用率
-            cpu_percent = psutil.cpu_percent(interval=0.1)
+            cpu_percent = psutil.cpu_percent(interval=None)  # 非阻塞模式
             self.cpu_usage_label.setText(f"CPU 使用率: {cpu_percent}%")
             self.cpu_usage_progress.setValue(int(cpu_percent))
             
@@ -594,11 +624,13 @@ class MainWindow(QMainWindow):
             self.mem_usage_label.setText(f"内存使用率: {mem_percent}% ({mem.used / (1024**3):.2f} GB / {mem.total / (1024**3):.2f} GB)")
             self.mem_usage_progress.setValue(int(mem_percent))
             
-            # 更新性能信息 - 显示真实进程列表
-            self.update_process_table()
+            # 更新性能信息 - 显示真实进程列表（降低频率）
+            if hasattr(self, 'perf_table'):
+                self.update_process_table()
             
             # 更新磁盘信息（真实数据）
-            self.update_disk_info()
+            if hasattr(self, 'disk_table'):
+                self.update_disk_info()
             
         except Exception as e:
             print(f"更新资源信息失败: {e}")
@@ -1340,9 +1372,13 @@ class MainWindow(QMainWindow):
         # 创建托盘图标
         self.tray_icon = QSystemTrayIcon(self)
         
-        # 设置托盘图标（使用 icon.ico）
-        if os.path.exists("icon.ico"):
-            self.tray_icon.setIcon(QIcon("icon.ico"))
+        # 设置托盘图标（兼容打包环境）
+        icon_path = self._get_resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.tray_icon.setIcon(QIcon(icon_path))
+            print(f"✅ 托盘图标加载成功: {icon_path}")
+        else:
+            print(f"⚠️ 托盘图标文件不存在: {icon_path}")
         
         # 创建托盘菜单
         tray_menu = QMenu()
@@ -1390,14 +1426,34 @@ class MainWindow(QMainWindow):
         """退出应用程序 - 真正关闭整个系统"""
         print("🔄 正在关闭系统...")
         
+        # 停止资源监控定时器（如果启用）
+        if hasattr(self, 'resource_timer') and self.resource_timer:
+            self.resource_timer.stop()
+        
         # 停止所有工作线程
         if self.screenshot_worker:
+            print("⏳ 正在停止截图监听...")
             self.screenshot_worker.stop()
             self.screenshot_worker.wait(2000)  # 最多等待2秒
+            print("✅ 截图监听已停止")
+        
+        if self.ocr_worker and self.ocr_worker.isRunning():
+            print("⏳ 正在停止 OCR 识别...")
+            self.ocr_worker.terminate()
+            self.ocr_worker.wait(1000)
+            print("✅ OCR 识别已停止")
+        
+        if self.llm_worker and self.llm_worker.isRunning():
+            print("⏳ 正在停止 LLM 分析...")
+            self.llm_worker.terminate()
+            self.llm_worker.wait(1000)
+            print("✅ LLM 分析已停止")
         
         if self.kimi_worker and self.kimi_worker.isRunning():
+            print("⏳ 正在停止 Kimi 分析...")
             self.kimi_worker.terminate()
             self.kimi_worker.wait(1000)
+            print("✅ Kimi 分析已停止")
         
         # 先停止 WebSocket 服务（需要等待异步任务清理）
         if self.websocket_worker:
@@ -1409,7 +1465,9 @@ class MainWindow(QMainWindow):
         # 停止快速分析监听器
         if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
             try:
+                print("⏳ 正在停止快捷键监听...")
                 self.quick_analysis_listener.stop()
+                print("✅ 快捷键监听已停止")
             except:
                 pass
         
@@ -1443,18 +1501,34 @@ class MainWindow(QMainWindow):
         # 真正退出时的清理工作
         print("🔄 正在关闭系统...")
         
-        # 停止资源监控定时器
-        if hasattr(self, 'resource_timer'):
+        # 停止资源监控定时器（如果启用）
+        if hasattr(self, 'resource_timer') and self.resource_timer:
             self.resource_timer.stop()
         
         # 停止所有工作线程
         if self.screenshot_worker:
+            print("⏳ 正在停止截图监听...")
             self.screenshot_worker.stop()
             self.screenshot_worker.wait(2000)
+            print("✅ 截图监听已停止")
+        
+        if self.ocr_worker and self.ocr_worker.isRunning():
+            print("⏳ 正在停止 OCR 识别...")
+            self.ocr_worker.terminate()
+            self.ocr_worker.wait(1000)
+            print("✅ OCR 识别已停止")
+        
+        if self.llm_worker and self.llm_worker.isRunning():
+            print("⏳ 正在停止 LLM 分析...")
+            self.llm_worker.terminate()
+            self.llm_worker.wait(1000)
+            print("✅ LLM 分析已停止")
         
         if self.kimi_worker and self.kimi_worker.isRunning():
+            print("⏳ 正在停止 Kimi 分析...")
             self.kimi_worker.terminate()
             self.kimi_worker.wait(1000)
+            print("✅ Kimi 分析已停止")
         
         # 先停止 WebSocket 服务（需要等待异步任务清理）
         if self.websocket_worker:
@@ -1466,7 +1540,9 @@ class MainWindow(QMainWindow):
         # 停止快速分析监听器
         if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
             try:
+                print("⏳ 正在停止快捷键监听...")
                 self.quick_analysis_listener.stop()
+                print("✅ 快捷键监听已停止")
             except:
                 pass
         
@@ -1480,11 +1556,19 @@ class MainWindow(QMainWindow):
 
 def main():
     """主函数"""
+    # 启用高 DPI 缩放
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+    
     app = QApplication(sys.argv)
     
     # 设置全局字体
     font = QFont("Microsoft YaHei", 10)
     app.setFont(font)
+    
+    # 优化渲染性能
+    app.setAttribute(Qt.AA_UseSoftwareOpenGL, False)  # 使用硬件加速
     
     # 创建并显示主窗口
     window = MainWindow()
