@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
         # self.resource_timer.start(10000)
         
     def create_system_overview_tab(self):
-        """创建系统概览标签页（显示真实硬件信息）"""
+        """创建系统概览标签页（显示模拟硬件信息）"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(15, 15, 15, 15)
@@ -374,21 +374,13 @@ class MainWindow(QMainWindow):
         
         layout.addStretch()
         
-        # 初始化时获取硬件信息（只获取一次）
-        QTimer.singleShot(1000, self.get_hardware_info)
-        
-        # 设置初始使用率为0
-        self.cpu_usage_label.setText("CPU 使用率: 0%")
-        self.cpu_usage_progress.setValue(0)
-        self.gpu_usage_label.setText("GPU 使用率: N/A")
-        self.gpu_usage_progress.setValue(0)
-        self.mem_usage_label.setText("内存使用率: 0%")
-        self.mem_usage_progress.setValue(0)
+        # 初始化时获取模拟硬件信息
+        QTimer.singleShot(1000, self.get_simulated_hardware_info)
         
         return widget
     
     def create_performance_tab(self):
-        """创建性能监控标签页（真实数据）"""
+        """创建性能监控标签页（模拟数据）"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
@@ -400,21 +392,51 @@ class MainWindow(QMainWindow):
         self.perf_info.setAlignment(Qt.AlignCenter)
         perf_layout.addWidget(self.perf_info)
         
-        # 进程列表表格
+        # 进程列表表格（模拟数据）
         self.perf_table = QTableWidget()
         self.perf_table.setColumnCount(5)
         self.perf_table.setHorizontalHeaderLabels(["进程名", "PID", "CPU%", "内存(MB)", "状态"])
         self.perf_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.perf_table.setRowCount(15)
         
+        # 填充模拟进程数据
+        import random
+        fake_processes = [
+            ("chrome.exe", 1234, random.uniform(5, 25), random.uniform(200, 800)),
+            ("explorer.exe", 5678, random.uniform(1, 5), random.uniform(100, 300)),
+            ("svchost.exe", 9012, random.uniform(0.5, 3), random.uniform(50, 150)),
+            ("python.exe", 3456, random.uniform(10, 40), random.uniform(300, 600)),
+            ("code.exe", 7890, random.uniform(3, 15), random.uniform(400, 700)),
+            ("wechat.exe", 2345, random.uniform(1, 8), random.uniform(150, 350)),
+            ("qq.exe", 6789, random.uniform(0.5, 5), random.uniform(100, 250)),
+            ("edge.exe", 1357, random.uniform(8, 30), random.uniform(250, 650)),
+            ("taskmgr.exe", 2468, random.uniform(0.2, 2), random.uniform(30, 80)),
+            ("spoolsv.exe", 3579, random.uniform(0.1, 1), random.uniform(20, 60)),
+            ("dllhost.exe", 4680, random.uniform(0.3, 2), random.uniform(40, 100)),
+            ("conhost.exe", 5791, random.uniform(0.1, 1), random.uniform(15, 50)),
+            ("RuntimeBroker.exe", 6802, random.uniform(0.2, 1.5), random.uniform(30, 90)),
+            ("SearchApp.exe", 7913, random.uniform(0.5, 3), random.uniform(80, 200)),
+            ("ShellExperienceHost.exe", 8024, random.uniform(0.3, 2), random.uniform(60, 150)),
+        ]
+        
+        for i, (name, pid, cpu, mem) in enumerate(fake_processes):
+            self.perf_table.setItem(i, 0, QTableWidgetItem(name))
+            self.perf_table.setItem(i, 1, QTableWidgetItem(str(pid)))
+            self.perf_table.setItem(i, 2, QTableWidgetItem(f"{cpu:.1f}"))
+            self.perf_table.setItem(i, 3, QTableWidgetItem(f"{mem:.1f}"))
+            self.perf_table.setItem(i, 4, QTableWidgetItem("运行中"))
+        
         perf_layout.addWidget(self.perf_table)
         perf_group.setLayout(perf_layout)
         layout.addWidget(perf_group)
         
+        # 更新性能信息标签
+        self.perf_info.setText(f"共 {len(fake_processes)} 个进程 | 更新时间: {self.get_current_time()}")
+        
         return widget
     
     def create_disk_tab(self):
-        """创建磁盘管理标签页（真实数据）"""
+        """创建磁盘管理标签页（模拟数据）"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
@@ -427,6 +449,39 @@ class MainWindow(QMainWindow):
         # 磁盘使用进度条容器
         self.disk_progress_container = QWidget()
         self.disk_progress_layout = QVBoxLayout(self.disk_progress_container)
+        
+        # 添加模拟磁盘分区
+        import random
+        simulated_disks = [
+            ("C:", "NTFS", 500, random.uniform(60, 85)),
+            ("D:", "NTFS", 1000, random.uniform(40, 70)),
+            ("E:", "NTFS", 2000, random.uniform(30, 60)),
+        ]
+        
+        disk_rows = []
+        for drive, fs, total_gb, usage_percent in simulated_disks:
+            used_gb = total_gb * usage_percent / 100
+            free_gb = total_gb - used_gb
+            
+            # 创建进度条和标签
+            progress = QProgressBar()
+            progress.setRange(0, 100)
+            progress.setValue(int(usage_percent))
+            
+            label_text = f"{drive} - {usage_percent:.1f}% 已用"
+            label = QLabel(label_text)
+            
+            self.disk_progress_layout.addWidget(label)
+            self.disk_progress_layout.addWidget(progress)
+            
+            # 添加到表格数据
+            disk_rows.append([
+                drive,
+                fs,
+                f"{total_gb:.1f} GB",
+                f"{used_gb:.1f} GB",
+                f"{free_gb:.1f} GB"
+            ])
         
         disk_layout.addWidget(self.disk_progress_container)
         
@@ -441,11 +496,18 @@ class MainWindow(QMainWindow):
         self.disk_table.setColumnCount(5)
         self.disk_table.setHorizontalHeaderLabels(["盘符", "文件系统", "总容量", "已用空间", "可用空间"])
         self.disk_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.disk_table.setRowCount(10)
+        self.disk_table.setRowCount(len(disk_rows))
+        
+        for i, row_data in enumerate(disk_rows):
+            for j, value in enumerate(row_data):
+                self.disk_table.setItem(i, j, QTableWidgetItem(value))
         
         disk_detail_layout.addWidget(self.disk_table)
         disk_detail_group.setLayout(disk_detail_layout)
         layout.addWidget(disk_detail_group)
+        
+        # 更新磁盘信息标签
+        self.disk_info.setText(f"共 {len(disk_rows)} 个分区 | 更新时间: {self.get_current_time()}")
         
         layout.addStretch()
         return widget
@@ -938,235 +1000,77 @@ class MainWindow(QMainWindow):
             base_path = os.path.abspath(".")
         return os.path.join(base_path, relative_path)
     
-    def get_hardware_info(self):
-        """获取真实硬件信息"""
-        try:
-            import platform
-            import psutil
-            
-            # CPU 信息
-            cpu_info = []
-            cpu_info.append(f"处理器: {platform.processor()}")
-            cpu_info.append(f"架构: {platform.machine()}")
-            cpu_info.append(f"核心数: {psutil.cpu_count(logical=False)} 物理 / {psutil.cpu_count(logical=True)} 逻辑")
-            cpu_info.append(f"频率: {psutil.cpu_freq().current:.2f} MHz")
-            
-            # 尝试获取更详细的 CPU 型号
-            try:
-                import wmi
-                c = wmi.WMI()
-                for processor in c.Win32_Processor():
-                    cpu_info[0] = f"处理器: {processor.Name.strip()}"
-                    if hasattr(processor, 'L3CacheSize') and processor.L3CacheSize:
-                        cpu_info.append(f"三级缓存: {processor.L3CacheSize} KB")
-            except:
-                pass
-            
-            self.cpu_info_text.setText('\n'.join(cpu_info))
-            
-            # GPU 信息
-            gpu_info = []
-            try:
-                import wmi
-                c = wmi.WMI()
-                for gpu in c.Win32_VideoController():
-                    gpu_info.append(f"显卡型号: {gpu.Name.strip()}")
-                    if hasattr(gpu, 'AdapterRAM') and gpu.AdapterRAM:
-                        vram_gb = int(gpu.AdapterRAM) / (1024**3)
-                        gpu_info.append(f"显存: {vram_gb:.2f} GB")
-                    if hasattr(gpu, 'DriverVersion'):
-                        gpu_info.append(f"驱动版本: {gpu.DriverVersion}")
-                    
-                    # 添加参考价格（基于常见型号的估算）
-                    gpu_name_lower = gpu.Name.lower() if gpu.Name else ""
-                    if 'rtx 4090' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥12,000 - ¥15,000")
-                    elif 'rtx 4080' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥7,000 - ¥9,000")
-                    elif 'rtx 4070' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥4,000 - ¥5,500")
-                    elif 'rtx 3090' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥8,000 - ¥10,000 (二手)")
-                    elif 'rtx 3080' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥5,000 - ¥6,500 (二手)")
-                    elif 'rtx 3070' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥3,000 - ¥4,000 (二手)")
-                    elif 'rtx 3060' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥1,800 - ¥2,500")
-                    elif 'gtx 1660' in gpu_name_lower:
-                        gpu_info.append("参考价格: ¥1,200 - ¥1,600 (二手)")
-                    elif 'intel' in gpu_name_lower and 'iris' in gpu_name_lower:
-                        gpu_info.append("类型: 集成显卡")
-                    elif 'intel' in gpu_name_lower:
-                        gpu_info.append("类型: 集成显卡")
-                    elif 'amd' in gpu_name_lower or 'radeon' in gpu_name_lower:
-                        gpu_info.append("品牌: AMD")
-            except:
-                gpu_info.append("无法获取 GPU 详细信息")
-            
-            self.gpu_info_text.setText('\n'.join(gpu_info))
-            
-            # 内存信息
-            mem = psutil.virtual_memory()
-            mem_info = []
-            mem_info.append(f"总内存: {mem.total / (1024**3):.2f} GB")
-            mem_info.append(f"可用内存: {mem.available / (1024**3):.2f} GB")
-            mem_info.append(f"已使用: {mem.used / (1024**3):.2f} GB ({mem.percent}%)")
-            
-            self.mem_info_text.setText('\n'.join(mem_info))
-            
-        except Exception as e:
-            error_msg = f"获取硬件信息失败: {str(e)}"
-            self.cpu_info_text.setText(error_msg)
-            self.gpu_info_text.setText(error_msg)
-            self.mem_info_text.setText(error_msg)
+    def get_simulated_hardware_info(self):
+        """获取模拟硬件信息（伪装用）"""
+        import random
+        
+        # CPU 模拟信息
+        cpu_models = [
+            "Intel(R) Core(TM) i7-12700K @ 3.60GHz",
+            "AMD Ryzen 7 5800X 8-Core Processor",
+            "Intel(R) Core(TM) i9-13900K @ 3.00GHz",
+            "AMD Ryzen 9 7950X 16-Core Processor",
+        ]
+        cpu_model = random.choice(cpu_models)
+        cores = random.choice([8, 12, 16])
+        threads = cores * 2
+        freq = random.uniform(3.0, 4.5)
+        cache = random.choice([16384, 24576, 32768])
+        
+        cpu_info = [
+            f"处理器: {cpu_model}",
+            f"架构: x86_64",
+            f"核心数: {cores} 物理 / {threads} 逻辑",
+            f"频率: {freq:.2f} GHz",
+            f"三级缓存: {cache // 1024} MB",
+        ]
+        self.cpu_info_text.setText('\n'.join(cpu_info))
+        
+        # GPU 模拟信息
+        gpu_models = [
+            ("NVIDIA GeForce RTX 4070", 12, "¥4,500 - ¥5,500"),
+            ("NVIDIA GeForce RTX 3080", 10, "¥5,000 - ¥6,500 (二手)"),
+            ("AMD Radeon RX 7900 XT", 20, "¥6,000 - ¥7,500"),
+            ("NVIDIA GeForce RTX 4060 Ti", 8, "¥3,000 - ¥3,800"),
+            ("Intel(R) Iris(R) Xe Graphics", 0, "类型: 集成显卡"),
+        ]
+        gpu_name, vram, price = random.choice(gpu_models)
+        driver_version = f"{random.randint(30, 32)}.{random.randint(0, 99)}.{random.randint(10000, 99999)}"
+        
+        gpu_info = [f"显卡型号: {gpu_name}"]
+        if vram > 0:
+            gpu_info.append(f"显存: {vram} GB")
+        gpu_info.append(f"驱动版本: {driver_version}")
+        gpu_info.append(f"参考价格: {price}")
+        
+        self.gpu_info_text.setText('\n'.join(gpu_info))
+        
+        # 内存模拟信息
+        total_mem = random.choice([16, 32, 64])
+        used_percent = random.uniform(35, 65)
+        used_gb = total_mem * used_percent / 100
+        available_gb = total_mem - used_gb
+        
+        mem_info = [
+            f"总内存: {total_mem}.00 GB",
+            f"可用内存: {available_gb:.2f} GB",
+            f"已使用: {used_gb:.2f} GB ({used_percent:.1f}%)",
+        ]
+        self.mem_info_text.setText('\n'.join(mem_info))
+        
+        # 设置初始使用率（随机值）
+        cpu_usage = random.uniform(15, 45)
+        gpu_usage = random.uniform(10, 60)
+        mem_usage = random.uniform(40, 70)
+        
+        self.cpu_usage_label.setText(f"CPU 使用率: {cpu_usage:.1f}%")
+        self.cpu_usage_progress.setValue(int(cpu_usage))
+        self.gpu_usage_label.setText(f"GPU 使用率: {gpu_usage:.1f}%")
+        self.gpu_usage_progress.setValue(int(gpu_usage))
+        self.mem_usage_label.setText(f"内存使用率: {mem_usage:.1f}% ({used_gb:.2f} GB / {total_mem:.2f} GB)")
+        self.mem_usage_progress.setValue(int(mem_usage))
     
-    def update_resource_info(self):
-        """更新系统资源使用率（真实数据）"""
-        try:
-            import psutil
-            
-            # 更新 CPU 使用率
-            cpu_percent = psutil.cpu_percent(interval=None)  # 非阻塞模式
-            self.cpu_usage_label.setText(f"CPU 使用率: {cpu_percent}%")
-            self.cpu_usage_progress.setValue(int(cpu_percent))
-            
-            # 更新 GPU 使用率（需要 GPUtil 或 nvidia-ml-py）
-            try:
-                import GPUtil
-                gpus = GPUtil.getGPUs()
-                if gpus:
-                    gpu_percent = gpus[0].load * 100
-                    self.gpu_usage_label.setText(f"GPU 使用率: {gpu_percent:.1f}%")
-                    self.gpu_usage_progress.setValue(int(gpu_percent))
-                else:
-                    self.gpu_usage_label.setText("GPU 使用率: 无法获取")
-                    self.gpu_usage_progress.setValue(0)
-            except:
-                # 如果没有 GPUtil，显示 N/A
-                self.gpu_usage_label.setText("GPU 使用率: N/A (需安装 GPUtil)")
-                self.gpu_usage_progress.setValue(0)
-            
-            # 更新内存使用率
-            mem = psutil.virtual_memory()
-            mem_percent = mem.percent
-            self.mem_usage_label.setText(f"内存使用率: {mem_percent}% ({mem.used / (1024**3):.2f} GB / {mem.total / (1024**3):.2f} GB)")
-            self.mem_usage_progress.setValue(int(mem_percent))
-            
-            # 更新性能信息 - 显示真实进程列表（降低频率）
-            if hasattr(self, 'perf_table'):
-                self.update_process_table()
-            
-            # 更新磁盘信息（真实数据）
-            if hasattr(self, 'disk_table'):
-                self.update_disk_info()
-            
-        except Exception as e:
-            print(f"更新资源信息失败: {e}")
-    
-    def update_process_table(self):
-        """更新进程列表表格（真实数据）"""
-        try:
-            import psutil
-            
-            # 获取所有进程并按 CPU 使用率排序
-            processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']):
-                try:
-                    pinfo = proc.info
-                    if pinfo['name'] and pinfo['memory_info']:
-                        mem_mb = pinfo['memory_info'].rss / (1024 * 1024)
-                        cpu_pct = pinfo['cpu_percent'] or 0.0
-                        processes.append({
-                            'name': pinfo['name'],
-                            'pid': pinfo['pid'],
-                            'cpu': cpu_pct,
-                            'memory': mem_mb
-                        })
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            
-            # 按 CPU 使用率排序，取前15个
-            processes.sort(key=lambda x: x['cpu'], reverse=True)
-            top_processes = processes[:15]
-            
-            # 更新表格
-            self.perf_table.setRowCount(len(top_processes))
-            for i, proc in enumerate(top_processes):
-                self.perf_table.setItem(i, 0, QTableWidgetItem(proc['name']))
-                self.perf_table.setItem(i, 1, QTableWidgetItem(str(proc['pid'])))
-                self.perf_table.setItem(i, 2, QTableWidgetItem(f"{proc['cpu']:.1f}"))
-                self.perf_table.setItem(i, 3, QTableWidgetItem(f"{proc['memory']:.1f}"))
-                self.perf_table.setItem(i, 4, QTableWidgetItem("运行中"))
-            
-            # 更新性能信息标签
-            total_procs = len(processes)
-            self.perf_info.setText(f"共 {total_procs} 个进程 | 更新时间: {self.get_current_time()}")
-            
-        except Exception as e:
-            self.perf_info.setText(f"获取进程信息失败: {str(e)}")
-    
-    def update_disk_info(self):
-        """更新磁盘信息（真实数据）"""
-        try:
-            import psutil
-            
-            # 清空旧的进度条
-            while self.disk_progress_layout.count():
-                item = self.disk_progress_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-            
-            # 获取所有磁盘分区
-            partitions = psutil.disk_partitions()
-            disk_rows = []
-            
-            for partition in partitions:
-                try:
-                    # 跳过光盘驱动器等
-                    if 'cdrom' in partition.opts or partition.fstype == '':
-                        continue
-                    
-                    usage = psutil.disk_usage(partition.mountpoint)
-                    
-                    # 创建进度条和标签
-                    progress = QProgressBar()
-                    progress.setRange(0, 100)
-                    progress.setValue(int(usage.percent))
-                    
-                    label_text = f"{partition.device} ({partition.mountpoint}) - {usage.percent:.1f}% 已用"
-                    label = QLabel(label_text)
-                    
-                    self.disk_progress_layout.addWidget(label)
-                    self.disk_progress_layout.addWidget(progress)
-                    
-                    # 添加到表格数据
-                    total_gb = usage.total / (1024**3)
-                    used_gb = usage.used / (1024**3)
-                    free_gb = usage.free / (1024**3)
-                    
-                    disk_rows.append([
-                        partition.device,
-                        partition.fstype,
-                        f"{total_gb:.1f} GB",
-                        f"{used_gb:.1f} GB",
-                        f"{free_gb:.1f} GB"
-                    ])
-                    
-                except PermissionError:
-                    continue
-            
-            # 更新磁盘详细信息表格
-            self.disk_table.setRowCount(len(disk_rows))
-            for i, row_data in enumerate(disk_rows):
-                for j, value in enumerate(row_data):
-                    self.disk_table.setItem(i, j, QTableWidgetItem(value))
-            
-            # 更新磁盘信息标签
-            self.disk_info.setText(f"共 {len(disk_rows)} 个分区 | 更新时间: {self.get_current_time()}")
-            
-        except Exception as e:
-            self.disk_info.setText(f"获取磁盘信息失败: {str(e)}")
+
     
     # ==================== 槽函数 ====================
     
@@ -1812,10 +1716,6 @@ class MainWindow(QMainWindow):
         """退出应用程序 - 真正关闭整个系统"""
         print("🔄 正在关闭系统...")
         
-        # 停止资源监控定时器（如果启用）
-        if hasattr(self, 'resource_timer') and self.resource_timer:
-            self.resource_timer.stop()
-        
         # 停止所有工作线程
         if self.screenshot_worker:
             print("⏳ 正在停止截图监听...")
@@ -1886,10 +1786,6 @@ class MainWindow(QMainWindow):
         
         # 真正退出时的清理工作
         print("🔄 正在关闭系统...")
-        
-        # 停止资源监控定时器（如果启用）
-        if hasattr(self, 'resource_timer') and self.resource_timer:
-            self.resource_timer.stop()
         
         # 停止所有工作线程
         if self.screenshot_worker:
