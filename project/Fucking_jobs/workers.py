@@ -192,7 +192,7 @@ class LLMWorker(QThread):
 
 
 class KimiWorker(QThread):
-    """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型）"""
+    """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型+智能降级）"""
     
     kimi_completed = Signal(str, float)   # Kimi 完成信号，参数为响应文本和耗时(秒)
     error_occurred = Signal(str)   # 错误信号
@@ -210,6 +210,15 @@ class KimiWorker(QThread):
     # SiliconFlow API 配置
     SILICONFLOW_API_KEY = "sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln"
     SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+    
+    # 类级别计数器：记录主模型连续失败次数（跨线程实例共享）
+    _primary_model_fail_count = 0
+    _primary_model_fail_threshold = 2  # 连续失败阈值
+    _switched_to_backup = False  # 是否已切换到备选模型
+    _current_backup_index = 0  # 当前使用的备选模型索引
+    _backup_success_count = 0  # 备选模型连续成功次数
+    _backup_success_threshold = 10  # 备选模型连续成功阈值（用于尝试恢复主模型）
+    _auto_recovery_enabled = True  # 启用自动恢复机制
     
     def __init__(self, api_key, image_path, prompt):
         super().__init__()
@@ -238,26 +247,71 @@ class KimiWorker(QThread):
             ext = os.path.splitext(self.image_path)[1].lstrip('.')
             image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
             
-            # 1. 首先尝试 Kimi 主模型
-            try:
-                print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
-                content = self._call_moonshot_api(image_url)
-                elapsed_time = time.time() - start_time
-                print(f"✅ Kimi 调用成功 (耗时: {elapsed_time:.2f}s)")
-                self.kimi_completed.emit(content, elapsed_time)
-                return
-            except Exception as e:
-                print(f"⚠️ 主模型 Kimi 调用失败: {str(e)}")
-                print(f"🔄 开始尝试备选模型...")
+            # 智能模型选择策略
+            use_primary_model = False
             
-            # 2. 依次尝试备选模型
-            total_elapsed = 0.0
-            for i, model in enumerate(self.BACKUP_MODELS, 1):
+            # 情况1：未切换状态，尝试主模型
+            if not self._switched_to_backup:
+                use_primary_model = True
+            
+            # 情况2：已切换状态，但备选模型连续成功达到阈值，尝试恢复主模型
+            elif (self._switched_to_backup and 
+                  self._backup_success_count >= self._backup_success_threshold and 
+                  self._auto_recovery_enabled):
+                print(f"🔍 备选模型已连续成功 {self._backup_success_count} 次，尝试恢复主模型...")
+                self._switched_to_backup = False
+                self._primary_model_fail_count = 0  # 重置失败计数
+                self._backup_success_count = 0  # 重置成功计数
+                use_primary_model = True
+            
+            # 执行调用逻辑
+            if use_primary_model:
+                # 尝试主模型
                 try:
-                    print(f"🤖 尝试备选模型 {i}/{len(self.BACKUP_MODELS)}: {model}")
+                    print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
+                    content = self._call_moonshot_api(image_url)
+                    elapsed_time = time.time() - start_time
+                    print(f"✅ Kimi 主模型调用成功 (耗时: {elapsed_time:.2f}s)")
+                    
+                    # 主模型成功，重置失败计数
+                    self.__class__._primary_model_fail_count = 0
+                    self.__class__._backup_success_count = 0  # 重置备选成功计数
+                    self.kimi_completed.emit(content, elapsed_time)
+                    return
+                    
+                except Exception as e:
+                    print(f"⚠️ 主模型 Kimi 调用失败: {str(e)}")
+                    # 增加失败计数
+                    self.__class__._primary_model_fail_count += 1
+                    
+                    # 检查是否达到阈值
+                    if self.__class__._primary_model_fail_count >= self.__class__._primary_model_fail_threshold:
+                        print(f"🚨 主模型连续失败 {self.__class__._primary_model_fail_count} 次，永久切换至备选模型！")
+                        self.__class__._switched_to_backup = True
+                        self.__class__._backup_success_count = 0  # 重置备选成功计数
+                    else:
+                        remaining = self.__class__._primary_model_fail_threshold - self.__class__._primary_model_fail_count
+                        print(f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
+                    
+                    # 切换至备选模型重试（效率优先：不重试主模型）
+                    backup_index = self.__class__._current_backup_index
+                    model = self.BACKUP_MODELS[backup_index]
+                    
+            # 使用备选模型（已切换或主模型失败）
+            if not use_primary_model or (use_primary_model and self._primary_model_fail_count > 0):
+                # 选择备选模型
+                backup_index = self.__class__._current_backup_index
+                model = self.BACKUP_MODELS[backup_index]
+                
+                try:
+                    print(f"🤖 使用备选模型 {backup_index + 1}/{len(self.BACKUP_MODELS)}: {model}")
                     content = self._call_siliconflow_api(image_url, model)
                     total_elapsed = time.time() - start_time
                     print(f"✅ 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
+                    
+                    # 备选模型成功，更新状态
+                    self.__class__._backup_success_count += 1
+                    self.__class__._current_backup_index = (backup_index + 1) % len(self.BACKUP_MODELS)
                     
                     # 在结果前添加使用的模型信息
                     result_with_model = f"[使用模型: {model}]\n\n{content}"
@@ -266,16 +320,35 @@ class KimiWorker(QThread):
                     
                 except Exception as e:
                     print(f"⚠️ 备选模型 {model} 调用失败: {str(e)}")
-                    continue
+                    # 备选模型也失败，重置成功计数，尝试下一个
+                    self.__class__._backup_success_count = 0
+                    self.__class__._current_backup_index = (backup_index + 1) % len(self.BACKUP_MODELS)
             
-            # 所有模型都失败
-            self.error_occurred.emit(f"所有模型均调用失败（主模型 + {len(self.BACKUP_MODELS)}个备选模型）")
+            # 所有尝试都失败
+            self.error_occurred.emit(f"所有模型均调用失败（主模型 + 备选模型）")
             
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
             print(f"Kimi 工作线程错误详情:\n{error_detail}")
             self.error_occurred.emit(f"图片分析失败: {str(e)}")
+    
+    @classmethod
+    def reset_model_state(cls):
+        """重置所有模型状态（可用于手动恢复主模型）"""
+        cls._primary_model_fail_count = 0
+        cls._switched_to_backup = False
+        cls._current_backup_index = 0
+        cls._backup_success_count = 0
+        print("🔄 KimiWorker 模型状态已重置，将重新尝试主模型")
+    
+    @classmethod
+    def force_use_primary(cls):
+        """强制使用主模型（忽略失败计数）"""
+        cls._primary_model_fail_count = 0
+        cls._switched_to_backup = False
+        cls._backup_success_count = 0
+        print("⚡ 已强制切换至主模型")
     
     def _call_moonshot_api(self, image_url):
         """调用 Moonshot (Kimi) API"""
