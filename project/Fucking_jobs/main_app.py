@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer
 from PySide6.QtGui import QFont, QTextCursor
 
 # 导入工作线程类
-from workers import (ScreenshotWorker, OCRWorker, LLMWorker, WebSocketServerWorker)
+from workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
 
 
 class MainWindow(QMainWindow):
@@ -29,12 +29,14 @@ class MainWindow(QMainWindow):
         self.screenshot_worker = None
         self.ocr_worker = None
         self.llm_worker = None
+        self.kimi_worker = None
         self.websocket_worker = None
         
         # 数据存储
         self.current_image_path = None
         self.ocr_result = ""
         self.llm_result = ""
+        self.kimi_result = ""
         
         # 时间记录
         self.screenshot_timestamp = None  # 快捷键触发时间
@@ -53,6 +55,9 @@ class MainWindow(QMainWindow):
         
         # 延迟启动截图监听（等待 UI 完全加载）
         QTimer.singleShot(500, self.auto_start_screenshot)
+        
+        # 延迟启动快速分析快捷键（Alt+Z）
+        QTimer.singleShot(1000, self.start_quick_analysis_hotkey)
         
     def init_ui(self):
         """初始化用户界面"""
@@ -278,6 +283,24 @@ class MainWindow(QMainWindow):
         # 模拟点击按钮启动截图监听
         self.toggle_screenshot(True)
     
+    def start_quick_analysis_hotkey(self):
+        """启动快速分析快捷键（Alt+Z）"""
+        try:
+            from pynput import keyboard
+            import threading
+            
+            # 创建全局热键监听器
+            self.quick_analysis_listener = keyboard.GlobalHotKeys({
+                '<alt>+z': self.on_quick_analysis_triggered
+            })
+            self.quick_analysis_listener.start()
+            
+            self.statusBar().showMessage("快速分析快捷键已启用 (Alt+Z)")
+            print("✅ 快速分析快捷键 Alt+Z 已启用")
+            
+        except Exception as e:
+            print(f"❌ 快速分析快捷键启动失败: {e}")
+    
     @Slot()
     def toggle_screenshot(self, checked):
         """切换截图监听状态"""
@@ -327,6 +350,47 @@ class MainWindow(QMainWindow):
         # 如果启用了自动 OCR
         if self.auto_ocr_check.isChecked():
             self.start_ocr()
+    
+    def on_quick_analysis_triggered(self):
+        """快速分析快捷键触发（Alt+Z）"""
+        print("🚀 快速分析流程启动...")
+        
+        # 1. 先进行截图
+        self.perform_quick_screenshot()
+    
+    def perform_quick_screenshot(self):
+        """执行快速截图"""
+        try:
+            import mss
+            from PIL import Image
+            from datetime import datetime
+            
+            # 创建截图目录
+            save_dir = "./screenshots"
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 截取屏幕
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                screenshot = sct.grab(monitor)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+                
+                # 生成文件名
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                filename = f"quick_{timestamp}.png"
+                filepath = os.path.join(save_dir, filename)
+                
+                # 保存图片
+                img.save(filepath)
+                
+                print(f"📸 快速截图完成: {filename}")
+                
+                # 2. 调用 Kimi 分析
+                self.start_kimi_analysis(filepath)
+                
+        except Exception as e:
+            print(f"❌ 快速截图失败: {e}")
+            self.statusBar().showMessage(f"快速截图失败: {str(e)}")
     
     @Slot()
     def start_ocr(self):
@@ -436,6 +500,114 @@ class MainWindow(QMainWindow):
             else:
                 self.statusBar().showMessage("LLM 分析完成")
     
+    def start_kimi_analysis(self, image_path):
+        """开始 Kimi 图片分析"""
+        try:
+            # 使用 main_app 中的提示词
+            prompt = """你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+
+【任务要求】
+1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
+2. 根据题型给出对应的回答：
+
+【回答格式】
+
+📌 如果是编程题：
+- 提供完整的 Python 代码实现
+- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 代码需包含必要的注释和边界处理
+- 简要说明算法思路和时间复杂度
+- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
+
+📌 如果是选择题：
+- 直接给出正确答案的序号（如：答案：B）
+- 简要解释选择理由（1-2句话）
+- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
+
+📌 如果是简答题/概念题：
+- 给出清晰、结构化的回答
+- 分点阐述关键要点
+- 适当举例说明
+- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
+
+📌 如果是系统设计题：
+- 给出系统架构设计思路
+- 列出关键技术选型
+- 说明核心流程和注意事项
+
+📌 如果是性格测试题：
+- 选择积极乐观、团队协作导向的选项
+- 体现责任心、学习能力、抗压能力等正面特质
+- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
+- 简要说明选择理由（1句话）
+
+
+
+【注意事项】
+- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
+- 回答要简洁专业，适合面试场景口头表达
+- 代码题必须提供可运行的完整代码
+- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
+- 每个题目之间用 --- 分割线隔开"""
+            
+            # 使用 use_LLM_kimi.py 中的 API Key
+            api_key = "sk-v07YQ9sffsU4znH1hbODXsFsz7tkQrm6qpcYJoXLm4cqqaiE"
+            
+            print(f"🤖 开始 Kimi 分析...")
+            self.statusBar().showMessage("正在调用 Kimi 分析图片...")
+            
+            # 创建并启动 Kimi 工作线程
+            self.kimi_worker = KimiWorker(api_key, image_path, prompt)
+            self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)
+            self.kimi_worker.error_occurred.connect(self.on_error)
+            self.kimi_worker.start()
+            
+        except Exception as e:
+            print(f"❌ 启动 Kimi 分析失败: {e}")
+            self.statusBar().showMessage(f"Kimi 分析启动失败: {str(e)}")
+    
+    @Slot(str, float)
+    def on_kimi_completed(self, kimi_text, elapsed_time):
+        """Kimi 完成回调"""
+        self.kimi_result = kimi_text
+        
+        # 在 LLM 结果区显示（因为是分析结果）
+        self.llm_result_text.setText(kimi_text)
+        self.llm_elapsed = elapsed_time
+        
+        # 显示 Kimi 耗时
+        self.llm_time_label.setText(f"⏱️ {elapsed_time:.2f}s (Kimi)")
+        
+        # 计算整体耗时
+        total_elapsed = 0.0
+        if self.screenshot_timestamp:
+            total_elapsed = time.time() - self.screenshot_timestamp
+        
+        print(f"✅ Kimi 分析完成 (耗时: {elapsed_time:.2f}s)")
+        
+        # 如果 WebSocket 已启动且有客户端连接，自动发送结果
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            # 构建发送消息
+            message = f"""🤖 Kimi 智能分析结果
+
+{kimi_text}
+
+⏰ {self.get_current_time()}"""
+            
+            # 发送消息
+            self.websocket_worker.send_message(message)
+            
+            if total_elapsed > 0:
+                self.statusBar().showMessage(f"Kimi 分析完成 (总耗时: {total_elapsed:.2f}s)，已发送到手机")
+            else:
+                self.statusBar().showMessage("Kimi 分析完成，已发送到手机")
+        else:
+            if total_elapsed > 0:
+                self.statusBar().showMessage(f"Kimi 分析完成 (总耗时: {total_elapsed:.2f}s)，请手动发送")
+            else:
+                self.statusBar().showMessage("Kimi 分析完成，请手动发送")
+    
     @Slot()
     def toggle_websocket(self, checked):
         """切换 WebSocket 服务状态"""
@@ -527,9 +699,17 @@ class MainWindow(QMainWindow):
             self.screenshot_worker.stop()
             self.screenshot_worker.wait()
         
+        if self.kimi_worker:
+            self.kimi_worker.terminate()
+            self.kimi_worker.wait()
+        
         if self.websocket_worker:
             self.websocket_worker.stop()
             self.websocket_worker.wait()
+        
+        # 停止快速分析监听器
+        if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
+            self.quick_analysis_listener.stop()
         
         event.accept()
 

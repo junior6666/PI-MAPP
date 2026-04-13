@@ -185,6 +185,81 @@ class LLMWorker(QThread):
             self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
 
 
+class KimiWorker(QThread):
+    """Kimi 工作线程 - 调用 Kimi API 进行图片分析"""
+    
+    kimi_completed = Signal(str, float)   # Kimi 完成信号，参数为响应文本和耗时（秒）
+    error_occurred = Signal(str)   # 错误信号
+    
+    def __init__(self, api_key, image_path, prompt):
+        super().__init__()
+        self.api_key = api_key
+        self.image_path = image_path
+        self.prompt = prompt
+        
+    def run(self):
+        """调用 Kimi API"""
+        try:
+            import base64
+            from openai import OpenAI
+            
+            start_time = time.time()
+            
+            # 检查文件是否存在
+            if not os.path.exists(self.image_path):
+                self.error_occurred.emit(f"图片文件不存在: {self.image_path}")
+                return
+            
+            # 读取并编码图片
+            with open(self.image_path, "rb") as f:
+                image_data = f.read()
+            
+            # 获取图片扩展名
+            ext = os.path.splitext(self.image_path)[1].lstrip('.')
+            image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
+            
+            # 创建 OpenAI 客户端
+            client = OpenAI(
+                api_key=self.api_key,
+                base_url="https://api.moonshot.cn/v1",
+            )
+            
+            # 调用 API
+            completion = client.chat.completions.create(
+                model="kimi-k2.5",
+                messages=[
+                    {"role": "system", "content": "你是专业的面试助手。"},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": self.prompt,
+                            },
+                        ],
+                    },
+                ],
+            )
+            
+            elapsed_time = time.time() - start_time
+            
+            # 提取回复内容
+            content = completion.choices[0].message.content
+            self.kimi_completed.emit(content, elapsed_time)
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"Kimi API 错误详情:\n{error_detail}")
+            self.error_occurred.emit(f"Kimi API 调用失败: {str(e)}")
+
+
 class WebSocketServerWorker(QThread):
     """WebSocket 服务器工作线程 - 局域网通信"""
     
