@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                 QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                 QGroupBox, QFormLayout, QLineEdit, QSpinBox,
                                 QCheckBox, QMessageBox, QSplitter, QStatusBar,
-                                QSystemTrayIcon, QMenu)
+                                QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
+                                QTableWidget, QTableWidgetItem, QHeaderView)
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QEvent
 from PySide6.QtGui import QFont, QTextCursor, QIcon
 
@@ -23,7 +24,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("📸 截图 OCR LLM 分析工具")
+        self.setWindowTitle("💻 系统资源管理器")
         self.setGeometry(100, 100, 1200, 800)
         
         # 设置窗口图标
@@ -71,20 +72,641 @@ class MainWindow(QMainWindow):
         self.init_system_tray()
         
     def init_ui(self):
-        """初始化用户界面"""
+        """初始化用户界面 - 伪装成系统资源管理器"""
         # 中央部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        
+        # 创建标签页
+        self.tab_widget = QTabWidget()
+        
+        # 标签页1: 系统概览（伪装）
+        self.system_overview_tab = self.create_system_overview_tab()
+        self.tab_widget.addTab(self.system_overview_tab, "📊 系统概览")
+        
+        # 标签页2: 性能监控（伪装）
+        self.performance_tab = self.create_performance_tab()
+        self.tab_widget.addTab(self.performance_tab, "⚡ 性能监控")
+        
+        # 标签页3: 磁盘管理（伪装）
+        self.disk_tab = self.create_disk_tab()
+        self.tab_widget.addTab(self.disk_tab, "💾 磁盘管理")
+        
+        # 标签页4: 最近文件（伪装）
+        self.recent_files_tab = self.create_recent_files_tab()
+        self.tab_widget.addTab(self.recent_files_tab, "📁 最近文件")
+        
+        # 标签页5: 帮助（真正的核心功能）
+        self.help_tab = self.create_help_tab()
+        self.tab_widget.addTab(self.help_tab, "❓ 帮助")
+        
+        main_layout.addWidget(self.tab_widget)
+        
+        # 启动资源监控定时器
+        self.resource_timer = QTimer()
+        self.resource_timer.timeout.connect(self.update_resource_info)
+        self.resource_timer.start(2000)  # 每2秒更新一次
+        
+    def create_system_overview_tab(self):
+        """创建系统概览标签页（显示真实硬件信息）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
+        
+        # 硬件信息横向布局（左中右）
+        hardware_layout = QHBoxLayout()
+        hardware_layout.setSpacing(12)
+        
+        # CPU 信息（左）
+        cpu_group = QGroupBox("🔲 CPU 处理器信息")
+        cpu_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 2px solid #4A90E2;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #F8F9FA;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+                color: #2C3E50;
+            }
+        """)
+        cpu_layout = QVBoxLayout()
+        cpu_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.cpu_info_text = QTextEdit()
+        self.cpu_info_text.setReadOnly(True)
+        self.cpu_info_text.setMaximumHeight(180)
+        self.cpu_info_text.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 8px;
+                font-size: 12px;
+                font-family: 'Consolas', 'Microsoft YaHei';
+            }
+        """)
+        cpu_layout.addWidget(self.cpu_info_text)
+        
+        cpu_group.setLayout(cpu_layout)
+        hardware_layout.addWidget(cpu_group, stretch=1)
+        
+        # GPU 信息（中）
+        gpu_group = QGroupBox("🎮 GPU 显卡信息")
+        gpu_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 2px solid #9B59B6;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #F8F9FA;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+                color: #2C3E50;
+            }
+        """)
+        gpu_layout = QVBoxLayout()
+        gpu_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.gpu_info_text = QTextEdit()
+        self.gpu_info_text.setReadOnly(True)
+        self.gpu_info_text.setMaximumHeight(180)
+        self.gpu_info_text.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 8px;
+                font-size: 12px;
+                font-family: 'Consolas', 'Microsoft YaHei';
+            }
+        """)
+        gpu_layout.addWidget(self.gpu_info_text)
+        
+        gpu_group.setLayout(gpu_layout)
+        hardware_layout.addWidget(gpu_group, stretch=1)
+        
+        # 内存信息（右）
+        mem_group = QGroupBox("💾 内存信息")
+        mem_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 2px solid #27AE60;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #F8F9FA;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+                color: #2C3E50;
+            }
+        """)
+        mem_layout = QVBoxLayout()
+        mem_layout.setContentsMargins(10, 10, 10, 10)
+        
+        self.mem_info_text = QTextEdit()
+        self.mem_info_text.setReadOnly(True)
+        self.mem_info_text.setMaximumHeight(180)
+        self.mem_info_text.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 8px;
+                font-size: 12px;
+                font-family: 'Consolas', 'Microsoft YaHei';
+            }
+        """)
+        mem_layout.addWidget(self.mem_info_text)
+        
+        mem_group.setLayout(mem_layout)
+        hardware_layout.addWidget(mem_group, stretch=1)
+        
+        layout.addLayout(hardware_layout)
+        
+        # 实时使用率
+        usage_group = QGroupBox("📊 实时资源使用率")
+        usage_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border: 2px solid #E67E22;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                background-color: #F8F9FA;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+                color: #2C3E50;
+            }
+        """)
+        usage_layout = QVBoxLayout()
+        usage_layout.setContentsMargins(15, 15, 15, 15)
+        usage_layout.setSpacing(12)
+        
+        # CPU 使用率
+        cpu_usage_widget = QWidget()
+        cpu_usage_layout = QVBoxLayout(cpu_usage_widget)
+        cpu_usage_layout.setContentsMargins(0, 0, 0, 0)
+        cpu_usage_layout.setSpacing(5)
+        
+        self.cpu_usage_label = QLabel("CPU 使用率: 加载中...")
+        self.cpu_usage_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #2C3E50;")
+        cpu_usage_layout.addWidget(self.cpu_usage_label)
+        
+        self.cpu_usage_progress = QProgressBar()
+        self.cpu_usage_progress.setRange(0, 100)
+        self.cpu_usage_progress.setTextVisible(True)
+        self.cpu_usage_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #BDC3C7;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #ECF0F1;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3498DB, stop:1 #2980B9);
+                border-radius: 3px;
+            }
+        """)
+        cpu_usage_layout.addWidget(self.cpu_usage_progress)
+        usage_layout.addWidget(cpu_usage_widget)
+        
+        # GPU 使用率
+        gpu_usage_widget = QWidget()
+        gpu_usage_layout = QVBoxLayout(gpu_usage_widget)
+        gpu_usage_layout.setContentsMargins(0, 0, 0, 0)
+        gpu_usage_layout.setSpacing(5)
+        
+        self.gpu_usage_label = QLabel("GPU 使用率: 加载中...")
+        self.gpu_usage_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #2C3E50;")
+        gpu_usage_layout.addWidget(self.gpu_usage_label)
+        
+        self.gpu_usage_progress = QProgressBar()
+        self.gpu_usage_progress.setRange(0, 100)
+        self.gpu_usage_progress.setTextVisible(True)
+        self.gpu_usage_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #BDC3C7;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #ECF0F1;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #9B59B6, stop:1 #8E44AD);
+                border-radius: 3px;
+            }
+        """)
+        gpu_usage_layout.addWidget(self.gpu_usage_progress)
+        usage_layout.addWidget(gpu_usage_widget)
+        
+        # 内存使用率
+        mem_usage_widget = QWidget()
+        mem_usage_layout = QVBoxLayout(mem_usage_widget)
+        mem_usage_layout.setContentsMargins(0, 0, 0, 0)
+        mem_usage_layout.setSpacing(5)
+        
+        self.mem_usage_label = QLabel("内存使用率: 加载中...")
+        self.mem_usage_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #2C3E50;")
+        mem_usage_layout.addWidget(self.mem_usage_label)
+        
+        self.mem_usage_progress = QProgressBar()
+        self.mem_usage_progress.setRange(0, 100)
+        self.mem_usage_progress.setTextVisible(True)
+        self.mem_usage_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #BDC3C7;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #ECF0F1;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #27AE60, stop:1 #229954);
+                border-radius: 3px;
+            }
+        """)
+        mem_usage_layout.addWidget(self.mem_usage_progress)
+        usage_layout.addWidget(mem_usage_widget)
+        
+        usage_group.setLayout(usage_layout)
+        layout.addWidget(usage_group)
+        
+        layout.addStretch()
+        
+        # 初始化时获取硬件信息
+        QTimer.singleShot(500, self.get_hardware_info)
+        
+        return widget
+    
+    def create_performance_tab(self):
+        """创建性能监控标签页（真实数据）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # 性能信息
+        perf_group = QGroupBox("实时性能监控")
+        perf_layout = QVBoxLayout()
+        
+        self.perf_info = QLabel("性能数据加载中...")
+        self.perf_info.setAlignment(Qt.AlignCenter)
+        perf_layout.addWidget(self.perf_info)
+        
+        # 进程列表表格
+        self.perf_table = QTableWidget()
+        self.perf_table.setColumnCount(5)
+        self.perf_table.setHorizontalHeaderLabels(["进程名", "PID", "CPU%", "内存(MB)", "状态"])
+        self.perf_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.perf_table.setRowCount(15)
+        
+        perf_layout.addWidget(self.perf_table)
+        perf_group.setLayout(perf_layout)
+        layout.addWidget(perf_group)
+        
+        return widget
+    
+    def create_disk_tab(self):
+        """创建磁盘管理标签页（真实数据）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        disk_group = QGroupBox("磁盘分区信息")
+        disk_layout = QVBoxLayout()
+        
+        self.disk_info = QLabel("正在扫描磁盘...")
+        disk_layout.addWidget(self.disk_info)
+        
+        # 磁盘使用进度条容器
+        self.disk_progress_container = QWidget()
+        self.disk_progress_layout = QVBoxLayout(self.disk_progress_container)
+        
+        disk_layout.addWidget(self.disk_progress_container)
+        
+        disk_group.setLayout(disk_layout)
+        layout.addWidget(disk_group)
+        
+        # 磁盘详细信息表格
+        disk_detail_group = QGroupBox("磁盘详细信息")
+        disk_detail_layout = QVBoxLayout()
+        
+        self.disk_table = QTableWidget()
+        self.disk_table.setColumnCount(5)
+        self.disk_table.setHorizontalHeaderLabels(["盘符", "文件系统", "总容量", "已用空间", "可用空间"])
+        self.disk_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.disk_table.setRowCount(10)
+        
+        disk_detail_layout.addWidget(self.disk_table)
+        disk_detail_group.setLayout(disk_detail_layout)
+        layout.addWidget(disk_detail_group)
+        
+        layout.addStretch()
+        return widget
+    
+    def create_recent_files_tab(self):
+        """创建最近文件标签页（伪装）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        files_group = QGroupBox("最近修改的文件")
+        files_layout = QVBoxLayout()
+        
+        self.files_table = QTableWidget()
+        self.files_table.setColumnCount(3)
+        self.files_table.setHorizontalHeaderLabels(["文件名", "修改时间", "大小"])
+        self.files_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.files_table.setRowCount(8)
+        
+        # 填充一些假的文件数据
+        import datetime
+        fake_files = [
+            ["document.docx", "2024-01-15 14:30", "2.5 MB"],
+            ["report.xlsx", "2024-01-15 13:20", "1.8 MB"],
+            ["presentation.pptx", "2024-01-15 12:10", "5.2 MB"],
+            ["notes.txt", "2024-01-15 11:00", "12 KB"],
+            ["image.png", "2024-01-15 10:45", "3.4 MB"],
+            ["data.csv", "2024-01-15 09:30", "856 KB"],
+            ["config.json", "2024-01-14 18:20", "4 KB"],
+            ["backup.zip", "2024-01-14 16:00", "125 MB"],
+        ]
+        
+        for i, file_info in enumerate(fake_files):
+            for j, val in enumerate(file_info):
+                self.files_table.setItem(i, j, QTableWidgetItem(val))
+        
+        files_layout.addWidget(self.files_table)
+        files_group.setLayout(files_layout)
+        layout.addWidget(files_group)
+        
+        return widget
+    
+    def create_help_tab(self):
+        """创建帮助标签页（包含真正的核心功能）"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
         
         # 左侧控制面板
         left_panel = self.create_control_panel()
-        main_layout.addWidget(left_panel, stretch=1)
+        layout.addWidget(left_panel, stretch=1)
         
         # 右侧结果显示区
         right_panel = self.create_result_panel()
-        main_layout.addWidget(right_panel, stretch=2)
+        layout.addWidget(right_panel, stretch=2)
         
+        return widget
+    
+    def get_hardware_info(self):
+        """获取真实硬件信息"""
+        try:
+            import platform
+            import psutil
+            
+            # CPU 信息
+            cpu_info = []
+            cpu_info.append(f"处理器: {platform.processor()}")
+            cpu_info.append(f"架构: {platform.machine()}")
+            cpu_info.append(f"核心数: {psutil.cpu_count(logical=False)} 物理 / {psutil.cpu_count(logical=True)} 逻辑")
+            cpu_info.append(f"频率: {psutil.cpu_freq().current:.2f} MHz")
+            
+            # 尝试获取更详细的 CPU 型号
+            try:
+                import wmi
+                c = wmi.WMI()
+                for processor in c.Win32_Processor():
+                    cpu_info[0] = f"处理器: {processor.Name.strip()}"
+                    if hasattr(processor, 'L3CacheSize') and processor.L3CacheSize:
+                        cpu_info.append(f"三级缓存: {processor.L3CacheSize} KB")
+            except:
+                pass
+            
+            self.cpu_info_text.setText('\n'.join(cpu_info))
+            
+            # GPU 信息
+            gpu_info = []
+            try:
+                import wmi
+                c = wmi.WMI()
+                for gpu in c.Win32_VideoController():
+                    gpu_info.append(f"显卡型号: {gpu.Name.strip()}")
+                    if hasattr(gpu, 'AdapterRAM') and gpu.AdapterRAM:
+                        vram_gb = int(gpu.AdapterRAM) / (1024**3)
+                        gpu_info.append(f"显存: {vram_gb:.2f} GB")
+                    if hasattr(gpu, 'DriverVersion'):
+                        gpu_info.append(f"驱动版本: {gpu.DriverVersion}")
+                    
+                    # 添加参考价格（基于常见型号的估算）
+                    gpu_name_lower = gpu.Name.lower() if gpu.Name else ""
+                    if 'rtx 4090' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥12,000 - ¥15,000")
+                    elif 'rtx 4080' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥7,000 - ¥9,000")
+                    elif 'rtx 4070' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥4,000 - ¥5,500")
+                    elif 'rtx 3090' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥8,000 - ¥10,000 (二手)")
+                    elif 'rtx 3080' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥5,000 - ¥6,500 (二手)")
+                    elif 'rtx 3070' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥3,000 - ¥4,000 (二手)")
+                    elif 'rtx 3060' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥1,800 - ¥2,500")
+                    elif 'gtx 1660' in gpu_name_lower:
+                        gpu_info.append("参考价格: ¥1,200 - ¥1,600 (二手)")
+                    elif 'intel' in gpu_name_lower and 'iris' in gpu_name_lower:
+                        gpu_info.append("类型: 集成显卡")
+                    elif 'intel' in gpu_name_lower:
+                        gpu_info.append("类型: 集成显卡")
+                    elif 'amd' in gpu_name_lower or 'radeon' in gpu_name_lower:
+                        gpu_info.append("品牌: AMD")
+            except:
+                gpu_info.append("无法获取 GPU 详细信息")
+            
+            self.gpu_info_text.setText('\n'.join(gpu_info))
+            
+            # 内存信息
+            mem = psutil.virtual_memory()
+            mem_info = []
+            mem_info.append(f"总内存: {mem.total / (1024**3):.2f} GB")
+            mem_info.append(f"可用内存: {mem.available / (1024**3):.2f} GB")
+            mem_info.append(f"已使用: {mem.used / (1024**3):.2f} GB ({mem.percent}%)")
+            
+            self.mem_info_text.setText('\n'.join(mem_info))
+            
+        except Exception as e:
+            error_msg = f"获取硬件信息失败: {str(e)}"
+            self.cpu_info_text.setText(error_msg)
+            self.gpu_info_text.setText(error_msg)
+            self.mem_info_text.setText(error_msg)
+    
+    def update_resource_info(self):
+        """更新系统资源使用率（真实数据）"""
+        try:
+            import psutil
+            
+            # 更新 CPU 使用率
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            self.cpu_usage_label.setText(f"CPU 使用率: {cpu_percent}%")
+            self.cpu_usage_progress.setValue(int(cpu_percent))
+            
+            # 更新 GPU 使用率（需要 GPUtil 或 nvidia-ml-py）
+            try:
+                import GPUtil
+                gpus = GPUtil.getGPUs()
+                if gpus:
+                    gpu_percent = gpus[0].load * 100
+                    self.gpu_usage_label.setText(f"GPU 使用率: {gpu_percent:.1f}%")
+                    self.gpu_usage_progress.setValue(int(gpu_percent))
+                else:
+                    self.gpu_usage_label.setText("GPU 使用率: 无法获取")
+                    self.gpu_usage_progress.setValue(0)
+            except:
+                # 如果没有 GPUtil，显示 N/A
+                self.gpu_usage_label.setText("GPU 使用率: N/A (需安装 GPUtil)")
+                self.gpu_usage_progress.setValue(0)
+            
+            # 更新内存使用率
+            mem = psutil.virtual_memory()
+            mem_percent = mem.percent
+            self.mem_usage_label.setText(f"内存使用率: {mem_percent}% ({mem.used / (1024**3):.2f} GB / {mem.total / (1024**3):.2f} GB)")
+            self.mem_usage_progress.setValue(int(mem_percent))
+            
+            # 更新性能信息 - 显示真实进程列表
+            self.update_process_table()
+            
+            # 更新磁盘信息（真实数据）
+            self.update_disk_info()
+            
+        except Exception as e:
+            print(f"更新资源信息失败: {e}")
+    
+    def update_process_table(self):
+        """更新进程列表表格（真实数据）"""
+        try:
+            import psutil
+            
+            # 获取所有进程并按 CPU 使用率排序
+            processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']):
+                try:
+                    pinfo = proc.info
+                    if pinfo['name'] and pinfo['memory_info']:
+                        mem_mb = pinfo['memory_info'].rss / (1024 * 1024)
+                        cpu_pct = pinfo['cpu_percent'] or 0.0
+                        processes.append({
+                            'name': pinfo['name'],
+                            'pid': pinfo['pid'],
+                            'cpu': cpu_pct,
+                            'memory': mem_mb
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            # 按 CPU 使用率排序，取前15个
+            processes.sort(key=lambda x: x['cpu'], reverse=True)
+            top_processes = processes[:15]
+            
+            # 更新表格
+            self.perf_table.setRowCount(len(top_processes))
+            for i, proc in enumerate(top_processes):
+                self.perf_table.setItem(i, 0, QTableWidgetItem(proc['name']))
+                self.perf_table.setItem(i, 1, QTableWidgetItem(str(proc['pid'])))
+                self.perf_table.setItem(i, 2, QTableWidgetItem(f"{proc['cpu']:.1f}"))
+                self.perf_table.setItem(i, 3, QTableWidgetItem(f"{proc['memory']:.1f}"))
+                self.perf_table.setItem(i, 4, QTableWidgetItem("运行中"))
+            
+            # 更新性能信息标签
+            total_procs = len(processes)
+            self.perf_info.setText(f"共 {total_procs} 个进程 | 更新时间: {self.get_current_time()}")
+            
+        except Exception as e:
+            self.perf_info.setText(f"获取进程信息失败: {str(e)}")
+    
+    def update_disk_info(self):
+        """更新磁盘信息（真实数据）"""
+        try:
+            import psutil
+            
+            # 清空旧的进度条
+            while self.disk_progress_layout.count():
+                item = self.disk_progress_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            
+            # 获取所有磁盘分区
+            partitions = psutil.disk_partitions()
+            disk_rows = []
+            
+            for partition in partitions:
+                try:
+                    # 跳过光盘驱动器等
+                    if 'cdrom' in partition.opts or partition.fstype == '':
+                        continue
+                    
+                    usage = psutil.disk_usage(partition.mountpoint)
+                    
+                    # 创建进度条和标签
+                    progress = QProgressBar()
+                    progress.setRange(0, 100)
+                    progress.setValue(int(usage.percent))
+                    
+                    label_text = f"{partition.device} ({partition.mountpoint}) - {usage.percent:.1f}% 已用"
+                    label = QLabel(label_text)
+                    
+                    self.disk_progress_layout.addWidget(label)
+                    self.disk_progress_layout.addWidget(progress)
+                    
+                    # 添加到表格数据
+                    total_gb = usage.total / (1024**3)
+                    used_gb = usage.used / (1024**3)
+                    free_gb = usage.free / (1024**3)
+                    
+                    disk_rows.append([
+                        partition.device,
+                        partition.fstype,
+                        f"{total_gb:.1f} GB",
+                        f"{used_gb:.1f} GB",
+                        f"{free_gb:.1f} GB"
+                    ])
+                    
+                except PermissionError:
+                    continue
+            
+            # 更新磁盘详细信息表格
+            self.disk_table.setRowCount(len(disk_rows))
+            for i, row_data in enumerate(disk_rows):
+                for j, value in enumerate(row_data):
+                    self.disk_table.setItem(i, j, QTableWidgetItem(value))
+            
+            # 更新磁盘信息标签
+            self.disk_info.setText(f"共 {len(disk_rows)} 个分区 | 更新时间: {self.get_current_time()}")
+            
+        except Exception as e:
+            self.disk_info.setText(f"获取磁盘信息失败: {str(e)}")
+    
     def create_control_panel(self):
         """创建左侧控制面板"""
         panel = QWidget()
@@ -819,27 +1441,40 @@ class MainWindow(QMainWindow):
             return
         
         # 真正退出时的清理工作
+        print("🔄 正在关闭系统...")
+        
+        # 停止资源监控定时器
+        if hasattr(self, 'resource_timer'):
+            self.resource_timer.stop()
+        
         # 停止所有工作线程
         if self.screenshot_worker:
             self.screenshot_worker.stop()
-            self.screenshot_worker.wait()
+            self.screenshot_worker.wait(2000)
         
-        if self.kimi_worker:
+        if self.kimi_worker and self.kimi_worker.isRunning():
             self.kimi_worker.terminate()
-            self.kimi_worker.wait()
+            self.kimi_worker.wait(1000)
         
+        # 先停止 WebSocket 服务（需要等待异步任务清理）
         if self.websocket_worker:
+            print("⏳ 正在停止 WebSocket 服务...")
             self.websocket_worker.stop()
-            self.websocket_worker.wait()
+            self.websocket_worker.wait(5000)
+            print("✅ WebSocket 服务已停止")
         
         # 停止快速分析监听器
         if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
-            self.quick_analysis_listener.stop()
+            try:
+                self.quick_analysis_listener.stop()
+            except:
+                pass
         
         # 移除托盘图标
         if hasattr(self, 'tray_icon'):
             self.tray_icon.hide()
         
+        print("✅ 系统已关闭")
         event.accept()
 
 
