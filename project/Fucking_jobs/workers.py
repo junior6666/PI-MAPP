@@ -192,10 +192,24 @@ class LLMWorker(QThread):
 
 
 class KimiWorker(QThread):
-    """Kimi 工作线程 - 调用 Kimi API 进行图片分析"""
+    """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型）"""
     
-    kimi_completed = Signal(str, float)   # Kimi 完成信号，参数为响应文本和耗时（秒）
+    kimi_completed = Signal(str, float)   # Kimi 完成信号，参数为响应文本和耗时(秒)
     error_occurred = Signal(str)   # 错误信号
+    
+    # 后备模型列表（当主模型失败时依次尝试）
+    BACKUP_MODELS = [
+        'Qwen/Qwen3-Omni-30B-A3B-Instruct',
+        'Qwen/Qwen3-VL-8B-Instruct',
+        'Qwen/Qwen3-VL-32B-Instruct',
+        'Qwen/Qwen3-VL-235B-A22B-Instruct',
+        'zai-org/GLM-4.5V',
+        'Pro/moonshotai/Kimi-K2.5'
+    ]
+    
+    # SiliconFlow API 配置
+    SILICONFLOW_API_KEY = "sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln"
+    SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
     
     def __init__(self, api_key, image_path, prompt):
         super().__init__()
@@ -204,7 +218,7 @@ class KimiWorker(QThread):
         self.prompt = prompt
         
     def run(self):
-        """调用 Kimi API"""
+        """调用 Kimi API（失败时自动切换备选模型）"""
         try:
             import base64
             from openai import OpenAI
@@ -224,46 +238,109 @@ class KimiWorker(QThread):
             ext = os.path.splitext(self.image_path)[1].lstrip('.')
             image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
             
-            # 创建 OpenAI 客户端
-            client = OpenAI(
-                api_key=self.api_key,
-                base_url="https://api.moonshot.cn/v1",
-            )
+            # 1. 首先尝试 Kimi 主模型
+            try:
+                print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
+                content = self._call_moonshot_api(image_url)
+                elapsed_time = time.time() - start_time
+                print(f"✅ Kimi 调用成功 (耗时: {elapsed_time:.2f}s)")
+                self.kimi_completed.emit(content, elapsed_time)
+                return
+            except Exception as e:
+                print(f"⚠️ 主模型 Kimi 调用失败: {str(e)}")
+                print(f"🔄 开始尝试备选模型...")
             
-            # 调用 API
-            completion = client.chat.completions.create(
-                model="kimi-k2.5",
-                messages=[
-                    {"role": "system", "content": "你是专业的面试助手。"},
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": image_url,
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": self.prompt,
-                            },
-                        ],
-                    },
-                ],
-            )
+            # 2. 依次尝试备选模型
+            total_elapsed = 0.0
+            for i, model in enumerate(self.BACKUP_MODELS, 1):
+                try:
+                    print(f"🤖 尝试备选模型 {i}/{len(self.BACKUP_MODELS)}: {model}")
+                    content = self._call_siliconflow_api(image_url, model)
+                    total_elapsed = time.time() - start_time
+                    print(f"✅ 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
+                    
+                    # 在结果前添加使用的模型信息
+                    result_with_model = f"[使用模型: {model}]\n\n{content}"
+                    self.kimi_completed.emit(result_with_model, total_elapsed)
+                    return
+                    
+                except Exception as e:
+                    print(f"⚠️ 备选模型 {model} 调用失败: {str(e)}")
+                    continue
             
-            elapsed_time = time.time() - start_time
-            
-            # 提取回复内容
-            content = completion.choices[0].message.content
-            self.kimi_completed.emit(content, elapsed_time)
+            # 所有模型都失败
+            self.error_occurred.emit(f"所有模型均调用失败（主模型 + {len(self.BACKUP_MODELS)}个备选模型）")
             
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
-            print(f"Kimi API 错误详情:\n{error_detail}")
-            self.error_occurred.emit(f"Kimi API 调用失败: {str(e)}")
+            print(f"Kimi 工作线程错误详情:\n{error_detail}")
+            self.error_occurred.emit(f"图片分析失败: {str(e)}")
+    
+    def _call_moonshot_api(self, image_url):
+        """调用 Moonshot (Kimi) API"""
+        from openai import OpenAI
+        
+        client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.moonshot.cn/v1",
+        )
+        
+        completion = client.chat.completions.create(
+            model="kimi-k2.5",
+            messages=[
+                {"role": "system", "content": "你是专业的面试助手。"},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": self.prompt,
+                        },
+                    ],
+                },
+            ],
+        )
+        
+        return completion.choices[0].message.content
+    
+    def _call_siliconflow_api(self, image_url, model):
+        """调用 SiliconFlow API"""
+        from openai import OpenAI
+        
+        client = OpenAI(
+            api_key=self.SILICONFLOW_API_KEY,
+            base_url=self.SILICONFLOW_BASE_URL,
+        )
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": self.prompt
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        return response.choices[0].message.content
 
 
 class WebSocketServerWorker(QThread):
