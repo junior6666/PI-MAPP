@@ -67,6 +67,9 @@ class MainWindow(QMainWindow):
         # 初始化状态栏
         self.statusBar().showMessage("就绪")
         
+        # 更新 IP 地址显示
+        QTimer.singleShot(300, self.update_ip_display)
+        
         # 延迟启动截图监听（等待 UI 完全加载）
         QTimer.singleShot(500, self.auto_start_screenshot)
         
@@ -854,6 +857,22 @@ class MainWindow(QMainWindow):
         ws_group = QGroupBox("📡 WebSocket 服务器")
         ws_layout = QFormLayout()
         
+        # 本机 IP 显示
+        ip_widget = QWidget()
+        ip_layout = QHBoxLayout(ip_widget)
+        ip_layout.setContentsMargins(0, 0, 0, 0)
+        ip_layout.setSpacing(5)
+        
+        self.ip_label = QLabel("加载中...")
+
+        self.btn_copy_ip = QPushButton("📋 复制")
+        self.btn_copy_ip.clicked.connect(self.copy_ip_to_clipboard)
+        
+        ip_layout.addWidget(self.ip_label)
+        ip_layout.addWidget(self.btn_copy_ip)
+        
+        ws_layout.addRow("本机 IP:", ip_widget)
+        
         self.ws_port_input = QSpinBox()
         self.ws_port_input.setRange(1024, 65535)
         self.ws_port_input.setValue(8765)
@@ -1391,6 +1410,70 @@ class MainWindow(QMainWindow):
         """获取当前时间字符串"""
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    def get_local_ip(self):
+        """获取本机局域网 IP"""
+        import socket
+        try:
+            # 通过连接外部地址获取本机IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return '127.0.0.1'
+    
+    def update_ip_display(self):
+        """更新IP地址显示"""
+        ip = self.get_local_ip()
+        self.ip_label.setText(ip)
+        print(f"🌐 本机局域网IP: {ip}")
+    
+    def copy_ip_to_clipboard(self):
+        """复制 IP 地址到剪贴板"""
+        from PySide6.QtWidgets import QApplication as QtApp
+        ip = self.ip_label.text()
+        if ip and ip != "加载中...":
+            clipboard = QtApp.clipboard()
+            clipboard.setText(ip)
+            
+            # 临时修改按钮文本提示
+            original_text = self.btn_copy_ip.text()
+            self.btn_copy_ip.setText("✅ 已复制")
+            self.btn_copy_ip.setStyleSheet("""
+                QPushButton {
+                    background-color: #5fffc8;
+                }
+            """)
+            
+            # 2秒后恢复
+            QTimer.singleShot(2000, lambda: self._reset_copy_button(original_text))
+            
+            self.statusBar().showMessage(f"IP 地址已复制: {ip}")
+        else:
+            QMessageBox.warning(self, "警告", "IP 地址尚未加载完成！")
+    
+    def _reset_copy_button(self, original_text):
+        """恢复复制按钮样式"""
+        self.btn_copy_ip.setText(original_text)
+        self.btn_copy_ip.setStyleSheet("""
+            QPushButton {
+                background-color: #4ecca3;
+                color: #0f0f23;
+                border: none;
+                border-radius: 3px;
+                padding: 3px 8px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5fffc8;
+            }
+            QPushButton:pressed {
+                background-color: #3db892;
+            }
+        """)
     
     def init_system_tray(self):
         """初始化系统托盘"""
