@@ -27,15 +27,12 @@ class MainWindow(QMainWindow):
         
         # 启用双缓冲和优化渲染
         self.setAttribute(Qt.WA_DeleteOnClose, False)
-        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
-        self.setAttribute(Qt.WA_NoSystemBackground, False)
-        self.setAutoFillBackground(True)
-        
-        # 设置窗口最小尺寸，防止频繁重绘
-        self.setMinimumSize(800, 600)
-        
+                
+        # 设置窗口合理尺寸,防止出现黑色边框
+        self.setMinimumSize(1000, 600)
+                
         self.setWindowTitle("💻 系统资源管理器")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1100, 700)
         
         # 设置窗口图标（兼容打包环境）
         icon_path = self._get_resource_path("icon.ico")
