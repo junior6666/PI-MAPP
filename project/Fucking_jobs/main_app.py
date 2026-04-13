@@ -70,6 +70,9 @@ class MainWindow(QMainWindow):
         # 更新 IP 地址显示
         QTimer.singleShot(300, self.update_ip_display)
         
+        # 加载保存的配置
+        QTimer.singleShot(400, self.load_saved_config)
+        
         # 延迟启动截图监听（等待 UI 完全加载）
         QTimer.singleShot(500, self.auto_start_screenshot)
         
@@ -487,15 +490,441 @@ class MainWindow(QMainWindow):
     def create_help_tab(self):
         """创建帮助标签页（包含真正的核心功能）"""
         widget = QWidget()
-        layout = QHBoxLayout(widget)
+        layout = QVBoxLayout(widget)
         
-        # 左侧控制面板
-        left_panel = self.create_control_panel()
-        layout.addWidget(left_panel, stretch=1)
+        # 创建内部标签页
+        self.help_inner_tabs = QTabWidget()
         
-        # 右侧结果显示区
-        right_panel = self.create_result_panel()
-        layout.addWidget(right_panel, stretch=2)
+        # 主页介绍
+        self.main_intro_tab = self.create_main_intro_tab()
+        self.help_inner_tabs.addTab(self.main_intro_tab, "🏠 主页")
+        
+        # Case1: Alt+X 工作流
+        self.case1_tab = self.create_case1_tab()
+        self.help_inner_tabs.addTab(self.case1_tab, "⚡ Case1 (Alt+X)")
+        
+        # Case2: Alt+Z 工作流
+        self.case2_tab = self.create_case2_tab()
+        self.help_inner_tabs.addTab(self.case2_tab, "🚀 Case2 (Alt+Z)")
+        
+        # R 标签：结果展示
+        self.r_tab = self.create_r_tab()
+        self.help_inner_tabs.addTab(self.r_tab, "📊 R - 结果")
+        
+        layout.addWidget(self.help_inner_tabs)
+        
+        return widget
+    
+    def create_main_intro_tab(self):
+        """创建主页介绍标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        # 简介
+        intro_text = QTextEdit()
+        intro_text.setReadOnly(True)
+        intro_text.setMaximumHeight(350)  # 增加高度
+        intro_text.setMinimumHeight(330)
+        intro_content = """
+<h3 style='color: #4ecca3;'>🎯 产品定位</h3>
+<p>这是一款伪装成<b>"系统资源管理器"</b>的AI面试辅助工具，支持快捷键截图、OCR识别、LLM智能分析，并可通过手机实时接收分析结果。</p>
+
+<h3 style='color: #4ecca3;'>⚡ 两大核心工作流</h3>
+<ul>
+<li><b>Case1 (Alt+X)：</b>完整流程 - 截图 → OCR文字识别 → LLM分析 → 推送手机（约20s）</li>
+<li><b>Case2 (Alt+Z)：</b>快速流程 - 截图 → Kimi视觉模型直接分析 → 推送手机（约30s，更准确）</li>
+</ul>
+
+<h3 style='color: #4ecca3;'>📱 手机端连接</h3>
+<p>在下方配置WebSocket服务器后，手机浏览器访问 <code>ws://[PC IP]:端口</code> 即可实时查看分析结果和工作流状态。</p>
+
+<h3 style='color: #4ecca3;'>💡 使用建议</h3>
+<ul>
+<li>面试时推荐使用 <b>Case2 (Alt+Z)</b>，虽然稍慢但识别更准确</li>
+<li>日常练习可使用 <b>Case1 (Alt+X)</b>，速度更快且可查看OCR文本</li>
+<li>可在下方编辑提示词来定制AI回答风格</li>
+<li>所有配置修改后会自动保存，下次启动自动加载</li>
+</ul>
+        """
+        intro_text.setHtml(intro_content)
+        layout.addWidget(intro_text)
+        
+        # 提示词和WebSocket左右布局
+        config_layout = QHBoxLayout()
+        config_layout.setSpacing(15)
+        
+        # 左侧：提示词编辑组
+        prompt_group = QGroupBox("📝 提示词配置")
+        prompt_layout = QVBoxLayout()
+        
+        self.main_prompt_input = QTextEdit()
+        self.main_prompt_input.setPlaceholderText("请输入提示词...")
+        self.main_prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+
+【任务要求】
+1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
+2. 根据题型给出对应的回答：
+
+【回答格式】
+
+📌 如果是编程题：
+- 提供完整的 Python 代码实现
+- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 代码需包含必要的注释和边界处理
+- 简要说明算法思路和时间复杂度
+- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
+
+📌 如果是选择题：
+- 直接给出正确答案的序号（如：答案：B）
+- 简要解释选择理由（1-2句话）
+- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
+
+📌 如果是简答题/概念题：
+- 给出清晰、结构化的回答
+- 分点阐述关键要点
+- 适当举例说明
+- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
+
+📌 如果是系统设计题：
+- 给出系统架构设计思路
+- 列出关键技术选型
+- 说明核心流程和注意事项
+
+📌 如果是性格测试题：
+- 选择积极乐观、团队协作导向的选项
+- 体现责任心、学习能力、抗压能力等正面特质
+- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
+- 简要说明选择理由（1句话）
+
+
+
+【注意事项】
+- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
+- 回答要简洁专业，适合面试场景口头表达
+- 代码题必须提供可运行的完整代码
+- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
+- 每个题目之间用 --- 分割线隔开""")
+        prompt_layout.addWidget(self.main_prompt_input)
+        
+        # 保存按钮
+        save_prompt_btn = QPushButton("💾 保存提示词")
+        save_prompt_btn.clicked.connect(self.save_prompt_config)
+        prompt_layout.addWidget(save_prompt_btn)
+        
+        prompt_group.setLayout(prompt_layout)
+        config_layout.addWidget(prompt_group, stretch=1)
+        
+        # 右侧：WebSocket 控制组
+        ws_group = QGroupBox("📡 WebSocket 服务器配置")
+        ws_layout = QFormLayout()
+        
+        # 本机 IP 显示
+        ip_widget = QWidget()
+        ip_layout = QHBoxLayout(ip_widget)
+        ip_layout.setContentsMargins(0, 0, 0, 0)
+        ip_layout.setSpacing(8)
+        
+        self.ip_label = QLabel("加载中...")
+        
+        self.btn_copy_ip = QPushButton("📋 复制IP")
+        self.btn_copy_ip.clicked.connect(self.copy_ip_to_clipboard)
+        
+        ip_layout.addWidget(self.ip_label)
+        ip_layout.addWidget(self.btn_copy_ip)
+        
+        ws_layout.addRow("本机 IP:", ip_widget)
+        
+        self.ws_port_input = QSpinBox()
+        self.ws_port_input.setRange(1024, 65535)
+        self.ws_port_input.setValue(8765)
+        ws_layout.addRow("端口号:", self.ws_port_input)
+        
+        self.ws_status_label = QLabel("未启动")
+        ws_layout.addRow("状态:", self.ws_status_label)
+        
+        self.btn_toggle_ws = QPushButton("▶️ 启动 WebSocket 服务")
+        self.btn_toggle_ws.setCheckable(True)
+        self.btn_toggle_ws.clicked.connect(self.toggle_websocket)
+        ws_layout.addRow(self.btn_toggle_ws)
+        
+        self.btn_send_to_phone = QPushButton("📤 发送结果到手机")
+        self.btn_send_to_phone.setEnabled(False)
+        self.btn_send_to_phone.clicked.connect(self.send_to_phone)
+        ws_layout.addRow(self.btn_send_to_phone)
+        
+        ws_group.setLayout(ws_layout)
+        config_layout.addWidget(ws_group, stretch=1)
+        
+        layout.addLayout(config_layout)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def create_case1_tab(self):
+        """创建 Case1 (Alt+X) 工作流配置标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 工作流说明
+        workflow_info = QTextEdit()
+        workflow_info.setReadOnly(True)
+        workflow_info.setMaximumHeight(150)  # 增加高度
+        workflow_info.setMinimumHeight(130)
+        workflow_content = """
+<h3 style='color: #2196f3;'>⚡ Case1: OCR 工作流模式</h3>
+<p><b>快捷键：</b>Alt + X &nbsp;&nbsp; <b>耗时：</b>约20秒 &nbsp;&nbsp; <b>特点：</b>先OCR提取文字，再调用文本LLM分析</p>
+<p><b>工作流程：</b>按下 Alt+X → 截图保存 → OCR文字识别 → LLM分析 → 结果推送到手机</p>
+<p><b>适用场景：</b>日常练习、需要查看OCR文本、速度优先的场景</p>
+        """
+        workflow_info.setHtml(workflow_content)
+        layout.addWidget(workflow_info)
+        
+        # 截图设置和OCR左右布局
+        top_config_layout = QHBoxLayout()
+        top_config_layout.setSpacing(15)
+        
+        # 左侧：截图设置
+        screenshot_group = QGroupBox("📸 截图设置")
+        screenshot_layout = QFormLayout()
+        
+        self.case1_hotkey_input = QLineEdit("<alt>+x")
+        screenshot_layout.addRow("热键组合:", self.case1_hotkey_input)
+        
+        self.save_dir_input = QLineEdit("./screenshots")
+        self.save_dir_input.setReadOnly(True)
+        screenshot_layout.addRow("保存目录:", self.save_dir_input)
+        
+        self.btn_toggle_screenshot = QPushButton("停止截图监听")
+        self.btn_toggle_screenshot.setCheckable(True)
+        self.btn_toggle_screenshot.setChecked(True)
+        self.btn_toggle_screenshot.clicked.connect(self.toggle_screenshot)
+        screenshot_layout.addRow(self.btn_toggle_screenshot)
+        
+        screenshot_group.setLayout(screenshot_layout)
+        top_config_layout.addWidget(screenshot_group, stretch=1)
+        
+        # 右侧：OCR 控制组
+        ocr_group = QGroupBox("🔍 OCR 文字识别")
+        ocr_layout = QVBoxLayout()
+        
+        self.btn_ocr = QPushButton("开始 OCR 识别")
+        self.btn_ocr.setEnabled(False)
+        self.btn_ocr.clicked.connect(self.start_ocr)
+        ocr_layout.addWidget(self.btn_ocr)
+        
+        self.auto_ocr_check = QCheckBox("截图后自动进行 OCR")
+        ocr_layout.addWidget(self.auto_ocr_check)
+        
+        ocr_group.setLayout(ocr_layout)
+        top_config_layout.addWidget(ocr_group, stretch=1)
+        
+        layout.addLayout(top_config_layout)
+        
+        # LLM 控制组
+        llm_group = QGroupBox("🤖 LLM 智能分析")
+        llm_layout = QFormLayout()
+        
+        self.api_key_input = QLineEdit("ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y")
+        self.api_key_input.setEchoMode(QLineEdit.Password)
+        llm_layout.addRow("API Key:", self.api_key_input)
+        
+        self.model_input = QLineEdit("LongCat-Flash-Chat")
+        llm_layout.addRow("模型名称:", self.model_input)
+        
+        self.prompt_input = QTextEdit()
+        self.prompt_input.setPlaceholderText("请输入提示词...")
+        self.prompt_input.setMaximumHeight(120)
+        self.prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+
+【任务要求】
+1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
+2. 根据题型给出对应的回答：
+
+【回答格式】
+
+📌 如果是编程题：
+- 提供完整的 Python 代码实现
+- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 代码需包含必要的注释和边界处理
+- 简要说明算法思路和时间复杂度
+- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
+
+📌 如果是选择题：
+- 直接给出正确答案的序号（如：答案：B）
+- 简要解释选择理由（1-2句话）
+- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
+
+📌 如果是简答题/概念题：
+- 给出清晰、结构化的回答
+- 分点阐述关键要点
+- 适当举例说明
+- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
+
+📌 如果是系统设计题：
+- 给出系统架构设计思路
+- 列出关键技术选型
+- 说明核心流程和注意事项
+
+📌 如果是性格测试题：
+- 选择积极乐观、团队协作导向的选项
+- 体现责任心、学习能力、抗压能力等正面特质
+- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
+- 简要说明选择理由（1句话）
+
+
+
+【注意事项】
+- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
+- 回答要简洁专业，适合面试场景口头表达
+- 代码题必须提供可运行的完整代码
+- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
+- 每个题目之间用 --- 分割线隔开""")
+        llm_layout.addRow("提示词:", self.prompt_input)
+        
+        self.btn_llm = QPushButton("调用 LLM 分析")
+        self.btn_llm.setEnabled(False)
+        self.btn_llm.clicked.connect(self.start_llm)
+        llm_layout.addRow(self.btn_llm)
+        
+        self.auto_llm_check = QCheckBox("OCR 完成后自动调用 LLM")
+        llm_layout.addRow(self.auto_llm_check)
+        
+        llm_group.setLayout(llm_layout)
+        layout.addWidget(llm_group)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def create_case2_tab(self):
+        """创建 Case2 (Alt+Z) 工作流配置标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 工作流说明
+        workflow_info = QTextEdit()
+        workflow_info.setReadOnly(True)
+        workflow_info.setMaximumHeight(100)
+        workflow_content = """
+<h3 style='color: #9c27b0;'>🚀 Case2: 快速分析模式</h3>
+<p><b>快捷键：</b>Alt + Z &nbsp;&nbsp; <b>耗时：</b>约30秒 &nbsp;&nbsp; <b>特点：</b>跳过OCR，直接调用Kimi视觉大模型分析（更准确）</p>
+<p><b>工作流程：</b>按下 Alt+Z → 全屏截图 → Kimi AI分析 → 结果推送到手机</p>
+        """
+        workflow_info.setHtml(workflow_content)
+        layout.addWidget(workflow_info)
+        
+        # 快速分析设置
+        quick_group = QGroupBox("🚀 快速分析设置")
+        quick_layout = QFormLayout()
+        
+        self.case2_hotkey_input = QLineEdit("<alt>+z")
+        quick_layout.addRow("热键组合:", self.case2_hotkey_input)
+        
+        self.kimi_api_key_input = QLineEdit("sk-v07YQ9sffsU4znH1hbODXsFsz7tkQrm6qpcYJoXLm4cqqaiE")
+        self.kimi_api_key_input.setEchoMode(QLineEdit.Password)
+        quick_layout.addRow("Kimi API Key:", self.kimi_api_key_input)
+        
+        status_label = QLabel("✅ 快速分析已启用 (Alt+Z)")
+        quick_layout.addRow("状态:", status_label)
+        
+        quick_group.setLayout(quick_layout)
+        layout.addWidget(quick_group)
+        
+        # 说明
+        info_text = QTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setMaximumHeight(350)
+        info_text.setMinimumHeight(310)
+        info_content = """
+<h3 style='color: #9c27b0;'>💡 使用说明</h3>
+<ul>
+<li><b>优势：</b>Kimi-K2.5 是视觉大模型，可以直接理解图片内容，无需OCR中间步骤</li>
+<li><b>适用场景：</b>有明确题目的面试场景，需要更准确的题目识别</li>
+<li><b>注意：</b>虽然流程上更快（跳过OCR），但实际耗时约30秒，比OCR流程稍慢</li>
+<li><b>自动触发：</b>程序启动后自动启用 Alt+Z 快捷键监听</li>
+</ul>
+
+<h3 style='color: #9c27b0;'>🔄 模型降级策略</h3>
+<p>当主模型 Kimi-K2.5 连续失败2次后，会自动切换到备选模型：</p>
+<ol>
+<li>Qwen/Qwen3-Omni-30B-A3B-Instruct</li>
+<li>Qwen/Qwen3-VL-8B-Instruct</li>
+<li>Qwen/Qwen3-VL-32B-Instruct</li>
+<li>Qwen/Qwen3-VL-235B-A22B-Instruct</li>
+<li>zai-org/GLM-4.5V</li>
+<li>Pro/moonshotai/Kimi-K2.5 (SiliconFlow)</li>
+</ol>
+        """
+        info_text.setHtml(info_content)
+        layout.addWidget(info_text)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def create_r_tab(self):
+        """创建 R 结果展示标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        # 截图结果
+        screenshot_result_group = QGroupBox("📷 截图信息")
+        screenshot_result_layout = QVBoxLayout()
+        
+        self.screenshot_info_label = QLabel("暂无截图")
+        self.screenshot_info_label.setAlignment(Qt.AlignCenter)
+        screenshot_result_layout.addWidget(self.screenshot_info_label)
+        
+        screenshot_result_group.setLayout(screenshot_result_layout)
+        layout.addWidget(screenshot_result_group)
+        
+        # OCR 结果
+        ocr_result_group = QGroupBox("🔤 OCR 识别结果")
+        ocr_result_layout = QVBoxLayout()
+        
+        self.ocr_result_text = QTextEdit()
+        self.ocr_result_text.setReadOnly(True)
+        self.ocr_result_text.setPlaceholderText("OCR 识别结果将显示在这里...")
+        ocr_result_layout.addWidget(self.ocr_result_text)
+        
+        # OCR 耗时标签（右下角）
+        ocr_timing_layout = QHBoxLayout()
+        ocr_timing_layout.addStretch()
+        self.ocr_time_label = QLabel("")
+        ocr_timing_layout.addWidget(self.ocr_time_label)
+        ocr_result_layout.addLayout(ocr_timing_layout)
+        
+        ocr_result_group.setLayout(ocr_result_layout)
+        layout.addWidget(ocr_result_group)
+        
+        # LLM 结果
+        llm_result_group = QGroupBox("💬 LLM 分析结果")
+        llm_result_layout = QVBoxLayout()
+        
+        self.llm_result_text = QTextEdit()
+        self.llm_result_text.setReadOnly(True)
+        self.llm_result_text.setPlaceholderText("LLM 分析结果将显示在这里...")
+        llm_result_layout.addWidget(self.llm_result_text)
+        
+        # LLM 耗时标签（右下角）
+        llm_timing_layout = QHBoxLayout()
+        llm_timing_layout.addStretch()
+        self.llm_time_label = QLabel("")
+        llm_timing_layout.addWidget(self.llm_time_label)
+        llm_result_layout.addLayout(llm_timing_layout)
+        
+        llm_result_group.setLayout(llm_result_layout)
+        layout.addWidget(llm_result_group)
         
         return widget
     
@@ -739,224 +1168,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.disk_info.setText(f"获取磁盘信息失败: {str(e)}")
     
-    def create_control_panel(self):
-        """创建左侧控制面板"""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        
-        # ===== 截图控制组 =====
-        screenshot_group = QGroupBox("📸 截图设置")
-        screenshot_layout = QFormLayout()
-        
-        self.hotkey_input = QLineEdit("<alt>+x")
-        self.hotkey_input.setPlaceholderText("例如: <ctrl>+<shift>+s")
-        screenshot_layout.addRow("热键组合:", self.hotkey_input)
-        
-        self.save_dir_input = QLineEdit("./screenshots")
-        self.save_dir_input.setReadOnly(True)
-        screenshot_layout.addRow("保存目录:", self.save_dir_input)
-        
-        self.btn_toggle_screenshot = QPushButton("停止截图监听")
-        self.btn_toggle_screenshot.setCheckable(True)
-        self.btn_toggle_screenshot.setChecked(True)  # 默认选中
-        self.btn_toggle_screenshot.clicked.connect(self.toggle_screenshot)
-        screenshot_layout.addRow(self.btn_toggle_screenshot)
-        
-        screenshot_group.setLayout(screenshot_layout)
-        layout.addWidget(screenshot_group)
-        
-        # ===== OCR 控制组 =====
-        ocr_group = QGroupBox("🔍 OCR 文字识别")
-        ocr_layout = QVBoxLayout()
-        
-        self.btn_ocr = QPushButton("开始 OCR 识别")
-        self.btn_ocr.setEnabled(False)
-        self.btn_ocr.clicked.connect(self.start_ocr)
-        ocr_layout.addWidget(self.btn_ocr)
-        
-        self.auto_ocr_check = QCheckBox("截图后自动进行 OCR")
-        ocr_layout.addWidget(self.auto_ocr_check)
-        
-        ocr_group.setLayout(ocr_layout)
-        layout.addWidget(ocr_group)
-        
-        # ===== LLM 控制组 =====
-        llm_group = QGroupBox("🤖 LLM 智能分析")
-        llm_layout = QFormLayout()
-        
-        self.api_key_input = QLineEdit("ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y")
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        llm_layout.addRow("API Key:", self.api_key_input)
-        
-        self.model_input = QLineEdit("LongCat-Flash-Chat")
-        llm_layout.addRow("模型名称:", self.model_input)
-        
-        self.prompt_input = QTextEdit()
-        self.prompt_input.setPlaceholderText("请输入提示词...")
-        self.prompt_input.setMaximumHeight(80)
-        self.prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
-
-【任务要求】
-1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
-2. 根据题型给出对应的回答：
-
-【回答格式】
-
-📌 如果是编程题：
-- 提供完整的 Python 代码实现
-- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t 等）
-- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
-- 代码需包含必要的注释和边界处理
-- 简要说明算法思路和时间复杂度
-- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
-
-📌 如果是选择题：
-- 直接给出正确答案的序号（如：答案：B）
-- 简要解释选择理由（1-2句话）
-- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
-
-📌 如果是简答题/概念题：
-- 给出清晰、结构化的回答
-- 分点阐述关键要点
-- 适当举例说明
-- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
-
-📌 如果是系统设计题：
-- 给出系统架构设计思路
-- 列出关键技术选型
-- 说明核心流程和注意事项
-
-📌 如果是性格测试题：
-- 选择积极乐观、团队协作导向的选项
-- 体现责任心、学习能力、抗压能力等正面特质
-- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
-- 简要说明选择理由（1句话）
-
-
-
-【注意事项】
-- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
-- 回答要简洁专业，适合面试场景口头表达
-- 代码题必须提供可运行的完整代码
-- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
-- 每个题目之间用 --- 分割线隔开""")
-        llm_layout.addRow("提示词:", self.prompt_input)
-        
-        self.btn_llm = QPushButton("调用 LLM 分析")
-        self.btn_llm.setEnabled(False)
-        self.btn_llm.clicked.connect(self.start_llm)
-        llm_layout.addRow(self.btn_llm)
-        
-        self.auto_llm_check = QCheckBox("OCR 完成后自动调用 LLM")
-        llm_layout.addRow(self.auto_llm_check)
-        
-        llm_group.setLayout(llm_layout)
-        layout.addWidget(llm_group)
-        
-        # ===== WebSocket 控制组 =====
-        ws_group = QGroupBox("📡 WebSocket 服务器")
-        ws_layout = QFormLayout()
-        
-        # 本机 IP 显示
-        ip_widget = QWidget()
-        ip_layout = QHBoxLayout(ip_widget)
-        ip_layout.setContentsMargins(0, 0, 0, 0)
-        ip_layout.setSpacing(5)
-        
-        self.ip_label = QLabel("加载中...")
-
-        self.btn_copy_ip = QPushButton("📋 复制")
-        self.btn_copy_ip.clicked.connect(self.copy_ip_to_clipboard)
-        
-        ip_layout.addWidget(self.ip_label)
-        ip_layout.addWidget(self.btn_copy_ip)
-        
-        ws_layout.addRow("本机 IP:", ip_widget)
-        
-        self.ws_port_input = QSpinBox()
-        self.ws_port_input.setRange(1024, 65535)
-        self.ws_port_input.setValue(8765)
-        ws_layout.addRow("端口号:", self.ws_port_input)
-        
-        self.ws_status_label = QLabel("未启动")
-        ws_layout.addRow("状态:", self.ws_status_label)
-        
-        self.btn_toggle_ws = QPushButton("启动 WebSocket 服务")
-        self.btn_toggle_ws.setCheckable(True)
-        self.btn_toggle_ws.clicked.connect(self.toggle_websocket)
-        ws_layout.addRow(self.btn_toggle_ws)
-        
-        self.btn_send_to_phone = QPushButton("发送结果到手机")
-        self.btn_send_to_phone.setEnabled(False)
-        self.btn_send_to_phone.clicked.connect(self.send_to_phone)
-        ws_layout.addRow(self.btn_send_to_phone)
-        
-        ws_group.setLayout(ws_layout)
-        layout.addWidget(ws_group)
-        
-        # 弹簧
-        layout.addStretch()
-        
-        return panel
-    
-    def create_result_panel(self):
-        """创建右侧结果显示区"""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        
-        # 截图结果
-        screenshot_result_group = QGroupBox("📷 截图信息")
-        screenshot_result_layout = QVBoxLayout()
-        
-        self.screenshot_info_label = QLabel("暂无截图")
-        self.screenshot_info_label.setAlignment(Qt.AlignCenter)
-        screenshot_result_layout.addWidget(self.screenshot_info_label)
-        
-        screenshot_result_group.setLayout(screenshot_result_layout)
-        layout.addWidget(screenshot_result_group)
-        
-        # OCR 结果
-        ocr_result_group = QGroupBox("🔤 OCR 识别结果")
-        ocr_result_layout = QVBoxLayout()
-        
-        self.ocr_result_text = QTextEdit()
-        self.ocr_result_text.setReadOnly(True)
-        self.ocr_result_text.setPlaceholderText("OCR 识别结果将显示在这里...")
-        ocr_result_layout.addWidget(self.ocr_result_text)
-        
-        # OCR 耗时标签（右下角）
-        ocr_timing_layout = QHBoxLayout()
-        ocr_timing_layout.addStretch()
-        self.ocr_time_label = QLabel("")
-        self.ocr_time_label.setStyleSheet("color: #888; font-size: 11px; padding: 2px 4px;")
-        ocr_timing_layout.addWidget(self.ocr_time_label)
-        ocr_result_layout.addLayout(ocr_timing_layout)
-        
-        ocr_result_group.setLayout(ocr_result_layout)
-        layout.addWidget(ocr_result_group)
-        
-        # LLM 结果
-        llm_result_group = QGroupBox("💬 LLM 分析结果")
-        llm_result_layout = QVBoxLayout()
-        
-        self.llm_result_text = QTextEdit()
-        self.llm_result_text.setReadOnly(True)
-        self.llm_result_text.setPlaceholderText("LLM 分析结果将显示在这里...")
-        llm_result_layout.addWidget(self.llm_result_text)
-        
-        # LLM 耗时标签（右下角）
-        llm_timing_layout = QHBoxLayout()
-        llm_timing_layout.addStretch()
-        self.llm_time_label = QLabel("")
-        self.llm_time_label.setStyleSheet("color: #888; font-size: 11px; padding: 2px 4px;")
-        llm_timing_layout.addWidget(self.llm_time_label)
-        llm_result_layout.addLayout(llm_timing_layout)
-        
-        llm_result_group.setLayout(llm_result_layout)
-        layout.addWidget(llm_result_group)
-        
-        return panel
-    
     # ==================== 槽函数 ====================
     
     def auto_start_screenshot(self):
@@ -991,7 +1202,8 @@ class MainWindow(QMainWindow):
     def toggle_screenshot(self, checked):
         """切换截图监听状态"""
         if checked:
-            hotkey = self.hotkey_input.text().strip()
+            # 优先使用 Case1 的热键配置
+            hotkey = self.case1_hotkey_input.text().strip() if hasattr(self, 'case1_hotkey_input') else self.hotkey_input.text().strip()
             if not hotkey:
                 QMessageBox.warning(self, "警告", "请输入热键组合！")
                 self.btn_toggle_screenshot.setChecked(False)
@@ -1410,6 +1622,67 @@ class MainWindow(QMainWindow):
         """获取当前时间字符串"""
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    def save_prompt_config(self):
+        """保存提示词配置"""
+        try:
+            prompt_text = self.main_prompt_input.toPlainText()
+            
+            # 保存到文件
+            config_file = "prompt_config.json"
+            import json
+            
+            config_data = {
+                "main_prompt": prompt_text,
+                "last_modified": self.get_current_time()
+            }
+            
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            
+            # 同步更新到 Case1 的提示词输入框
+            if hasattr(self, 'prompt_input'):
+                self.prompt_input.setText(prompt_text)
+            
+            QMessageBox.information(self, "成功", "✅ 提示词已保存！")
+            self.statusBar().showMessage("提示词配置已保存")
+            print(f"💾 提示词已保存到 {config_file}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
+            print(f"❌ 保存提示词失败: {e}")
+    
+    def load_saved_config(self):
+        """加载保存的配置"""
+        try:
+            import json
+            import os
+            
+            config_file = "prompt_config.json"
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                # 加载提示词
+                if "main_prompt" in config_data:
+                    saved_prompt = config_data["main_prompt"]
+                    
+                    # 更新主页提示词
+                    if hasattr(self, 'main_prompt_input'):
+                        self.main_prompt_input.setText(saved_prompt)
+                    
+                    # 更新 Case1 提示词
+                    if hasattr(self, 'prompt_input'):
+                        self.prompt_input.setText(saved_prompt)
+                    
+                    print(f"✅ 已加载保存的提示词配置 (修改时间: {config_data.get('last_modified', '未知')})")
+                else:
+                    print("⚠️ 配置文件无提示词数据")
+            else:
+                print("ℹ️ 未找到保存的配置文件，使用默认配置")
+                
+        except Exception as e:
+            print(f"⚠️ 加载配置失败: {e}，使用默认配置")
     
     def get_local_ip(self):
         """获取本机局域网 IP"""
