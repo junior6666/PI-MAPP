@@ -30,6 +30,8 @@ class ScreenshotWorker(QThread):
         self.enabled = True
         self.listener = None
         self.capture_lock = threading.Lock()
+        # 确保保存目录存在
+        os.makedirs(save_dir, exist_ok=True)
         
     def run(self):
         """运行线程"""
@@ -89,7 +91,11 @@ class ScreenshotWorker(QThread):
         """停止监听"""
         self.enabled = False
         if self.listener:
-            self.listener.stop()
+            try:
+                self.listener.stop()
+            except:
+                pass
+        self.wait(2000)  # 等待线程结束
 
 
 class OCRWorker(QThread):
@@ -398,7 +404,7 @@ class WebSocketServerWorker(QThread):
                 # 关闭所有客户端连接
                 if self.clients:
                     close_tasks = []
-                    for client in self.clients:
+                    for client in list(self.clients):  # 创建副本避免迭代时修改
                         try:
                             close_tasks.append(asyncio.ensure_future(client.close()))
                         except:
@@ -434,3 +440,5 @@ class WebSocketServerWorker(QThread):
                     self.loop.close()
             except:
                 pass
+        
+        self.wait(3000)  # 等待线程结束
