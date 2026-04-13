@@ -223,7 +223,7 @@
         }
         
         .drawer.open {
-            max-height: 100px;
+            max-height: 350px; /* 增加高度以容纳历史记录 */
         }
         
         /* 底部控制栏 */
@@ -234,6 +234,115 @@
             gap: 4px;
             justify-content: center;
             flex-wrap: wrap;
+        }
+        
+        /* 历史记录区域 */
+        .history-section {
+            padding: 8px;
+            border-top: 1px solid #2a2a4a;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 0 4px;
+        }
+        
+        .history-header h4 {
+            color: #4ecca3;
+            font-size: 12px;
+            margin: 0;
+        }
+        
+        .clear-history-btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+        
+        .clear-history-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .history-item {
+            background: rgba(15, 52, 96, 0.5);
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            padding: 8px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .history-item:hover {
+            background: rgba(15, 52, 96, 0.8);
+            border-color: #4ecca3;
+        }
+        
+        .history-item-time {
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        
+        .history-item-preview {
+            font-size: 11px;
+            color: #b0b0d0;
+            line-height: 1.4;
+            max-height: 40px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        
+        .history-item-delete {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(233, 69, 96, 0.8);
+            color: white;
+            border: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .history-item:hover .history-item-delete {
+            opacity: 1;
+        }
+        
+        .history-item-delete:active {
+            transform: scale(0.9);
+        }
+        
+        .empty-history {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+            font-size: 11px;
         }
         
         button {
@@ -408,6 +517,17 @@
         <button onclick="connect()">连接</button>
         <button class="danger" onclick="disconnect()">断开</button>
     </div>
+    
+    <!-- 历史记录区域 -->
+    <div class="history-section">
+        <div class="history-header">
+            <h4>📜 历史记录</h4>
+            <button class="clear-history-btn" onclick="clearAllHistory()">清空</button>
+        </div>
+        <div class="history-list" id="historyList">
+            <div class="empty-history">暂无历史记录</div>
+        </div>
+    </div>
 </div>
 
 <!-- 配置弹窗 -->
@@ -431,10 +551,13 @@
 <script>
     let ws;
     let drawerOpen = false;  // 抽屉状态
+    let currentMessage = '';  // 当前显示的消息
+    let isFromWebSocket = false;  // 标记消息是否来自WebSocket
 
-    // 页面加载时自动读配置
+    // 页面加载时自动读配置和加载历史记录
     window.onload = function () {
         loadConfig();
+        loadHistory();
     };
     
     // 切换抽屉展开/收纳
@@ -532,7 +655,9 @@
     
             ws.onmessage = (event) => {
                 console.log('收到消息:', event.data);
+                isFromWebSocket = true;  // 标记为WebSocket消息
                 displayMessage(event.data);
+                isFromWebSocket = false;  // 重置标记
             };
     
             ws.onclose = (event) => {
@@ -563,8 +688,9 @@
         }
     }
     
-    function displayMessage(text) {
+    function displayMessage(text, skipHistory = false) {
         const messagesEl = document.getElementById('messages');
+        currentMessage = text;  // 保存当前消息
         
         // 使用 marked.js 渲染 Markdown
         try {
@@ -604,9 +730,17 @@
             
             // 滚动到底部
             messagesEl.scrollTop = messagesEl.scrollHeight;
+            
+            // 仅当消息来自WebSocket且未跳过历史时才保存
+            if (!skipHistory && isFromWebSocket) {
+                saveToHistory(text);
+            }
         } catch (error) {
             console.error('Markdown 渲染失败:', error);
             messagesEl.textContent = text;
+            if (!skipHistory && isFromWebSocket) {
+                saveToHistory(text);
+            }
         }
     }
     
@@ -676,6 +810,150 @@
             ws.close();
         }
         closeDrawerAfterAction();
+    }
+    
+    // ========== 历史记录功能 ==========
+    
+    // 保存消息到历史记录（带唯一性检查）
+    function saveToHistory(message) {
+        if (!message || message.trim() === '') return;
+        
+        try {
+            let history = JSON.parse(localStorage.getItem('message_history') || '[]');
+            
+            // 唯一性检查：基于内容哈希判断是否已存在
+            const contentHash = generateContentHash(message);
+            const exists = history.some(item => item.contentHash === contentHash);
+            
+            if (exists) {
+                console.log('该消息已存在于历史记录中，跳过添加');
+                return;
+            }
+            
+            // 创建历史记录项
+            const historyItem = {
+                id: Date.now(),
+                timestamp: new Date().toISOString(),
+                content: message,
+                preview: message.substring(0, 100),  // 预览前100字符
+                contentHash: contentHash  // 保存内容哈希用于唯一性判断
+            };
+            
+            // 添加到数组开头（最新的在前）
+            history.unshift(historyItem);
+            
+            // 限制历史记录数量（最多50条）
+            if (history.length > 50) {
+                history = history.slice(0, 50);
+            }
+            
+            // 保存到 localStorage
+            localStorage.setItem('message_history', JSON.stringify(history));
+            
+            // 刷新显示
+            loadHistory();
+            console.log('消息已保存到历史记录');
+        } catch (error) {
+            console.error('保存历史记录失败:', error);
+        }
+    }
+    
+    // 生成内容哈希用于唯一性判断
+    function generateContentHash(content) {
+        // 简单的哈希算法：将字符串转换为数字
+        let hash = 0;
+        const str = content.trim();
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // 转换为32位整数
+        }
+        return hash.toString(36); // 转换为36进制字符串
+    }
+    
+    // 加载并显示历史记录
+    function loadHistory() {
+        try {
+            const historyList = document.getElementById('historyList');
+            const history = JSON.parse(localStorage.getItem('message_history') || '[]');
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<div class="empty-history">暂无历史记录</div>';
+                return;
+            }
+            
+            // 按时间倒序排列（最新的在前）
+            history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            let html = '';
+            history.forEach(item => {
+                const date = new Date(item.timestamp);
+                const timeStr = formatDateTime(date);
+                
+                html += `
+                    <div class="history-item" onclick="loadHistoryItem(${item.id})">
+                        <div class="history-item-time">${timeStr}</div>
+                        <div class="history-item-preview">${escapeHtml(item.preview)}</div>
+                        <button class="history-item-delete" onclick="event.stopPropagation(); deleteHistoryItem(${item.id})" title="删除">✕</button>
+                    </div>
+                `;
+            });
+            
+            historyList.innerHTML = html;
+        } catch (error) {
+            console.error('加载历史记录失败:', error);
+        }
+    }
+    
+    // 加载某个历史记录到主显示区
+    function loadHistoryItem(id) {
+        try {
+            const history = JSON.parse(localStorage.getItem('message_history') || '[]');
+            const item = history.find(h => h.id === id);
+            
+            if (item) {
+                // 传递 skipHistory=true 避免重复加入历史
+                displayMessage(item.content, true);
+                // 关闭抽屉
+                if (drawerOpen) {
+                    toggleDrawer();
+                }
+            }
+        } catch (error) {
+            console.error('加载历史记录项失败:', error);
+        }
+    }
+    
+    // 删除单个历史记录
+    function deleteHistoryItem(id) {
+        try {
+            let history = JSON.parse(localStorage.getItem('message_history') || '[]');
+            history = history.filter(h => h.id !== id);
+            localStorage.setItem('message_history', JSON.stringify(history));
+            loadHistory();
+        } catch (error) {
+            console.error('删除历史记录失败:', error);
+        }
+    }
+    
+    // 清空所有历史记录
+    function clearAllHistory() {
+        if (confirm('确定要清空所有历史记录吗？')) {
+            localStorage.removeItem('message_history');
+            loadHistory();
+        }
+    }
+    
+    // 格式化日期时间
+    function formatDateTime(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 </script>
 
