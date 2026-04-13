@@ -1014,13 +1014,24 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage(f"截图已保存: {filename}")
         
+        # 发送截图触发状态到手机（静默，不打印日志）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:已触发截图]", silent=True)
+        
         # 如果启用了自动 OCR
         if self.auto_ocr_check.isChecked():
+            # 发送OCR开始状态
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:OCR分析中]", silent=True)
             self.start_ocr()
     
     def on_quick_analysis_triggered(self):
         """快速分析快捷键触发（Alt+Z）"""
         print("🚀 快速分析流程启动...")
+        
+        # 发送截图触发状态到手机（静默）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:已触发截图]", silent=True)
         
         # 1. 先进行截图
         self.perform_quick_screenshot()
@@ -1052,6 +1063,10 @@ class MainWindow(QMainWindow):
                 
                 print(f"📸 快速截图完成: {filename}")
                 
+                # 发送LLM开始状态（快速分析跳过OCR，直接进入LLM）
+                if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                    self.websocket_worker.send_message("[STATUS:LLM分析中]", silent=True)
+                
                 # 2. 调用 Kimi 分析
                 self.start_kimi_analysis(filepath)
                 
@@ -1073,6 +1088,10 @@ class MainWindow(QMainWindow):
         # 禁用按钮
         self.btn_ocr.setEnabled(False)
         self.btn_ocr.setText("识别中...")
+        
+        # 发送OCR开始状态到手机（静默）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:OCR分析中]", silent=True)
         
         # 创建并启动 OCR 工作线程
         self.ocr_worker = OCRWorker(self.current_image_path)
@@ -1121,6 +1140,10 @@ class MainWindow(QMainWindow):
         self.btn_llm.setEnabled(False)
         self.btn_llm.setText("分析中...")
         
+        # 发送LLM开始状态到手机（静默）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:LLM分析中]", silent=True)
+        
         # 构建完整提示词
         full_prompt = f"{prompt}\n\n识别到的文字内容：\n{self.ocr_result}"
         
@@ -1153,6 +1176,9 @@ class MainWindow(QMainWindow):
         
         # 如果 WebSocket 已启动且有客户端连接，自动发送结果
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            # 发送完成状态（带总耗时）
+            self.websocket_worker.send_message(f"[STATUS:已完成] [ELAPSED:{total_elapsed:.2f}]")
+            
             # 自动发送到手机
             self.send_to_phone()
             
@@ -1224,6 +1250,10 @@ class MainWindow(QMainWindow):
             print(f"🤖 开始 Kimi 分析...")
             self.statusBar().showMessage("正在调用 Kimi 分析图片...")
             
+            # 发送Kimi开始状态到手机
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:LLM分析中]")
+            
             # 创建并启动 Kimi 工作线程
             self.kimi_worker = KimiWorker(api_key, image_path, prompt)
             self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)
@@ -1239,22 +1269,25 @@ class MainWindow(QMainWindow):
         """Kimi 完成回调"""
         self.kimi_result = kimi_text
         
-        # 在 LLM 结果区显示（因为是分析结果）
+        # 在LLM结果区显示（因为是分析结果）
         self.llm_result_text.setText(kimi_text)
         self.llm_elapsed = elapsed_time
         
-        # 显示 Kimi 耗时
+        # 显示Kimi耗时
         self.llm_time_label.setText(f"⏱️ {elapsed_time:.2f}s (Kimi)")
         
-        # 计算整体耗时
+        # 计算整体耗时（从截图触发开始计算）
         total_elapsed = 0.0
         if self.screenshot_timestamp:
             total_elapsed = time.time() - self.screenshot_timestamp
         
         print(f"✅ Kimi 分析完成 (耗时: {elapsed_time:.2f}s)")
         
-        # 如果 WebSocket 已启动且有客户端连接，自动发送结果
+        # 如果WebSocket已启动且有客户端连接，自动发送结果
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            # 发送完成状态（带总耗时）
+            self.websocket_worker.send_message(f"[STATUS:已完成] [ELAPSED:{total_elapsed:.2f}]")
+            
             # 构建发送消息
             message = f"""🤖 Kimi 智能分析结果
 

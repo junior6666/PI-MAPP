@@ -452,10 +452,16 @@ class WebSocketServerWorker(QThread):
         finally:
             self.clients.discard(websocket)
     
-    async def send_message_async(self, message: str):
-        """异步发送消息到所有客户端"""
+    async def send_message_async(self, message: str, silent: bool = False):
+        """异步发送消息到所有客户端
+        
+        Args:
+            message: 要发送的消息
+            silent: 是否静默发送（不打印日志）
+        """
         if not self.clients:
-            print("[!] 没有已连接的设备")
+            if not silent:
+                print("[!] 没有已连接的设备")
             return
         
         disconnected = set()
@@ -463,21 +469,28 @@ class WebSocketServerWorker(QThread):
         for client in self.clients:
             try:
                 await client.send(message)
-                print(f"[→] 消息已发送")
+                if not silent:
+                    print(f"[→] 消息已发送")
             except Exception as e:
-                print(f"[✗] 发送失败: {e}")
+                if not silent:
+                    print(f"[✗] 发送失败: {e}")
                 disconnected.add(client)
         
         # 移除断开的客户端
         for client in disconnected:
             self.clients.discard(client)
     
-    def send_message(self, message: str):
-        """发送消息（从主线程调用）"""
+    def send_message(self, message: str, silent: bool = False):
+        """发送消息（从主线程调用）
+        
+        Args:
+            message: 要发送的消息
+            silent: 是否静默发送（不打印日志）
+        """
         if self.loop and self.loop.is_running():
             # 在事件循环中调度协程
             asyncio.run_coroutine_threadsafe(
-                self.send_message_async(message),
+                self.send_message_async(message, silent),
                 self.loop
             )
     

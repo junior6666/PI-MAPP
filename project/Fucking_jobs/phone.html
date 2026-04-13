@@ -493,6 +493,8 @@
 <!-- 顶部状态栏 -->
 <div class="header">
     <h2>📡 消息接收器</h2>
+    <!-- PC端工作状态显示 -->
+    <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin: 0 8px; white-space: nowrap;">⏳ 待命</span>
     <span id="status">未连接</span>
 </div>
 
@@ -553,6 +555,7 @@
     let drawerOpen = false;  // 抽屉状态
     let currentMessage = '';  // 当前显示的消息
     let isFromWebSocket = false;  // 标记消息是否来自WebSocket
+    let workflowStartTime = null;  // 工作流开始时间
 
     // 页面加载时自动读配置和加载历史记录
     window.onload = function () {
@@ -655,9 +658,21 @@
     
             ws.onmessage = (event) => {
                 console.log('收到消息:', event.data);
-                isFromWebSocket = true;  // 标记为WebSocket消息
-                displayMessage(event.data);
-                isFromWebSocket = false;  // 重置标记
+                
+                // 解析消息，提取状态信息
+                const messageData = parseWorkflowMessage(event.data);
+                
+                // 更新PC状态（始终更新，包含耗时信息）
+                if (messageData.status) {
+                    updatePCStatus(messageData.status, messageData.elapsed);
+                }
+                
+                // 仅当有实际内容时才显示消息（纯状态标记不显示在主消息区）
+                if (messageData.content && messageData.content.trim() !== '') {
+                    isFromWebSocket = true;  // 标记为WebSocket消息
+                    displayMessage(messageData.content);
+                    isFromWebSocket = false;  // 重置标记
+                }
             };
     
             ws.onclose = (event) => {
@@ -677,6 +692,86 @@
         }
     }
     
+    // 更新PC端工作状态
+    function updatePCStatus(status, elapsed = null) {
+        const pcStatusEl = document.getElementById('pc-status');
+        
+        // 定义状态样式映射
+        const statusConfig = {
+            '待命': {
+                icon: '⏳',
+                bg: 'rgba(255, 193, 7, 0.1)',
+                color: '#ffc107'
+            },
+            '已触发截图': {
+                icon: '📸',
+                bg: 'rgba(0, 150, 136, 0.1)',
+                color: '#009688'
+            },
+            'OCR分析中': {
+                icon: '🔍',
+                bg: 'rgba(33, 150, 243, 0.1)',
+                color: '#2196f3'
+            },
+            'LLM分析中': {
+                icon: '🤖',
+                bg: 'rgba(156, 39, 176, 0.1)',
+                color: '#9c27b0'
+            },
+            '已完成': {
+                icon: '✅',
+                bg: 'rgba(76, 175, 80, 0.1)',
+                color: '#4caf50'
+            },
+            '错误': {
+                icon: '❌',
+                bg: 'rgba(244, 67, 54, 0.1)',
+                color: '#f44336'
+            }
+        };
+        
+        const config = statusConfig[status] || statusConfig['待命'];
+        
+        // 构建显示文本
+        let displayText = `${config.icon} ${status}`;
+        if (elapsed !== null && elapsed > 0) {
+            displayText += ` (${elapsed.toFixed(2)}s)`;
+        }
+        
+        // 更新样式
+        pcStatusEl.textContent = displayText;
+        pcStatusEl.style.background = config.bg;
+        pcStatusEl.style.color = config.color;
+    }
+    
+    // 解析工作流消息，提取状态和内容
+    function parseWorkflowMessage(rawMessage) {
+        const result = {
+            status: null,
+            content: rawMessage,
+            elapsed: null
+        };
+        
+        // 尝试从消息中提取状态标记
+        // 格式示例: [STATUS:OCR分析中] 或 [STATUS:已完成|ELAPSED:15.23]
+        const statusMatch = rawMessage.match(/\[STATUS:(.+?)\]/);
+        const elapsedMatch = rawMessage.match(/\[ELAPSED:([\d.]+)\]/);
+        
+        if (statusMatch) {
+            result.status = statusMatch[1];
+            // 移除状态标记，保留纯内容
+            result.content = rawMessage.replace(/\[STATUS:.+?\]/g, '').trim();
+        }
+        
+        if (elapsedMatch) {
+            result.elapsed = parseFloat(elapsedMatch[1]);
+            // 移除耗时标记
+            result.content = result.content.replace(/\[ELAPSED:[\d.]+\]/g, '').trim();
+        }
+        
+        return result;
+    }
+    
     function updateStatus(connected) {
         const statusEl = document.getElementById('status');
         if (connected) {
@@ -685,6 +780,8 @@
         } else {
             statusEl.textContent = '❌ 未连接';
             statusEl.classList.add('disconnected');
+            // 连接断开时重置PC状态
+            updatePCStatus('待命');
         }
     }
     
