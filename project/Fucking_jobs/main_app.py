@@ -9,9 +9,10 @@ import time
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                 QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                 QGroupBox, QFormLayout, QLineEdit, QSpinBox,
-                                QCheckBox, QMessageBox, QSplitter, QStatusBar)
-from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer
-from PySide6.QtGui import QFont, QTextCursor
+                                QCheckBox, QMessageBox, QSplitter, QStatusBar,
+                                QSystemTrayIcon, QMenu)
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QEvent
+from PySide6.QtGui import QFont, QTextCursor, QIcon
 
 # 导入工作线程类
 from workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
@@ -24,6 +25,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("📸 截图 OCR LLM 分析工具")
         self.setGeometry(100, 100, 1200, 800)
+        
+        # 设置窗口图标
+        if os.path.exists("icon.ico"):
+            self.setWindowIcon(QIcon("icon.ico"))
         
         # 工作线程实例
         self.screenshot_worker = None
@@ -58,6 +63,12 @@ class MainWindow(QMainWindow):
         
         # 延迟启动快速分析快捷键（Alt+Z）
         QTimer.singleShot(1000, self.start_quick_analysis_hotkey)
+        
+        # 延迟启动 WebSocket 服务
+        QTimer.singleShot(1500, self.auto_start_websocket)
+        
+        # 初始化系统托盘
+        self.init_system_tray()
         
     def init_ui(self):
         """初始化用户界面"""
@@ -282,6 +293,11 @@ class MainWindow(QMainWindow):
         """自动启动截图监听（程序启动时调用）"""
         # 模拟点击按钮启动截图监听
         self.toggle_screenshot(True)
+    
+    def auto_start_websocket(self):
+        """自动启动 WebSocket 服务（程序启动时调用）"""
+        # 模拟点击按钮启动 WebSocket 服务
+        self.toggle_websocket(True)
     
     def start_quick_analysis_hotkey(self):
         """启动快速分析快捷键（Alt+Z）"""
@@ -692,8 +708,117 @@ class MainWindow(QMainWindow):
         from datetime import datetime
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    def init_system_tray(self):
+        """初始化系统托盘"""
+        # 检查系统是否支持托盘图标
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            print("⚠️ 系统不支持托盘图标")
+            return
+        
+        # 创建托盘图标
+        self.tray_icon = QSystemTrayIcon(self)
+        
+        # 设置托盘图标（使用 icon.ico）
+        if os.path.exists("icon.ico"):
+            self.tray_icon.setIcon(QIcon("icon.ico"))
+        
+        # 创建托盘菜单
+        tray_menu = QMenu()
+        
+        # 显示/隐藏窗口动作
+        self.show_action = tray_menu.addAction("📺 显示窗口")
+        self.show_action.triggered.connect(self.show_window_from_tray)
+        
+        tray_menu.addSeparator()
+        
+        # 退出动作
+        quit_action = tray_menu.addAction("🚪 退出程序")
+        quit_action.triggered.connect(self.quit_application)
+        
+        # 设置托盘菜单
+        self.tray_icon.setContextMenu(tray_menu)
+        
+        # 设置双击托盘图标的行为
+        self.tray_icon.activated.connect(self.on_tray_activated)
+        
+        # 显示托盘图标
+        self.tray_icon.show()
+        
+        print("✅ 系统托盘已启用")
+    
+    def on_tray_activated(self, reason):
+        """托盘图标激活事件"""
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.toggle_window_visibility()
+    
+    def toggle_window_visibility(self):
+        """切换窗口显示/隐藏"""
+        if self.isVisible():
+            self.hide()
+        else:
+            self.show_window_from_tray()
+    
+    def show_window_from_tray(self):
+        """从托盘显示窗口"""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+    
+    def quit_application(self):
+        """退出应用程序 - 真正关闭整个系统"""
+        print("🔄 正在关闭系统...")
+        
+        # 停止所有工作线程
+        if self.screenshot_worker:
+            self.screenshot_worker.stop()
+            self.screenshot_worker.wait(2000)  # 最多等待2秒
+        
+        if self.kimi_worker and self.kimi_worker.isRunning():
+            self.kimi_worker.terminate()
+            self.kimi_worker.wait(1000)
+        
+        # 先停止 WebSocket 服务（需要等待异步任务清理）
+        if self.websocket_worker:
+            print("⏳ 正在停止 WebSocket 服务...")
+            self.websocket_worker.stop()
+            self.websocket_worker.wait(5000)  # 等待最多5秒让异步任务清理
+            print("✅ WebSocket 服务已停止")
+        
+        # 停止快速分析监听器
+        if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
+            try:
+                self.quick_analysis_listener.stop()
+            except:
+                pass
+        
+        # 移除托盘图标
+        if hasattr(self, 'tray_icon'):
+            self.tray_icon.hide()
+        
+        print("✅ 系统已关闭")
+        # 强制退出应用
+        QApplication.quit()
+    
+    def changeEvent(self, event):
+        """窗口状态改变事件 - 捕获最小化操作"""
+        if event.type() == QEvent.WindowStateChange:
+            if self.windowState() & Qt.WindowMinimized:
+                # 窗口被最小化时，隐藏到托盘（无提示）
+                if hasattr(self, 'tray_icon') and self.tray_icon.isVisible():
+                    self.hide()
+                    event.ignore()  # 忽略最小化事件
+                    return
+        super().changeEvent(event)
+    
     def closeEvent(self, event):
-        """窗口关闭事件"""
+        """窗口关闭事件 - 最小化到托盘而非退出"""
+        # 如果用户点击关闭按钮，隐藏到托盘而不是退出（无提示）
+        if hasattr(self, 'tray_icon') and self.tray_icon.isVisible():
+            self.hide()
+            event.ignore()  # 忽略关闭事件
+            return
+        
+        # 真正退出时的清理工作
         # 停止所有工作线程
         if self.screenshot_worker:
             self.screenshot_worker.stop()
@@ -711,6 +836,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'quick_analysis_listener') and self.quick_analysis_listener:
             self.quick_analysis_listener.stop()
         
+        # 移除托盘图标
+        if hasattr(self, 'tray_icon'):
+            self.tray_icon.hide()
+        
         event.accept()
 
 
@@ -724,7 +853,9 @@ def main():
     
     # 创建并显示主窗口
     window = MainWindow()
-    window.show()
+    
+    # 默认隐藏窗口，只显示托盘图标
+    window.hide()
     
     sys.exit(app.exec())
 
