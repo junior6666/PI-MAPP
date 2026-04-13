@@ -738,7 +738,7 @@ class MainWindow(QMainWindow):
         workflow_info.setMaximumHeight(150)  # 增加高度
         workflow_info.setMinimumHeight(130)
         workflow_content = """
-<h3 style='color: #2196f3;'>⚡ Case1: OCR 工作流模式</h3>
+<h3 style='color: #4ecca3;'>⚡ Case1: OCR 工作流模式</h3>
 <p><b>快捷键：</b>Alt + X &nbsp;&nbsp; <b>耗时：</b>约20秒 &nbsp;&nbsp; <b>特点：</b>先OCR提取文字，再调用文本LLM分析</p>
 <p><b>工作流程：</b>按下 Alt+X → 截图保存 → OCR文字识别 → LLM分析 → 结果推送到手机</p>
 <p><b>适用场景：</b>日常练习、需要查看OCR文本、速度优先的场景</p>
@@ -871,19 +871,33 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # 工作流说明
+        # 顶部左右布局：工作流说明 + 快速分析设置
+        top_layout = QVBoxLayout()
+        top_layout.setSpacing(15)
+        
+        # 左侧：工作流说明
         workflow_info = QTextEdit()
         workflow_info.setReadOnly(True)
-        workflow_info.setMaximumHeight(100)
+        workflow_info.setMaximumHeight(120)
+        workflow_info.setMinimumHeight(100)
         workflow_content = """
-<h3 style='color: #9c27b0;'>🚀 Case2: 快速分析模式</h3>
+<h3 style='color: #4ecca3;'>🚀 Case2: 快速分析模式</h3>
 <p><b>快捷键：</b>Alt + Z &nbsp;&nbsp; <b>耗时：</b>约30秒 &nbsp;&nbsp; <b>特点：</b>跳过OCR，直接调用Kimi视觉大模型分析（更准确）</p>
 <p><b>工作流程：</b>按下 Alt+Z → 全屏截图 → Kimi AI分析 → 结果推送到手机</p>
         """
         workflow_info.setHtml(workflow_content)
-        layout.addWidget(workflow_info)
+        workflow_info.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 8px;
+                font-size: 12px;
+            }
+        """)
+        top_layout.addWidget(workflow_info, stretch=1)
         
-        # 快速分析设置
+        # 右侧：快速分析设置
         quick_group = QGroupBox("🚀 快速分析设置")
         quick_layout = QFormLayout()
         
@@ -893,12 +907,24 @@ class MainWindow(QMainWindow):
         self.kimi_api_key_input = QLineEdit("sk-v07YQ9sffsU4znH1hbODXsFsz7tkQrm6qpcYJoXLm4cqqaiE")
         self.kimi_api_key_input.setEchoMode(QLineEdit.Password)
         quick_layout.addRow("Kimi API Key:", self.kimi_api_key_input)
-        
+
+        # 备用模型配置（SiliconFlow）
+        self.backup_api_key_input = QLineEdit("sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln")
+        self.backup_api_key_input.setEchoMode(QLineEdit.Password)
+        self.backup_api_key_input.setPlaceholderText("备用模型 API Key")
+        quick_layout.addRow("备用 API Key:", self.backup_api_key_input)
+
+        self.backup_base_url_input = QLineEdit("https://api.siliconflow.cn/v1")
+        self.backup_base_url_input.setPlaceholderText("备用模型 Base URL")
+        quick_layout.addRow("备用 Base URL:", self.backup_base_url_input)
+
         status_label = QLabel("✅ 快速分析已启用 (Alt+Z)")
         quick_layout.addRow("状态:", status_label)
-        
+
         quick_group.setLayout(quick_layout)
-        layout.addWidget(quick_group)
+        top_layout.addWidget(quick_group, stretch=1)
+        
+        layout.addLayout(top_layout)
         
         # 说明
         info_text = QTextEdit()
@@ -906,7 +932,7 @@ class MainWindow(QMainWindow):
         info_text.setMaximumHeight(350)
         info_text.setMinimumHeight(310)
         info_content = """
-<h3 style='color: #9c27b0;'>💡 使用说明</h3>
+<h3 style='color: #4ecca3;'>💡 使用说明</h3>
 <ul>
 <li><b>优势：</b>Kimi-K2.5 是视觉大模型，可以直接理解图片内容，无需OCR中间步骤</li>
 <li><b>适用场景：</b>有明确题目的面试场景，需要更准确的题目识别</li>
@@ -914,7 +940,7 @@ class MainWindow(QMainWindow):
 <li><b>自动触发：</b>程序启动后自动启用 Alt+Z 快捷键监听</li>
 </ul>
 
-<h3 style='color: #9c27b0;'>🔄 模型降级策略</h3>
+<h3 style='color: #4ecca3;'>🔄 模型降级策略</h3>
 <p>当主模型 Kimi-K2.5 连续失败2次后，会自动切换到备选模型：</p>
 <ol>
 <li>Qwen/Qwen3-Omni-30B-A3B-Instruct</li>
