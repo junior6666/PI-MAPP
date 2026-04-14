@@ -1178,18 +1178,56 @@ class MainWindow(QMainWindow):
         # 发送截图触发状态到手机（静默，不打印日志）
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:已触发截图]", silent=True)
-        
+        self._interrupt_all_tasks()
         # 如果启用了自动 OCR
         if self.auto_ocr_check.isChecked():
             # 发送OCR开始状态
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
                 self.websocket_worker.send_message("[STATUS:OCR分析中]", silent=True)
             self.start_ocr()
-    
+
+    def _interrupt_all_tasks(self):
+        """中断所有正在进行的任务（用于新任务触发时）"""
+        interrupted = False
+
+        # 中断 OCR 任务
+        if self.ocr_worker and self.ocr_worker.isRunning():
+            print("🛑 检测到旧 OCR 任务，立即中断...")
+            self.ocr_worker.interrupt()
+            self.ocr_worker.terminate()
+            self.ocr_worker.wait(1000)
+            self.ocr_worker = None
+            interrupted = True
+
+        # 中断 LLM 任务
+        if self.llm_worker and self.llm_worker.isRunning():
+            print("🛑 检测到旧 LLM 任务，立即中断...")
+            self.llm_worker.interrupt()
+            self.llm_worker.terminate()
+            self.llm_worker.wait(1000)
+            self.llm_worker = None
+            interrupted = True
+
+        # 中断 Kimi 任务
+        if self.kimi_worker and self.kimi_worker.isRunning():
+            print("🛑 检测到旧 Kimi 任务，立即中断...")
+            self.kimi_worker.interrupt()
+            self.kimi_worker.terminate()
+            self.kimi_worker.wait(1000)
+            self.kimi_worker = None
+            interrupted = True
+
+        if interrupted:
+            print("✅ 旧任务已全部中断，准备处理新任务")
+            # 通知手机端（可选）
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:旧任务已中断，处理新任务]", silent=True)
+
     def on_quick_analysis_triggered(self):
         """快速分析快捷键触发（Alt+Z）"""
         print("🚀 快速分析流程启动...")
-        
+        # 【关键】立即中断所有旧任务
+        self._interrupt_all_tasks()
         # 发送截图触发状态到手机（静默）
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:已触发截图]", silent=True)
@@ -1296,7 +1334,12 @@ class MainWindow(QMainWindow):
         if not api_key or not model or not prompt:
             QMessageBox.warning(self, "警告", "请填写完整的 LLM 配置！")
             return
-        
+        # 【关键】如果已有 LLM 任务在运行，先中断
+        if self.llm_worker and self.llm_worker.isRunning():
+            print("⚠️ 检测到正在运行的 LLM 任务，先中断...")
+            self.llm_worker.interrupt()
+            self.llm_worker.terminate()
+            self.llm_worker.wait(1000)
         # 禁用按钮
         self.btn_llm.setEnabled(False)
         self.btn_llm.setText("分析中...")
@@ -1414,7 +1457,12 @@ class MainWindow(QMainWindow):
             # 发送Kimi开始状态到手机
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
                 self.websocket_worker.send_message("[STATUS:LLM分析中]")
-            
+            # 【关键】如果已有 Kimi 任务在运行，先中断
+            if self.kimi_worker and self.kimi_worker.isRunning():
+                print("⚠️ 检测到正在运行的 Kimi 任务，先中断...")
+                self.kimi_worker.interrupt()
+                self.kimi_worker.terminate()
+                self.kimi_worker.wait(1000)
             # 创建并启动 Kimi 工作线程
             self.kimi_worker = KimiWorker(api_key, image_path, prompt)
             self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)
