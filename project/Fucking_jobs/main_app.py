@@ -1343,6 +1343,10 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage(f"OCR 识别完成 (耗时: {elapsed_time:.2f}s)")
         
+        # 【关键】发送 OCR 完成状态到手机（通知手机端可以切换到 LLM 分析）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message(f"[STATUS:OCR已完成] [ELAPSED:{elapsed_time:.2f}]", silent=True)
+        
         # 如果启用了自动 LLM
         if self.auto_llm_check.isChecked():
             self.start_llm()
@@ -1428,7 +1432,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("LLM 分析完成")
     
     def start_kimi_analysis(self, image_path):
-        """开始 Kimi 图片分析"""
+        """开始 Kimi 图片分析（支持 DeepSeek-OCR + EasyOCR 降级）"""
         try:
             # 使用 main_app 中的提示词
             prompt = """你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
@@ -1484,9 +1488,10 @@ class MainWindow(QMainWindow):
             print(f"🤖 开始 Kimi 分析...")
             self.statusBar().showMessage("正在调用 Kimi 分析图片...")
             
-            # 发送Kimi开始状态到手机
+            # 【关键】发送 LLM 开始状态到手机
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                self.websocket_worker.send_message("[STATUS:LLM分析中]")
+                self.websocket_worker.send_message("[STATUS:LLM分析中]", silent=True)
+            
             # 【关键】如果已有 Kimi 任务在运行，先中断
             if self.kimi_worker and self.kimi_worker.isRunning():
                 print("⚠️ 检测到正在运行的 Kimi 任务，先中断...")
@@ -1496,6 +1501,7 @@ class MainWindow(QMainWindow):
                     self.kimi_worker.wait(500)
                 except Exception as e:
                     print(f"⚠️ Kimi 任务中断异常: {e}")
+            
             # 创建并启动 Kimi 工作线程
             self.kimi_worker = KimiWorker(api_key, image_path, prompt)
             self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)

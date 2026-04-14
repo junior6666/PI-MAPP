@@ -100,14 +100,26 @@ class ScreenshotWorker(QThread):
 
 
 class OCRWorker(QThread):
-    """OCR 工作线程 - 文字识别（使用单例 Reader 避免内存泄漏）"""
+    """OCR 工作线程 - 文字识别（DeepSeek-OCR 首选 + EasyOCR 备选）"""
 
     ocr_completed = Signal(str, float)  # OCR 完成信号，参数为识别文本和耗时（秒）
     error_occurred = Signal(str)  # 错误信号
     
+    # SiliconFlow API 配置
+    SILICONFLOW_API_KEY = "sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln"
+    SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+    
     # 类级别的单例 Reader（避免重复加载模型导致内存泄漏）
     _reader_instance = None
     _reader_lock = threading.Lock()
+    
+    # 类级别计数器：记录主模型连续失败次数（跨线程实例共享）
+    _primary_model_fail_count = 0
+    _primary_model_fail_threshold = 2  # 连续失败阈值
+    _switched_to_backup = False  # 是否已切换到备选模型
+    _backup_success_count = 0  # 备选模型连续成功次数
+    _backup_success_threshold = 10  # 备选模型连续成功阈值（用于尝试恢复主模型）
+    _auto_recovery_enabled = True  # 启用自动恢复机制
 
     def __init__(self, image_path):
         super().__init__()
@@ -116,12 +128,12 @@ class OCRWorker(QThread):
     
     @classmethod
     def get_reader(cls):
-        """获取或创建 OCR Reader 单例"""
+        """获取或创建 EasyOCR Reader 单例（仅备选方案使用）"""
         if cls._reader_instance is None:
             with cls._reader_lock:
                 # 双重检查锁定
                 if cls._reader_instance is None:
-                    print("🔍 正在初始化 OCR 引擎（首次加载，可能需要几秒）...")
+                    print("🔍 正在初始化 EasyOCR 引擎（首次加载，可能需要几秒）...")
                     try:
                         # 禁用 verbose 输出，减少日志干扰
                         cls._reader_instance = easyocr.Reader(
@@ -130,28 +142,34 @@ class OCRWorker(QThread):
                             verbose=False,
                             download_enabled=True
                         )
-                        print("✅ OCR 引擎初始化完成")
+                        print("✅ EasyOCR 引擎初始化完成")
                     except Exception as e:
-                        print(f"❌ OCR 引擎初始化失败: {e}")
+                        print(f"❌ EasyOCR 引擎初始化失败: {e}")
                         raise
         return cls._reader_instance
     
     @classmethod
     def cleanup_reader(cls):
-        """清理 OCR Reader（程序退出时调用）"""
+        """清理 EasyOCR Reader（程序退出时调用）"""
         if cls._reader_instance is not None:
             with cls._reader_lock:
                 if cls._reader_instance is not None:
                     try:
                         del cls._reader_instance
                         cls._reader_instance = None
-                        print("🗑️ OCR 引擎已清理")
+                        print("🗑️ EasyOCR 引擎已清理")
                     except:
                         pass
 
     def run(self):
-        """运行 OCR 识别"""
+        """运行 OCR 识别（智能降级策略）"""
+        import base64
+        from openai import OpenAI
+        
         reader = None
+        client = None
+        image_url = None
+        
         try:
             # 检查文件是否存在
             if not os.path.exists(self.image_path):
@@ -159,63 +177,221 @@ class OCRWorker(QThread):
                 return
 
             start_time = time.time()
-
-            # 获取单例 Reader
-            reader = self.get_reader()
             
-            # 检查是否已被中断
-            if self._interrupted:
-                print("⚠️ OCR 任务在开始前已被中断")
-                return
+            # 智能模型选择策略
+            use_primary_model = False
 
-            # 执行识别（设置较短的超时时间）
-            # 注意：easyocr 不支持原生中断，所以我们依赖线程终止
-            result = reader.readtext(
-                self.image_path,
-                paragraph=False,  # 不合并段落，提高速度
-                detail=0,  # 只返回文本，不返回坐标和置信度
-                batch_size=1  # 单张图片处理
-            )
+            # 情况1：未切换状态，尝试主模型
+            if not self._switched_to_backup:
+                use_primary_model = True
 
-            # 检查是否被中断
-            if self._interrupted:
-                print("⚠️ OCR 任务已被中断")
-                return
+            # 情况2：已切换状态，但备选模型连续成功达到阈值，尝试恢复主模型
+            elif (self._switched_to_backup and
+                  self._backup_success_count >= self._backup_success_threshold and
+                  self._auto_recovery_enabled):
+                print(f"🔍 EasyOCR 已连续成功 {self._backup_success_count} 次，尝试恢复 DeepSeek-OCR...")
+                self.__class__._switched_to_backup = False
+                self.__class__._primary_model_fail_count = 0  # 重置失败计数
+                self.__class__._backup_success_count = 0  # 重置成功计数
+                use_primary_model = True
 
-            # 提取文本（detail=0 时直接返回文本列表）
-            if isinstance(result, list) and len(result) > 0:
-                full_text = '\n'.join(result)
-            else:
-                full_text = ""
+            # 执行调用逻辑
+            if use_primary_model:
+                # 尝试主模型：DeepSeek-OCR
+                try:
+                    print(f"🤖 正在调用主模型: DeepSeek-OCR (SiliconFlow)")
+                    
+                    # 读取并编码图片
+                    with open(self.image_path, "rb") as f:
+                        image_data = f.read()
+                    
+                    # 获取图片扩展名
+                    ext = os.path.splitext(self.image_path)[1].lstrip('.')
+                    image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
+                    
+                    # 【关键】立即释放 image_data，减少内存占用
+                    del image_data
+                    
+                    # 创建客户端
+                    client = OpenAI(
+                        api_key=self.SILICONFLOW_API_KEY,
+                        base_url=self.SILICONFLOW_BASE_URL,
+                        timeout=60
+                    )
+                    
+                    # 检查是否已被中断
+                    if self._interrupted:
+                        print("⚠️ OCR 任务在调用前已被中断")
+                        return
+                    
+                    response = client.chat.completions.create(
+                        model="deepseek-ai/DeepSeek-OCR",
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": image_url
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "Convert the document to markdown"
+                                    }
+                                ]
+                            }
+                        ]
+                    )
+                    
+                    full_text = response.choices[0].message.content
 
-            elapsed_time = time.time() - start_time
+                    # 检查是否被中断
+                    if self._interrupted:
+                        print("⚠️ OCR 任务已被中断")
+                        return
 
-            # 再次检查是否被中断
-            if self._interrupted:
-                print("⚠️ OCR 任务已被中断（后处理阶段）")
-                return
+                    elapsed_time = time.time() - start_time
+                    print(f"✅ DeepSeek-OCR 主模型调用成功 (耗时: {elapsed_time:.2f}s)")
 
-            # 发送信号
-            self.ocr_completed.emit(full_text, elapsed_time)
+                    # 主模型成功，重置失败计数
+                    self.__class__._primary_model_fail_count = 0
+                    self.__class__._backup_success_count = 0  # 重置备选成功计数
+                    self.ocr_completed.emit(full_text, elapsed_time)
+                    return
 
-        except Exception as e:
+                except Exception as e:
+                    if self._interrupted:
+                        print("✅ OCR 任务已安全中断")
+                        return
+                    print(f"⚠️ 主模型 DeepSeek-OCR 调用失败: {str(e)}")
+                    # 增加失败计数
+                    self.__class__._primary_model_fail_count += 1
+
+                    # 检查是否达到阈值
+                    if self.__class__._primary_model_fail_count >= self.__class__._primary_model_fail_threshold:
+                        print(f"🚨 主模型连续失败 {self.__class__._primary_model_fail_count} 次，永久切换至备选模型！")
+                        self.__class__._switched_to_backup = True
+                        self.__class__._backup_success_count = 0  # 重置备选成功计数
+                    else:
+                        remaining = self.__class__._primary_model_fail_threshold - self.__class__._primary_model_fail_count
+                        print(
+                            f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
+
+            # 使用备选模型（已切换或主模型失败）
+            if not use_primary_model or (use_primary_model and self._primary_model_fail_count > 0):
+                try:
+                    print(f"🤖 使用备选模型: EasyOCR (本地)")
+                    
+                    # 获取单例 Reader
+                    reader = self.get_reader()
+                    
+                    # 检查是否已被中断
+                    if self._interrupted:
+                        print("⚠️ OCR 任务在备选模型调用前已被中断")
+                        return
+                    
+                    # 执行识别
+                    result = reader.readtext(
+                        self.image_path,
+                        paragraph=False,  # 不合并段落，提高速度
+                        detail=0,  # 只返回文本，不返回坐标和置信度
+                        batch_size=1  # 单张图片处理
+                    )
+                    
+                    # 提取文本
+                    if isinstance(result, list) and len(result) > 0:
+                        full_text = '\n'.join(result)
+                    else:
+                        full_text = ""
+
+                    # 检查是否被中断
+                    if self._interrupted:
+                        print("⚠️ OCR 任务已被中断")
+                        return
+
+                    total_elapsed = time.time() - start_time
+                    print(f"✅ EasyOCR 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
+
+                    # 备选模型成功，更新状态
+                    self.__class__._backup_success_count += 1
+
+                    # 在结果前添加使用的模型信息
+                    result_with_model = f"[使用模型: EasyOCR]\n\n{full_text}"
+                    self.ocr_completed.emit(result_with_model, total_elapsed)
+                    return
+
+                except Exception as e:
+                    if self._interrupted:
+                        print("✅ OCR 任务已安全中断")
+                        return
+                    print(f"⚠️ 备选模型 EasyOCR 调用失败: {str(e)}")
+                    # 备选模型也失败，重置成功计数
+                    self.__class__._backup_success_count = 0
+
+            # 所有尝试都失败
             if not self._interrupted:
-                import traceback
-                error_detail = traceback.format_exc()
-                print(f"OCR 错误详情:\n{error_detail}")
-                self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
+                self.error_occurred.emit(f"所有模型均调用失败（DeepSeek-OCR + EasyOCR）")
             else:
                 print("✅ OCR 任务已安全中断")
+
+        except SystemExit:
+            # 【关键】捕获系统退出信号，静默处理
+            print("✅ OCR 任务已被系统终止")
+            return
+        except KeyboardInterrupt:
+            # 【关键】捕获键盘中断
+            print("✅ OCR 任务被用户中断")
+            return
+        except Exception as e:
+            if self._interrupted:
+                print("✅ OCR 任务已安全中断")
+                return
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"OCR 工作线程错误详情:\n{error_detail}")
+            self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
         finally:
+            # 【关键】确保资源被正确清理
+            try:
+                if client is not None:
+                    # 关闭客户端连接
+                    if hasattr(client, 'close'):
+                        client.close()
+                    client = None
+            except:
+                pass
+            # 【关键】释放大对象
+            try:
+                if image_url is not None:
+                    del image_url
+            except:
+                pass
             # 注意：不要在这里删除 reader，它是单例
-            pass
 
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 OCR 任务收到中断信号")
-        # 注意：由于 easyocr 不支持原生中断，我们依赖主程序的 terminate()
+        # 注意：由于 easyocr 和 API 调用都不支持原生中断，我们依赖线程终止
         # 这里只是设置标志位，实际中断由线程终止完成
+    
+    @classmethod
+    def reset_model_state(cls):
+        """重置所有模型状态（可用于手动恢复主模型）"""
+        cls._primary_model_fail_count = 0
+        cls._switched_to_backup = False
+        cls._backup_success_count = 0
+        print("🔄 OCRWorker 模型状态已重置，将重新尝试 DeepSeek-OCR")
+    
+    @classmethod
+    def force_use_primary(cls):
+        """强制使用主模型（忽略失败计数）"""
+        cls._primary_model_fail_count = 0
+        cls._switched_to_backup = False
+        cls._backup_success_count = 0
+        print("⚡ 已强制切换至 DeepSeek-OCR 主模型")
 
 
 class LLMWorker(QThread):
