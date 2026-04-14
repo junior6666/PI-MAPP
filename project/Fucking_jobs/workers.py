@@ -595,10 +595,23 @@ class KimiWorker(QThread):
             if use_primary_model:
                 # 尝试主模型
                 try:
-                    print(f"🤖 Kimi-K2.5 请求中...")
+                    # 获取当前主模型名称
+                    primary_model_name = getattr(KimiWorker, '_custom_primary_model', 'kimi-k2.5')
+                    model_display = primary_model_name.split('/')[-1] if '/' in primary_model_name else primary_model_name
+                    
+                    # 根据模型选择 API 端点
+                    if primary_model_name == 'kimi-k2.5':
+                        api_key = self.api_key
+                        base_url = "https://api.moonshot.cn/v1"
+                    else:
+                        # Qwen 等非 Kimi 模型使用 SiliconFlow
+                        api_key = self.SILICONFLOW_API_KEY
+                        base_url = self.SILICONFLOW_BASE_URL
+                    
+                    print(f"🤖 {model_display} 请求中...")
                     client = OpenAI(
-                        api_key=self.api_key,
-                        base_url="https://api.moonshot.cn/v1",
+                        api_key=api_key,
+                        base_url=base_url,
                         timeout=60  # 设置超时
                     )
                     
@@ -607,7 +620,7 @@ class KimiWorker(QThread):
                         return
                     
                     completion = client.chat.completions.create(
-                        model="kimi-k2.5",
+                        model=primary_model_name,
                         messages=[
                             {"role": "system", "content": "你是专业的面试助手。"},
                             {
@@ -635,7 +648,7 @@ class KimiWorker(QThread):
                         return
 
                     elapsed_time = time.time() - start_time
-                    print(f"✅ Kimi-K2.5 完成 ({elapsed_time:.2f}s)")
+                    print(f"✅ {model_display} 完成 ({elapsed_time:.2f}s)")
 
                     # 主模型成功，重置失败计数
                     self.__class__._primary_model_fail_count = 0
@@ -646,7 +659,7 @@ class KimiWorker(QThread):
                 except Exception as e:
                     if self._interrupted:
                         return
-                    print(f"❌ Kimi-K2.5 失败: {str(e)[:50]}")
+                    print(f"❌ {model_display} 失败: {str(e)[:50]}")
                     # 增加失败计数
                     self.__class__._primary_model_fail_count += 1
 
@@ -787,6 +800,29 @@ class KimiWorker(QThread):
         cls._switched_to_backup = False
         cls._backup_success_count = 0
         print("⚡ 已强制切换至主模型")
+    
+    @classmethod
+    def toggle_kimi_model(cls):
+        """切换 Kimi 主模型（Kimi-K2.5 ↔ QwenA3B）"""
+        # 检查当前主模型是什么
+        current_primary = getattr(cls, '_custom_primary_model', 'kimi-k2.5')
+        
+        if current_primary == 'kimi-k2.5':
+            # 切换到 QwenA3B
+            cls._custom_primary_model = 'Qwen/Qwen3-Omni-30B-A3B-Instruct'
+            cls._primary_model_fail_count = 0
+            cls._switched_to_backup = False
+            cls._backup_success_count = 0
+            print("🔄 Kimi 主模型已切换: Kimi-K2.5 → QwenA3B")
+            return "QwenA3B"
+        else:
+            # 切换回 Kimi-K2.5
+            cls._custom_primary_model = 'kimi-k2.5'
+            cls._primary_model_fail_count = 0
+            cls._switched_to_backup = False
+            cls._backup_success_count = 0
+            print("🔄 Kimi 主模型已切换: QwenA3B → Kimi-K2.5")
+            return "Kimi-K2.5"
 
 
 class WebSocketServerWorker(QThread):
