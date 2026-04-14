@@ -15,7 +15,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background: #0f0f23;
@@ -26,7 +26,7 @@
             flex-direction: column;
             overflow: hidden;
         }
-        
+
         /* 顶部状态栏 */
         .header {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -37,13 +37,13 @@
             border-bottom: 1px solid #2a2a4a;
             min-height: 38px;
         }
-        
+
         .header h2 {
             font-size: 14px;
             color: #4ecca3;
             font-weight: 600;
         }
-        
+
         #status {
             font-size: 11px;
             padding: 3px 8px;
@@ -52,12 +52,12 @@
             color: #4ecca3;
             font-weight: 500;
         }
-        
+
         #status.disconnected {
             background: rgba(233, 69, 96, 0.1);
             color: #e94560;
         }
-        
+
         #messages {
             flex: 1;
             background: #1a1a2e;
@@ -70,38 +70,38 @@
             line-height: 1.4;
             -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
         }
-        
+
         /* Markdown 样式增强 */
         #messages h1, #messages h2, #messages h3, #messages h4 {
             color: #4ecca3;
             margin: 3px 0 1px 0;
             font-weight: 600;
         }
-        
+
         #messages h1 { font-size: 14px; border-bottom: 1px solid #2a2a4a; padding-bottom: 2px; }
         #messages h2 { font-size: 13px; }
         #messages h3 { font-size: 12.5px; }
-        
+
         #messages p {
             margin: 1px 0;
             line-height: 1.4;
         }
-        
+
         #messages strong {
             color: #4ecca3;
             font-weight: 600;
         }
-        
+
         #messages ul, #messages ol {
             margin: 1px 0;
             padding-left: 16px;
         }
-        
+
         #messages li {
             margin: 0.5px 0;
             line-height: 1.4;
         }
-        
+
         #messages blockquote {
             border-left: 2px solid #4ecca3;
             background: rgba(78, 204, 163, 0.05);
@@ -109,13 +109,13 @@
             margin: 2px 0;
             border-radius: 0 2px 2px 0;
         }
-        
+
         #messages hr {
             border: none;
             border-top: 1px solid #2a2a4a;
             margin: 2px 0;
         }
-        
+
         /* Markdown 代码块样式 */
         #messages code {
             background: rgba(255, 121, 198, 0.15);
@@ -125,7 +125,7 @@
             font-size: 0.85em;
             color: #ff79c6;
         }
-        
+
         #messages pre {
             background: #1e1e2e;
             border: 1px solid #3a3a5e;
@@ -135,7 +135,7 @@
             overflow-x: auto;
             position: relative;
         }
-        
+
         /* 让 highlight.js 完全控制代码块内样式 */
         #messages pre code {
             background: none !important;
@@ -146,7 +146,7 @@
             line-height: 1.38 !important;
             display: block;
         }
-        
+
         /* 代码块语言标签 */
         .code-language {
             position: absolute;
@@ -159,7 +159,7 @@
             font-size: 9px;
             font-weight: 600;
         }
-        
+
         /* 代码块复制按钮 */
         .copy-btn {
             position: absolute;
@@ -176,16 +176,16 @@
             transition: all 0.2s;
             font-weight: 600;
         }
-        
+
         .copy-btn:hover {
             opacity: 1;
             background: #5fffc8;
         }
-        
+
         .copy-btn:active {
             transform: scale(0.95);
         }
-        
+
         /* 底部触发条 */
         .drawer-trigger {
             background: #16213e;
@@ -198,21 +198,21 @@
             transition: all 0.3s;
             min-height: 20px;
         }
-        
+
         .drawer-trigger:active {
             background: #1a2744;
         }
-        
+
         .drawer-trigger-icon {
             font-size: 10px;
             color: #4ecca3;
             transition: transform 0.3s;
         }
-        
+
         .drawer-trigger.open .drawer-trigger-icon {
             transform: rotate(180deg);
         }
-        
+
         /* 抽屉容器 */
         .drawer {
             background: #16213e;
@@ -221,11 +221,11 @@
             transition: max-height 0.3s ease-out;
             border-top: 1px solid #2a2a4a;
         }
-        
+
         .drawer.open {
             max-height: 350px; /* 增加高度以容纳历史记录 */
         }
-        
+
         /* 底部控制栏 */
         .controls {
             background: transparent;
@@ -235,7 +235,7 @@
             justify-content: center;
             flex-wrap: wrap;
         }
-        
+
         /* 历史记录区域 */
         .history-section {
             padding: 8px;
@@ -243,7 +243,7 @@
             max-height: 250px;
             overflow-y: auto;
         }
-        
+
         .history-header {
             display: flex;
             justify-content: space-between;
@@ -251,13 +251,13 @@
             margin-bottom: 8px;
             padding: 0 4px;
         }
-        
+
         .history-header h4 {
             color: #4ecca3;
             font-size: 12px;
             margin: 0;
         }
-        
+
         .clear-history-btn {
             background: #e94560;
             color: white;
@@ -267,17 +267,17 @@
             font-size: 10px;
             cursor: pointer;
         }
-        
+
         .clear-history-btn:active {
             transform: scale(0.95);
         }
-        
+
         .history-list {
             display: flex;
             flex-direction: column;
             gap: 6px;
         }
-        
+
         .history-item {
             background: rgba(15, 52, 96, 0.5);
             border: 1px solid #2a2a4a;
@@ -287,18 +287,18 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        
+
         .history-item:hover {
             background: rgba(15, 52, 96, 0.8);
             border-color: #4ecca3;
         }
-        
+
         .history-item-time {
             font-size: 10px;
             color: #888;
             margin-bottom: 4px;
         }
-        
+
         .history-item-preview {
             font-size: 11px;
             color: #b0b0d0;
@@ -310,7 +310,7 @@
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
         }
-        
+
         .history-item-delete {
             position: absolute;
             top: 5px;
@@ -329,22 +329,22 @@
             opacity: 0;
             transition: opacity 0.2s;
         }
-        
+
         .history-item:hover .history-item-delete {
             opacity: 1;
         }
-        
+
         .history-item-delete:active {
             transform: scale(0.9);
         }
-        
+
         .empty-history {
             text-align: center;
             color: #666;
             padding: 20px;
             font-size: 11px;
         }
-        
+
         button {
             background: #0f3460;
             color: white;
@@ -357,21 +357,21 @@
             white-space: nowrap;
             min-width: 45px;
         }
-        
+
         button:active {
             transform: scale(0.95);
         }
-        
+
         button.primary {
             background: #4ecca3;
             color: #0f0f23;
             font-weight: 600;
         }
-        
+
         button.danger {
             background: #e94560;
         }
-        
+
         /* 配置弹窗遮罩 */
         #configModal {
             display: none;
@@ -386,11 +386,11 @@
             justify-content: center;
             padding: 20px;
         }
-        
+
         #configModal.show {
             display: flex;
         }
-        
+
         /* 配置弹窗内容 */
         .modal-content {
             background: #16213e;
@@ -400,21 +400,21 @@
             max-width: 350px;
             border: 1px solid #2a2a4a;
         }
-        
+
         .modal-content h3 {
             margin-bottom: 16px;
             text-align: center;
             color: #4ecca3;
             font-size: 18px;
         }
-        
+
         .modal-content label {
             display: block;
             margin: 12px 0 6px;
             font-size: 13px;
             color: #b0b0d0;
         }
-        
+
         .modal-content input[type=text],
         .modal-content input[type=number] {
             width: 100%;
@@ -425,58 +425,58 @@
             color: #e0e0e0;
             font-size: 15px;
         }
-        
+
         .modal-content input:focus {
             outline: none;
             border-color: #4ecca3;
         }
-        
+
         .modal-buttons {
             display: flex;
             gap: 8px;
             margin-top: 16px;
         }
-        
+
         .modal-buttons button {
             flex: 1;
         }
-        
+
         /* 空状态提示 */
         .empty-state {
             text-align: center;
             color: #666;
             padding: 40px 20px;
         }
-        
+
         .empty-state-icon {
             font-size: 48px;
             margin-bottom: 12px;
         }
-        
+
         /* 适配小屏幕手机 */
         @media (max-width: 375px) {
             .header h2 {
                 font-size: 14px;
             }
-            
+
             #messages {
                 font-size: 13px;
                 padding: 10px;
             }
-            
+
             button {
                 padding: 7px 12px;
                 font-size: 12px;
             }
         }
-        
+
         /* 适配平板 */
         @media (min-width: 768px) {
 
             .controls {
                 padding: 15px;
             }
-            
+
             button {
                 padding: 10px 18px;
                 font-size: 14px;
@@ -519,7 +519,7 @@
         <button onclick="connect()">连接</button>
         <button class="danger" onclick="disconnect()">断开</button>
     </div>
-    
+
     <!-- 历史记录区域 -->
     <div class="history-section">
         <div class="history-header">
@@ -556,19 +556,21 @@
     let currentMessage = '';  // 当前显示的消息
     let isFromWebSocket = false;  // 标记消息是否来自WebSocket
     let workflowStartTime = null;  // 工作流开始时间
+    let statusTimerInterval = null;  // 状态计时器ID
+    let currentStatusStartTime = null;  // 当前状态开始时间
 
     // 页面加载时自动读配置和加载历史记录
     window.onload = function () {
         loadConfig();
         loadHistory();
     };
-    
+
     // 切换抽屉展开/收纳
     function toggleDrawer() {
         drawerOpen = !drawerOpen;
         const drawer = document.getElementById('controlDrawer');
         const trigger = document.querySelector('.drawer-trigger');
-        
+
         if (drawerOpen) {
             drawer.classList.add('open');
             trigger.classList.add('open');
@@ -577,7 +579,7 @@
             trigger.classList.remove('open');
         }
     }
-    
+
     // 操作按钮点击后自动收纳抽屉
     function closeDrawerAfterAction() {
         setTimeout(() => {
@@ -637,36 +639,36 @@
             return;
         }
         closeDrawerAfterAction();
-            
+
         // 关闭已有连接
         if (ws) {
             ws.close();
         }
-            
+
         const url = `ws://${ip}:${port}`;
         console.log('尝试连接到:', url);
         document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔄</div><div>正在连接...</div></div>';
-            
+
         try {
             ws = new WebSocket(url);
-    
+
             ws.onopen = () => {
                 console.log('WebSocket 连接成功');
                 updateStatus(true);
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><div>已连接！等待接收消息...</div></div>';
             };
-    
+
             ws.onmessage = (event) => {
                 console.log('收到消息:', event.data);
-                
+
                 // 解析消息，提取状态信息
                 const messageData = parseWorkflowMessage(event.data);
-                
+
                 // 更新PC状态（始终更新，包含耗时信息）
                 if (messageData.status) {
                     updatePCStatus(messageData.status, messageData.elapsed);
                 }
-                
+
                 // 仅当有实际内容时才显示消息（纯状态标记不显示在主消息区）
                 if (messageData.content && messageData.content.trim() !== '') {
                     isFromWebSocket = true;  // 标记为WebSocket消息
@@ -674,13 +676,13 @@
                     isFromWebSocket = false;  // 重置标记
                 }
             };
-    
+
             ws.onclose = (event) => {
                 console.log('连接关闭:', event.code, event.reason);
                 updateStatus(false);
                 showMessage('❌ 连接已断开', 'error');
             };
-    
+
             ws.onerror = (error) => {
                 console.error('WebSocket 错误:', error);
                 updateStatus(false);
@@ -691,11 +693,11 @@
             alert('创建连接失败：' + error.message);
         }
     }
-    
+
     // 更新PC端工作状态
     function updatePCStatus(status, elapsed = null) {
         const pcStatusEl = document.getElementById('pc-status');
-        
+
         // 定义状态样式映射
         const statusConfig = {
             '待命': {
@@ -729,21 +731,69 @@
                 color: '#f44336'
             }
         };
-        
+
         const config = statusConfig[status] || statusConfig['待命'];
-        
-        // 构建显示文本
-        let displayText = `${config.icon} ${status}`;
-        if (elapsed !== null && elapsed > 0) {
-            displayText += ` (${elapsed.toFixed(2)}s)`;
+
+        // 如果需要计时的状态，启动计时器
+        if (status === 'OCR分析中' || status === 'LLM分析中') {
+            // 如果计时器未运行或状态改变，重新启动计时器
+            if (!statusTimerInterval || currentStatusStartTime === null) {
+                currentStatusStartTime = Date.now();
+                startStatusTimer(status, config.icon);
+            }
+        } else {
+            // 其他状态，停止计时器
+            stopStatusTimer();
+            currentStatusStartTime = null;
+            
+            // 构建显示文本（使用传入的elapsed或无耗时）
+            let displayText = `${config.icon} ${status}`;
+            if (elapsed !== null && elapsed > 0) {
+                displayText += ` (${elapsed.toFixed(2)}s)`;
+            }
+            pcStatusEl.textContent = displayText;
         }
-        
+
         // 更新样式
-        pcStatusEl.textContent = displayText;
         pcStatusEl.style.background = config.bg;
         pcStatusEl.style.color = config.color;
     }
-    
+
+    // 启动状态计时器
+    function startStatusTimer(status, icon) {
+        const pcStatusEl = document.getElementById('pc-status');
+        
+        // 清除之前的计时器
+        if (statusTimerInterval) {
+            clearInterval(statusTimerInterval);
+        }
+        
+        // 立即更新一次
+        updateTimerDisplay(status, icon);
+        
+        // 每秒更新一次
+        statusTimerInterval = setInterval(() => {
+            updateTimerDisplay(status, icon);
+        }, 1000);
+    }
+
+    // 更新计时器显示
+    function updateTimerDisplay(status, icon) {
+        const pcStatusEl = document.getElementById('pc-status');
+        if (currentStatusStartTime) {
+            const elapsed = (Date.now() - currentStatusStartTime) / 1000;
+            pcStatusEl.textContent = `${icon} ${status} (${elapsed.toFixed(0)}s)`;
+        }
+    }
+
+    // 停止状态计时器
+    function stopStatusTimer() {
+        if (statusTimerInterval) {
+            clearInterval(statusTimerInterval);
+            statusTimerInterval = null;
+        }
+    }
+
     // 解析工作流消息，提取状态和内容
     function parseWorkflowMessage(rawMessage) {
         const result = {
@@ -751,27 +801,27 @@
             content: rawMessage,
             elapsed: null
         };
-        
+
         // 尝试从消息中提取状态标记
         // 格式示例: [STATUS:OCR分析中] 或 [STATUS:已完成|ELAPSED:15.23]
         const statusMatch = rawMessage.match(/\[STATUS:(.+?)\]/);
         const elapsedMatch = rawMessage.match(/\[ELAPSED:([\d.]+)\]/);
-        
+
         if (statusMatch) {
             result.status = statusMatch[1];
             // 移除状态标记，保留纯内容
             result.content = rawMessage.replace(/\[STATUS:.+?\]/g, '').trim();
         }
-        
+
         if (elapsedMatch) {
             result.elapsed = parseFloat(elapsedMatch[1]);
             // 移除耗时标记
             result.content = result.content.replace(/\[ELAPSED:[\d.]+\]/g, '').trim();
         }
-        
+
         return result;
     }
-    
+
     function updateStatus(connected) {
         const statusEl = document.getElementById('status');
         if (connected) {
@@ -784,11 +834,11 @@
             updatePCStatus('待命');
         }
     }
-    
+
     function displayMessage(text, skipHistory = false) {
         const messagesEl = document.getElementById('messages');
         currentMessage = text;  // 保存当前消息
-        
+
         // 使用 marked.js 渲染 Markdown
         try {
             // 配置 marked
@@ -798,15 +848,15 @@
                 headerIds: false,
                 mangle: false
             });
-            
+
             // 自定义渲染器以添加代码块功能
             const renderer = new marked.Renderer();
-            
+
             // 自定义代码块渲染
             renderer.code = function(code, language) {
                 const lang = (language || 'text').toLowerCase();
                 let highlightedCode;
-                
+
                 // 使用 highlight.js 进行语法高亮
                 try {
                     if (language && hljs.getLanguage(language)) {
@@ -817,17 +867,17 @@
                 } catch (e) {
                     highlightedCode = escapeHtml(code);
                 }
-                
+
                 return `<pre><span class="code-language">${lang}</span><button class="copy-btn" onclick="copyCode(this)">📋 复制</button><code>${highlightedCode}</code></pre>`;
             };
-            
+
             // 渲染 Markdown
             let html = marked.parse(text, { renderer: renderer });
             messagesEl.innerHTML = html;
-            
+
             // 滚动到底部
             messagesEl.scrollTop = messagesEl.scrollHeight;
-            
+
             // 仅当消息来自WebSocket且未跳过历史时才保存
             if (!skipHistory && isFromWebSocket) {
                 saveToHistory(text);
@@ -840,19 +890,19 @@
             }
         }
     }
-    
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
-    
+
     function copyCode(btn) {
         // 找到代码块内容
         const pre = btn.parentElement;
         const codeBlock = pre.querySelector('code');
         const text = codeBlock.textContent;
-        
+
         // 复制到剪贴板
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(text).then(() => {
@@ -865,7 +915,7 @@
             fallbackCopy(btn, text);
         }
     }
-    
+
     function fallbackCopy(btn, text) {
         // 备用复制方法
         const textarea = document.createElement('textarea');
@@ -874,7 +924,7 @@
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
         textarea.select();
-        
+
         try {
             document.execCommand('copy');
             showCopySuccess(btn);
@@ -882,10 +932,10 @@
             console.error('复制失败:', err);
             alert('复制失败，请手动选择复制');
         }
-        
+
         document.body.removeChild(textarea);
     }
-    
+
     function showCopySuccess(btn) {
         const originalText = btn.textContent;
         btn.textContent = '✅ 已复制';
@@ -895,7 +945,7 @@
             btn.style.background = '#4ecca3';
         }, 2000);
     }
-    
+
     function showMessage(text, type = 'info') {
         const messagesEl = document.getElementById('messages');
         const icon = type === 'error' ? '❌' : 'ℹ️';
@@ -908,25 +958,25 @@
         }
         closeDrawerAfterAction();
     }
-    
+
     // ========== 历史记录功能 ==========
-    
+
     // 保存消息到历史记录（带唯一性检查）
     function saveToHistory(message) {
         if (!message || message.trim() === '') return;
-        
+
         try {
             let history = JSON.parse(localStorage.getItem('message_history') || '[]');
-            
+
             // 唯一性检查：基于内容哈希判断是否已存在
             const contentHash = generateContentHash(message);
             const exists = history.some(item => item.contentHash === contentHash);
-            
+
             if (exists) {
                 console.log('该消息已存在于历史记录中，跳过添加');
                 return;
             }
-            
+
             // 创建历史记录项
             const historyItem = {
                 id: Date.now(),
@@ -935,18 +985,18 @@
                 preview: message.substring(0, 100),  // 预览前100字符
                 contentHash: contentHash  // 保存内容哈希用于唯一性判断
             };
-            
+
             // 添加到数组开头（最新的在前）
             history.unshift(historyItem);
-            
+
             // 限制历史记录数量（最多50条）
             if (history.length > 50) {
                 history = history.slice(0, 50);
             }
-            
+
             // 保存到 localStorage
             localStorage.setItem('message_history', JSON.stringify(history));
-            
+
             // 刷新显示
             loadHistory();
             console.log('消息已保存到历史记录');
@@ -954,7 +1004,7 @@
             console.error('保存历史记录失败:', error);
         }
     }
-    
+
     // 生成内容哈希用于唯一性判断
     function generateContentHash(content) {
         // 简单的哈希算法：将字符串转换为数字
@@ -967,26 +1017,26 @@
         }
         return hash.toString(36); // 转换为36进制字符串
     }
-    
+
     // 加载并显示历史记录
     function loadHistory() {
         try {
             const historyList = document.getElementById('historyList');
             const history = JSON.parse(localStorage.getItem('message_history') || '[]');
-            
+
             if (history.length === 0) {
                 historyList.innerHTML = '<div class="empty-history">暂无历史记录</div>';
                 return;
             }
-            
+
             // 按时间倒序排列（最新的在前）
             history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            
+
             let html = '';
             history.forEach(item => {
                 const date = new Date(item.timestamp);
                 const timeStr = formatDateTime(date);
-                
+
                 html += `
                     <div class="history-item" onclick="loadHistoryItem(${item.id})">
                         <div class="history-item-time">${timeStr}</div>
@@ -995,19 +1045,19 @@
                     </div>
                 `;
             });
-            
+
             historyList.innerHTML = html;
         } catch (error) {
             console.error('加载历史记录失败:', error);
         }
     }
-    
+
     // 加载某个历史记录到主显示区
     function loadHistoryItem(id) {
         try {
             const history = JSON.parse(localStorage.getItem('message_history') || '[]');
             const item = history.find(h => h.id === id);
-            
+
             if (item) {
                 // 传递 skipHistory=true 避免重复加入历史
                 displayMessage(item.content, true);
@@ -1020,7 +1070,7 @@
             console.error('加载历史记录项失败:', error);
         }
     }
-    
+
     // 删除单个历史记录
     function deleteHistoryItem(id) {
         try {
@@ -1032,7 +1082,7 @@
             console.error('删除历史记录失败:', error);
         }
     }
-    
+
     // 清空所有历史记录
     function clearAllHistory() {
         if (confirm('确定要清空所有历史记录吗？')) {
@@ -1040,7 +1090,7 @@
             loadHistory();
         }
     }
-    
+
     // 格式化日期时间
     function formatDateTime(date) {
         const year = date.getFullYear();
@@ -1049,7 +1099,7 @@
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
         const seconds = String(date.getSeconds()).padStart(2, '0');
-        
+
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 </script>
