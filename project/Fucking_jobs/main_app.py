@@ -85,6 +85,9 @@ class MainWindow(QMainWindow):
         # 延迟启动 Kimi 模型切换快捷键（Alt+2）
         QTimer.singleShot(1400, self.start_kimi_model_toggle_hotkey)
         
+        # 延迟启动后备模型快捷键（Alt+3 ~ Alt+7）
+        QTimer.singleShot(1600, self.start_backup_model_hotkeys)
+        
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
         
@@ -953,6 +956,11 @@ class MainWindow(QMainWindow):
 <li><b>Alt + Z：</b>Case2 工作流 - 截图 → Kimi 直接分析</li>
 <li><b>Alt + 1：</b>切换 OCR 模型（DeepSeek-OCR ↔ EasyOCR）</li>
 <li><b>Alt + 2：</b>切换 Kimi 主模型（Kimi-K2.5 ↔ QwenA3B）</li>
+<li><b>Alt + 3：</b>设置 Qwen-VL-8B 为主模型</li>
+<li><b>Alt + 4：</b>设置 Qwen-VL-32B 为主模型</li>
+<li><b>Alt + 5：</b>设置 Qwen-VL-235B 为主模型</li>
+<li><b>Alt + 6：</b>设置 GLM-4.5V 为主模型</li>
+<li><b>Alt + 7：</b>设置 Kimi-K2.5(SF) 为主模型</li>
 </ul>
 
 <h3 style='color: #4ecca3;'>🔄 模型降级策略</h3>
@@ -1177,6 +1185,39 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ Kimi模型切换快捷键启动失败: {e}")
     
+    def start_backup_model_hotkeys(self):
+        """启动后备模型快捷键（Alt+3 ~ Alt+7）"""
+        try:
+            from pynput import keyboard
+            from workers import KimiWorker
+            
+            # 定义后备模型映射
+            backup_models = {
+                '<alt>+3': KimiWorker.BACKUP_MODELS[0],  # Qwen/Qwen3-VL-8B-Instruct
+                '<alt>+4': KimiWorker.BACKUP_MODELS[1],  # Qwen/Qwen3-VL-32B-Instruct
+                '<alt>+5': KimiWorker.BACKUP_MODELS[2],  # Qwen/Qwen3-VL-235B-A22B-Instruct
+                '<alt>+6': KimiWorker.BACKUP_MODELS[3],  # zai-org/GLM-4.5V
+                '<alt>+7': KimiWorker.BACKUP_MODELS[4],  # Pro/moonshotai/Kimi-K2.5
+            }
+            
+            # 创建回调函数映射
+            handlers = {}
+            for hotkey, model in backup_models.items():
+                # 使用闭包捕获 model 变量
+                def make_handler(m):
+                    return lambda: self.on_backup_model_triggered(m)
+                handlers[hotkey] = make_handler(model)
+            
+            # 创建全局热键监听器
+            self.backup_model_listener = keyboard.GlobalHotKeys(handlers)
+            self.backup_model_listener.start()
+            
+            self.statusBar().showMessage("后备模型快捷键已启用 (Alt+3~7)")
+            print("✅ 后备模型快捷键 Alt+3~7 已启用")
+            
+        except Exception as e:
+            print(f"❌ 后备模型快捷键启动失败: {e}")
+    
     @Slot()
     def toggle_screenshot(self, checked):
         """切换截图监听状态"""
@@ -1352,6 +1393,27 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ Kimi 模型切换失败: {e}")
             self.statusBar().showMessage(f"Kimi 模型切换失败: {str(e)}")
+    
+    def on_backup_model_triggered(self, model_name):
+        """后备模型快捷键触发（Alt+3~7）"""
+        try:
+            from workers import KimiWorker
+            
+            # 设置为主模型
+            model_short = KimiWorker.set_primary_model(model_name)
+            
+            # 显示提示消息
+            self.statusBar().showMessage(f"Kimi 主模型已设置为: {model_short}")
+            
+            # 如果 WebSocket 已连接，通知手机端
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message(f"[STATUS:Kimi主模型设置为{model_short}]", silent=True)
+            
+            print(f"✅ 当前 Kimi 主模型: {model_short}")
+            
+        except Exception as e:
+            print(f"❌ 设置主模型失败: {e}")
+            self.statusBar().showMessage(f"设置主模型失败: {str(e)}")
     
     def perform_quick_screenshot(self):
         """执行快速截图"""
@@ -1979,6 +2041,15 @@ class MainWindow(QMainWindow):
             except:
                 pass
         
+        # 停止后备模型监听器
+        if hasattr(self, 'backup_model_listener') and self.backup_model_listener:
+            try:
+                print("⏳ 正在停止后备模型监听...")
+                self.backup_model_listener.stop()
+                print("✅ 后备模型监听已停止")
+            except:
+                pass
+        
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
             from workers import OCRWorker
@@ -2073,6 +2144,15 @@ class MainWindow(QMainWindow):
                 print("⏳ 正在停止 Kimi 模型切换监听...")
                 self.kimi_model_toggle_listener.stop()
                 print("✅ Kimi 模型切换监听已停止")
+            except:
+                pass
+        
+        # 停止后备模型监听器
+        if hasattr(self, 'backup_model_listener') and self.backup_model_listener:
+            try:
+                print("⏳ 正在停止后备模型监听...")
+                self.backup_model_listener.stop()
+                print("✅ 后备模型监听已停止")
             except:
                 pass
         

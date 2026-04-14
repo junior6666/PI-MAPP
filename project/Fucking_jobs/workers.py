@@ -823,6 +823,17 @@ class KimiWorker(QThread):
             cls._backup_success_count = 0
             print("🔄 Kimi 主模型已切换: QwenA3B → Kimi-K2.5")
             return "Kimi-K2.5"
+    
+    @classmethod
+    def set_primary_model(cls, model_name):
+        """设置指定的模型为主模型"""
+        cls._custom_primary_model = model_name
+        cls._primary_model_fail_count = 0
+        cls._switched_to_backup = False
+        cls._backup_success_count = 0
+        model_short = model_name.split('/')[-1]
+        print(f"🔄 Kimi 主模型已设置为: {model_short}")
+        return model_short
 
 
 class WebSocketServerWorker(QThread):
