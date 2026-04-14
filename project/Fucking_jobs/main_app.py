@@ -82,6 +82,9 @@ class MainWindow(QMainWindow):
         # 延迟启动模型切换快捷键（Alt+1）
         QTimer.singleShot(1200, self.start_model_toggle_hotkey)
         
+        # 延迟启动 Kimi 模型切换快捷键（Alt+2）
+        QTimer.singleShot(1400, self.start_kimi_model_toggle_hotkey)
+        
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
         
@@ -670,7 +673,8 @@ class MainWindow(QMainWindow):
 - 回答要简洁专业，适合面试场景口头表达
 - 代码题必须提供可运行的完整代码
 - 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
-- 每个题目之间用 --- 分割线隔开""")
+- 每个题目之间用 --- 分割线隔开
+- 返回markdown格式""")
         prompt_layout.addWidget(self.main_prompt_input)
         
         # 保存按钮
@@ -948,6 +952,7 @@ class MainWindow(QMainWindow):
 <li><b>Alt + X：</b>Case1 工作流 - 截图 → OCR → LLM</li>
 <li><b>Alt + Z：</b>Case2 工作流 - 截图 → Kimi 直接分析</li>
 <li><b>Alt + 1：</b>切换 OCR 模型（DeepSeek-OCR ↔ EasyOCR）</li>
+<li><b>Alt + 2：</b>切换 Kimi 主模型（Kimi-K2.5 ↔ QwenA3B）</li>
 </ul>
 
 <h3 style='color: #4ecca3;'>🔄 模型降级策略</h3>
@@ -1155,6 +1160,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ 模型切换快捷键启动失败: {e}")
     
+    def start_kimi_model_toggle_hotkey(self):
+        """启动 Kimi 模型切换快捷键（Alt+2）"""
+        try:
+            from pynput import keyboard
+            
+            # 创建全局热键监听器
+            self.kimi_model_toggle_listener = keyboard.GlobalHotKeys({
+                '<alt>+2': self.on_kimi_model_toggle_triggered
+            })
+            self.kimi_model_toggle_listener.start()
+            
+            self.statusBar().showMessage("Kimi模型切换快捷键已启用 (Alt+2)")
+            print("✅ Kimi模型切换快捷键 Alt+2 已启用")
+            
+        except Exception as e:
+            print(f"❌ Kimi模型切换快捷键启动失败: {e}")
+    
     @Slot()
     def toggle_screenshot(self, checked):
         """切换截图监听状态"""
@@ -1309,6 +1331,27 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ 模型切换失败: {e}")
             self.statusBar().showMessage(f"模型切换失败: {str(e)}")
+    
+    def on_kimi_model_toggle_triggered(self):
+        """Kimi 模型切换快捷键触发（Alt+2）"""
+        try:
+            from workers import KimiWorker
+            
+            # 调用切换方法
+            current_model = KimiWorker.toggle_kimi_model()
+            
+            # 显示提示消息
+            self.statusBar().showMessage(f"Kimi 主模型已切换为: {current_model}")
+            
+            # 如果 WebSocket 已连接，通知手机端
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message(f"[STATUS:Kimi主模型切换为{current_model}]", silent=True)
+            
+            print(f"✅ 当前 Kimi 主模型: {current_model}")
+            
+        except Exception as e:
+            print(f"❌ Kimi 模型切换失败: {e}")
+            self.statusBar().showMessage(f"Kimi 模型切换失败: {str(e)}")
     
     def perform_quick_screenshot(self):
         """执行快速截图"""
@@ -1927,6 +1970,15 @@ class MainWindow(QMainWindow):
             except:
                 pass
         
+        # 停止 Kimi 模型切换监听器
+        if hasattr(self, 'kimi_model_toggle_listener') and self.kimi_model_toggle_listener:
+            try:
+                print("⏳ 正在停止 Kimi 模型切换监听...")
+                self.kimi_model_toggle_listener.stop()
+                print("✅ Kimi 模型切换监听已停止")
+            except:
+                pass
+        
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
             from workers import OCRWorker
@@ -2012,6 +2064,15 @@ class MainWindow(QMainWindow):
                 print("⏳ 正在停止模型切换监听...")
                 self.model_toggle_listener.stop()
                 print("✅ 模型切换监听已停止")
+            except:
+                pass
+        
+        # 停止 Kimi 模型切换监听器
+        if hasattr(self, 'kimi_model_toggle_listener') and self.kimi_model_toggle_listener:
+            try:
+                print("⏳ 正在停止 Kimi 模型切换监听...")
+                self.kimi_model_toggle_listener.stop()
+                print("✅ Kimi 模型切换监听已停止")
             except:
                 pass
         
