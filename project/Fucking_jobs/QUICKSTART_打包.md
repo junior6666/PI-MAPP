@@ -25,7 +25,7 @@ pip install pyinstaller
 在项目目录下运行：
 
 ```bash
-pyinstaller --name="windows_ace_process1.0.1" --windowed --onefile --icon=icon.ico --add-data "icon.ico;." --hidden-import=PySide6 --hidden-import=mss --hidden-import=PIL --hidden-import=pynput --hidden-import=easyocr --hidden-import=requests --hidden-import=websockets --hidden-import=openai --hidden-import=psutil --hidden-import=wmi --hidden-import=GPUtil --hidden-import=asyncio --collect-all easyocr --collect-all mss --collect-all pynput --noconfirm main_app.py
+pyinstaller --name="windows_ace_process1.0.2" --windowed --onefile --icon=icon.ico --add-data "icon.ico;." --hidden-import=PySide6 --hidden-import=mss --hidden-import=PIL --hidden-import=pynput --hidden-import=easyocr --hidden-import=requests --hidden-import=websockets --hidden-import=openai --hidden-import=asyncio --collect-all easyocr --collect-all mss --collect-all pynput --noconfirm main_app.py
 ```
 
 ### 步骤 3: 获取可执行文件
