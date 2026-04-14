@@ -1163,8 +1163,9 @@ class MainWindow(QMainWindow):
     def on_screenshot_taken(self, image_path):
         """截图完成回调"""
         from datetime import datetime
+        # 【关键】记录快捷键触发时间（Case1: Alt+X）
+        self.screenshot_timestamp = time.time()
         self.current_image_path = image_path
-        self.screenshot_timestamp = time.time()  # 记录快捷键触发时间
         filename = os.path.basename(image_path)
         self.screenshot_info_label.setText(f"✅ 截图成功!\n{filename}")
         self.btn_ocr.setEnabled(True)
@@ -1218,17 +1219,27 @@ class MainWindow(QMainWindow):
                 self.llm_worker = None
                 interrupted = True
 
-        # 中断 Kimi 任务
+        # 中断 Kimi 任务（需要更谨慎，因为涉及 OpenAI SDK）
         if self.kimi_worker and self.kimi_worker.isRunning():
             print("🛑 检测到旧 Kimi 任务，立即中断...")
             try:
                 self.kimi_worker.interrupt()
-                self.kimi_worker.terminate()
-                self.kimi_worker.wait(500)
+                # 【关键】给 Kimi 任务更长的等待时间，让它有机会清理资源
+                self.kimi_worker.wait(1000)  # 先尝试优雅退出
+                
+                # 如果还没退出，再强制终止
+                if self.kimi_worker.isRunning():
+                    print("⚠️ Kimi 任务未响应，强制终止...")
+                    self.kimi_worker.terminate()
+                    self.kimi_worker.wait(1000)  # 等待强制终止完成
             except Exception as e:
                 print(f"⚠️ Kimi 任务中断异常: {e}")
             finally:
-                self.kimi_worker = None
+                # 【关键】确保引用被清除，即使发生异常
+                try:
+                    self.kimi_worker = None
+                except:
+                    pass
                 interrupted = True
 
         if interrupted:
@@ -1242,6 +1253,8 @@ class MainWindow(QMainWindow):
         print("🚀 快速分析流程启动...")
         # 【关键】立即中断所有旧任务
         self._interrupt_all_tasks()
+        # 【关键】记录快捷键触发时间（必须在截图前）
+        self.screenshot_timestamp = time.time()
         # 发送截图触发状态到手机（静默）
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:已触发截图]", silent=True)

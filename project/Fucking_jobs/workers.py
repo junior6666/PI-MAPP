@@ -387,6 +387,9 @@ class KimiWorker(QThread):
             # 获取图片扩展名
             ext = os.path.splitext(self.image_path)[1].lstrip('.')
             image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
+            
+            # 【关键】立即释放 image_data，减少内存占用
+            del image_data
 
             # 智能模型选择策略
             use_primary_model = False
@@ -557,6 +560,14 @@ class KimiWorker(QThread):
             else:
                 print("✅ Kimi 任务已安全中断")
 
+        except SystemExit:
+            # 【关键】捕获系统退出信号，静默处理
+            print("✅ Kimi 任务已被系统终止")
+            return
+        except KeyboardInterrupt:
+            # 【关键】捕获键盘中断
+            print("✅ Kimi 任务被用户中断")
+            return
         except Exception as e:
             if self._interrupted:
                 print("✅ Kimi 任务已安全中断")
@@ -566,8 +577,20 @@ class KimiWorker(QThread):
             print(f"Kimi 工作线程错误详情:\n{error_detail}")
             self.error_occurred.emit(f"图片分析失败: {str(e)}")
         finally:
-            # 清理客户端
-            client = None
+            # 【关键】确保 client 被正确清理
+            try:
+                if client is not None:
+                    # 关闭客户端连接
+                    if hasattr(client, 'close'):
+                        client.close()
+                    client = None
+            except:
+                pass
+            # 【关键】释放大对象
+            try:
+                del image_url
+            except:
+                pass
 
     def interrupt(self):
         """中断当前任务"""
