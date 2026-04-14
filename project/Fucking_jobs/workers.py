@@ -199,7 +199,7 @@ class OCRWorker(QThread):
             if use_primary_model:
                 # 尝试主模型：DeepSeek-OCR
                 try:
-                    print(f"🤖 正在调用主模型: DeepSeek-OCR (SiliconFlow)")
+                    print(f"🤖 DeepSeek-OCR 请求中...")
                     
                     # 读取并编码图片
                     with open(self.image_path, "rb") as f:
@@ -221,7 +221,6 @@ class OCRWorker(QThread):
                     
                     # 检查是否已被中断
                     if self._interrupted:
-                        print("⚠️ OCR 任务在调用前已被中断")
                         return
                     
                     response = client.chat.completions.create(
@@ -249,11 +248,10 @@ class OCRWorker(QThread):
 
                     # 检查是否被中断
                     if self._interrupted:
-                        print("⚠️ OCR 任务已被中断")
                         return
 
                     elapsed_time = time.time() - start_time
-                    print(f"✅ DeepSeek-OCR 主模型调用成功 (耗时: {elapsed_time:.2f}s)")
+                    print(f"✅ DeepSeek-OCR 完成 ({elapsed_time:.2f}s)")
 
                     # 主模型成功，重置失败计数
                     self.__class__._primary_model_fail_count = 0
@@ -263,33 +261,27 @@ class OCRWorker(QThread):
 
                 except Exception as e:
                     if self._interrupted:
-                        print("✅ OCR 任务已安全中断")
                         return
-                    print(f"⚠️ 主模型 DeepSeek-OCR 调用失败: {str(e)}")
+                    print(f"❌ DeepSeek-OCR 失败: {str(e)[:50]}")
                     # 增加失败计数
                     self.__class__._primary_model_fail_count += 1
 
                     # 检查是否达到阈值
                     if self.__class__._primary_model_fail_count >= self.__class__._primary_model_fail_threshold:
-                        print(f"🚨 主模型连续失败 {self.__class__._primary_model_fail_count} 次，永久切换至备选模型！")
+                        print(f"🚨 切换至 EasyOCR")
                         self.__class__._switched_to_backup = True
                         self.__class__._backup_success_count = 0  # 重置备选成功计数
-                    else:
-                        remaining = self.__class__._primary_model_fail_threshold - self.__class__._primary_model_fail_count
-                        print(
-                            f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
 
             # 使用备选模型（已切换或主模型失败）
             if not use_primary_model or (use_primary_model and self._primary_model_fail_count > 0):
                 try:
-                    print(f"🤖 使用备选模型: EasyOCR (本地)")
+                    print(f"🤖 EasyOCR 识别中...")
                     
                     # 获取单例 Reader
                     reader = self.get_reader()
                     
                     # 检查是否已被中断
                     if self._interrupted:
-                        print("⚠️ OCR 任务在备选模型调用前已被中断")
                         return
                     
                     # 执行识别
@@ -308,11 +300,10 @@ class OCRWorker(QThread):
 
                     # 检查是否被中断
                     if self._interrupted:
-                        print("⚠️ OCR 任务已被中断")
                         return
 
                     total_elapsed = time.time() - start_time
-                    print(f"✅ EasyOCR 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
+                    print(f"✅ EasyOCR 完成 ({total_elapsed:.2f}s)")
 
                     # 备选模型成功，更新状态
                     self.__class__._backup_success_count += 1
@@ -324,9 +315,8 @@ class OCRWorker(QThread):
 
                 except Exception as e:
                     if self._interrupted:
-                        print("✅ OCR 任务已安全中断")
                         return
-                    print(f"⚠️ 备选模型 EasyOCR 调用失败: {str(e)}")
+                    print(f"❌ EasyOCR 失败: {str(e)[:50]}")
                     # 备选模型也失败，重置成功计数
                     self.__class__._backup_success_count = 0
 
@@ -434,9 +424,9 @@ class LLMWorker(QThread):
 
             # 检查是否已被中断
             if self._interrupted:
-                print("⚠️ LLM 任务在请求前已被中断")
                 return
 
+            print(f"🤖 LLM 请求中...")
             # 发送请求（设置合理的超时）
             response = self._session.post(
                 url, 
@@ -448,7 +438,6 @@ class LLMWorker(QThread):
 
             # 检查是否被中断
             if self._interrupted:
-                print("⚠️ LLM 任务已被中断")
                 return
 
             result = response.json()
@@ -461,9 +450,9 @@ class LLMWorker(QThread):
 
                 # 最后检查是否被中断
                 if self._interrupted:
-                    print("⚠️ LLM 任务已被中断（结果处理阶段）")
                     return
 
+                print(f"✅ LLM 完成 ({elapsed_time:.2f}s)")
                 self.llm_completed.emit(content, elapsed_time)
             else:
                 if not self._interrupted:
@@ -471,20 +460,21 @@ class LLMWorker(QThread):
 
         except requests.exceptions.Timeout:
             if not self._interrupted:
+                print(f"❌ LLM 超时")
                 self.error_occurred.emit("LLM API 请求超时，请重试")
         except requests.exceptions.ConnectionError:
             if not self._interrupted:
+                print(f"❌ LLM 连接失败")
                 self.error_occurred.emit("LLM API 连接失败，请检查网络")
         except requests.exceptions.RequestException as e:
             if not self._interrupted:
                 # 忽略因中断导致的异常
                 if "Interrupted function call" not in str(e):
+                    print(f"❌ LLM 请求失败: {str(e)[:50]}")
                     self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
         except Exception as e:
             if not self._interrupted:
-                import traceback
-                error_detail = traceback.format_exc()
-                print(f"LLM 错误详情:\n{error_detail}")
+                print(f"❌ LLM 错误: {str(e)[:50]}")
                 self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
         finally:
             # 清理 Session
@@ -588,7 +578,7 @@ class KimiWorker(QThread):
             if use_primary_model:
                 # 尝试主模型
                 try:
-                    print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
+                    print(f"🤖 Kimi-K2.5 请求中...")
                     client = OpenAI(
                         api_key=self.api_key,
                         base_url="https://api.moonshot.cn/v1",
@@ -597,7 +587,6 @@ class KimiWorker(QThread):
                     
                     # 检查是否已被中断
                     if self._interrupted:
-                        print("⚠️ Kimi 任务在调用前已被中断")
                         return
                     
                     completion = client.chat.completions.create(
@@ -626,11 +615,10 @@ class KimiWorker(QThread):
 
                     # 检查是否被中断
                     if self._interrupted:
-                        print("⚠️ Kimi 任务已被中断")
                         return
 
                     elapsed_time = time.time() - start_time
-                    print(f"✅ Kimi 主模型调用成功 (耗时: {elapsed_time:.2f}s)")
+                    print(f"✅ Kimi-K2.5 完成 ({elapsed_time:.2f}s)")
 
                     # 主模型成功，重置失败计数
                     self.__class__._primary_model_fail_count = 0
@@ -640,21 +628,16 @@ class KimiWorker(QThread):
 
                 except Exception as e:
                     if self._interrupted:
-                        print("✅ Kimi 任务已安全中断")
                         return
-                    print(f"⚠️ 主模型 Kimi 调用失败: {str(e)}")
+                    print(f"❌ Kimi-K2.5 失败: {str(e)[:50]}")
                     # 增加失败计数
                     self.__class__._primary_model_fail_count += 1
 
                     # 检查是否达到阈值
                     if self.__class__._primary_model_fail_count >= self.__class__._primary_model_fail_threshold:
-                        print(f"🚨 主模型连续失败 {self.__class__._primary_model_fail_count} 次，永久切换至备选模型！")
+                        print(f"🚨 切换至备选模型")
                         self.__class__._switched_to_backup = True
                         self.__class__._backup_success_count = 0  # 重置备选成功计数
-                    else:
-                        remaining = self.__class__._primary_model_fail_threshold - self.__class__._primary_model_fail_count
-                        print(
-                            f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
 
                     # 切换至备选模型重试（效率优先：不重试主模型）
                     backup_index = self.__class__._current_backup_index
@@ -667,7 +650,7 @@ class KimiWorker(QThread):
                 model = self.BACKUP_MODELS[backup_index]
 
                 try:
-                    print(f"🤖 使用备选模型 {backup_index + 1}/{len(self.BACKUP_MODELS)}: {model}")
+                    print(f"🤖 备选模型 {model.split('/')[-1]} 请求中...")
                     
                     # 创建客户端
                     client = OpenAI(
@@ -678,7 +661,6 @@ class KimiWorker(QThread):
                     
                     # 检查是否已被中断
                     if self._interrupted:
-                        print("⚠️ Kimi 任务在备选模型调用前已被中断")
                         return
                     
                     response = client.chat.completions.create(
@@ -706,11 +688,10 @@ class KimiWorker(QThread):
 
                     # 检查是否被中断
                     if self._interrupted:
-                        print("⚠️ Kimi 任务已被中断")
                         return
 
                     total_elapsed = time.time() - start_time
-                    print(f"✅ 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
+                    print(f"✅ {model.split('/')[-1]} 完成 ({total_elapsed:.2f}s)")
 
                     # 备选模型成功，更新状态
                     self.__class__._backup_success_count += 1
@@ -723,9 +704,8 @@ class KimiWorker(QThread):
 
                 except Exception as e:
                     if self._interrupted:
-                        print("✅ Kimi 任务已安全中断")
                         return
-                    print(f"⚠️ 备选模型 {model} 调用失败: {str(e)}")
+                    print(f"❌ {model.split('/')[-1]} 失败: {str(e)[:50]}")
                     # 备选模型也失败，重置成功计数，尝试下一个
                     self.__class__._backup_success_count = 0
                     self.__class__._current_backup_index = (backup_index + 1) % len(self.BACKUP_MODELS)
