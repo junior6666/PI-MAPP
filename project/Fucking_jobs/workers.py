@@ -100,14 +100,15 @@ class ScreenshotWorker(QThread):
 
 class OCRWorker(QThread):
     """OCR 工作线程 - 文字识别"""
-    
-    ocr_completed = Signal(str, float)   # OCR 完成信号，参数为识别文本和耗时（秒）
-    error_occurred = Signal(str)   # 错误信号
-    
+
+    ocr_completed = Signal(str, float)  # OCR 完成信号，参数为识别文本和耗时（秒）
+    error_occurred = Signal(str)  # 错误信号
+
     def __init__(self, image_path):
         super().__init__()
         self.image_path = image_path
-        
+        self._interrupted = False
+
     def run(self):
         """运行 OCR 识别"""
         try:
@@ -115,51 +116,70 @@ class OCRWorker(QThread):
             if not os.path.exists(self.image_path):
                 self.error_occurred.emit(f"图片文件不存在: {self.image_path}")
                 return
-            
+
             start_time = time.time()
-            
+
             # 初始化 OCR 阅读器
             reader = easyocr.Reader(['ch_sim', 'en'])
-            
+
             # 执行识别
             result = reader.readtext(self.image_path)
-            
+
+            # 检查是否被中断
+            if self._interrupted:
+                print("⚠️ OCR 任务已被中断")
+                return
+
             # 提取文本
             texts = [text for bbox, text, prob in result]
             full_text = '\n'.join(texts)
-            
+
             elapsed_time = time.time() - start_time
-            
+
+            # 再次检查是否被中断
+            if self._interrupted:
+                print("⚠️ OCR 任务已被中断（后处理阶段）")
+                return
+
             # 发送信号
             self.ocr_completed.emit(full_text, elapsed_time)
-            
+
         except Exception as e:
-            self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
+            if not self._interrupted:
+                self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
+            else:
+                print("✅ OCR 任务已安全中断")
+
+    def interrupt(self):
+        """中断当前任务"""
+        self._interrupted = True
+        print("🛑 OCR 任务收到中断信号")
 
 
 class LLMWorker(QThread):
     """LLM 工作线程 - 调用大语言模型 API"""
-    
-    llm_completed = Signal(str, float)   # LLM 完成信号，参数为响应文本和耗时（秒）
-    error_occurred = Signal(str)   # 错误信号
-    
+
+    llm_completed = Signal(str, float)  # LLM 完成信号，参数为响应文本和耗时（秒）
+    error_occurred = Signal(str)  # 错误信号
+
     def __init__(self, api_key, model, prompt):
         super().__init__()
         self.api_key = api_key
         self.model = model
         self.prompt = prompt
-        
+        self._interrupted = False
+
     def run(self):
         """调用 LLM API"""
         try:
             start_time = time.time()
-            
+
             url = "https://api.longcat.chat/openai/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
+
             data = {
                 "model": self.model,
                 "messages": [
@@ -168,28 +188,47 @@ class LLMWorker(QThread):
                 "max_tokens": 2000,
                 "temperature": 0.7
             }
-            
+
             response = requests.post(url, headers=headers, json=data, timeout=60)
             response.raise_for_status()
-            
+
+            # 检查是否被中断
+            if self._interrupted:
+                print("⚠️ LLM 任务已被中断")
+                return
+
             result = response.json()
-            
+
             elapsed_time = time.time() - start_time
-            
+
             # 提取回复内容
             if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0]['message']['content']
+
+                # 最后检查是否被中断
+                if self._interrupted:
+                    print("⚠️ LLM 任务已被中断（结果处理阶段）")
+                    return
+
                 self.llm_completed.emit(content, elapsed_time)
             else:
-                self.error_occurred.emit("LLM API 返回格式异常")
-                
-        except requests.exceptions.Timeout:
-            self.error_occurred.emit("LLM API 请求超时，请重试")
-        except requests.exceptions.RequestException as e:
-            self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
-        except Exception as e:
-            self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
+                if not self._interrupted:
+                    self.error_occurred.emit("LLM API 返回格式异常")
 
+        except requests.exceptions.Timeout:
+            if not self._interrupted:
+                self.error_occurred.emit("LLM API 请求超时，请重试")
+        except requests.exceptions.RequestException as e:
+            if not self._interrupted:
+                self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
+        except Exception as e:
+            if not self._interrupted:
+                self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
+
+    def interrupt(self):
+        """中断当前任务"""
+        self._interrupted = True
+        print("🛑 LLM 任务收到中断信号")
 
 class KimiWorker(QThread):
     """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型+智能降级）"""
@@ -225,65 +264,75 @@ class KimiWorker(QThread):
         self.api_key = api_key
         self.image_path = image_path
         self.prompt = prompt
-        
+        self._interrupted = False
+
     def run(self):
         """调用 Kimi API（失败时自动切换备选模型）"""
         try:
             import base64
             from openai import OpenAI
-            
+
             start_time = time.time()
-            
+
             # 检查文件是否存在
             if not os.path.exists(self.image_path):
                 self.error_occurred.emit(f"图片文件不存在: {self.image_path}")
                 return
-            
+
             # 读取并编码图片
             with open(self.image_path, "rb") as f:
                 image_data = f.read()
-            
+
             # 获取图片扩展名
             ext = os.path.splitext(self.image_path)[1].lstrip('.')
             image_url = f"data:image/{ext};base64,{base64.b64encode(image_data).decode('utf-8')}"
-            
+
             # 智能模型选择策略
             use_primary_model = False
-            
+
             # 情况1：未切换状态，尝试主模型
             if not self._switched_to_backup:
                 use_primary_model = True
-            
+
             # 情况2：已切换状态，但备选模型连续成功达到阈值，尝试恢复主模型
-            elif (self._switched_to_backup and 
-                  self._backup_success_count >= self._backup_success_threshold and 
+            elif (self._switched_to_backup and
+                  self._backup_success_count >= self._backup_success_threshold and
                   self._auto_recovery_enabled):
                 print(f"🔍 备选模型已连续成功 {self._backup_success_count} 次，尝试恢复主模型...")
                 self._switched_to_backup = False
                 self._primary_model_fail_count = 0  # 重置失败计数
                 self._backup_success_count = 0  # 重置成功计数
                 use_primary_model = True
-            
+
             # 执行调用逻辑
             if use_primary_model:
                 # 尝试主模型
                 try:
                     print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
                     content = self._call_moonshot_api(image_url)
+
+                    # 检查是否被中断
+                    if self._interrupted:
+                        print("⚠️ Kimi 任务已被中断")
+                        return
+
                     elapsed_time = time.time() - start_time
                     print(f"✅ Kimi 主模型调用成功 (耗时: {elapsed_time:.2f}s)")
-                    
+
                     # 主模型成功，重置失败计数
                     self.__class__._primary_model_fail_count = 0
                     self.__class__._backup_success_count = 0  # 重置备选成功计数
                     self.kimi_completed.emit(content, elapsed_time)
                     return
-                    
+
                 except Exception as e:
+                    if self._interrupted:
+                        print("✅ Kimi 任务已安全中断")
+                        return
                     print(f"⚠️ 主模型 Kimi 调用失败: {str(e)}")
                     # 增加失败计数
                     self.__class__._primary_model_fail_count += 1
-                    
+
                     # 检查是否达到阈值
                     if self.__class__._primary_model_fail_count >= self.__class__._primary_model_fail_threshold:
                         print(f"🚨 主模型连续失败 {self.__class__._primary_model_fail_count} 次，永久切换至备选模型！")
@@ -291,47 +340,68 @@ class KimiWorker(QThread):
                         self.__class__._backup_success_count = 0  # 重置备选成功计数
                     else:
                         remaining = self.__class__._primary_model_fail_threshold - self.__class__._primary_model_fail_count
-                        print(f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
-                    
+                        print(
+                            f"⏳ 主模型失败次数: {self.__class__._primary_model_fail_count}/{self.__class__._primary_model_fail_threshold} (还需{remaining}次失败将切换)")
+
                     # 切换至备选模型重试（效率优先：不重试主模型）
                     backup_index = self.__class__._current_backup_index
                     model = self.BACKUP_MODELS[backup_index]
-                    
+
             # 使用备选模型（已切换或主模型失败）
             if not use_primary_model or (use_primary_model and self._primary_model_fail_count > 0):
                 # 选择备选模型
                 backup_index = self.__class__._current_backup_index
                 model = self.BACKUP_MODELS[backup_index]
-                
+
                 try:
                     print(f"🤖 使用备选模型 {backup_index + 1}/{len(self.BACKUP_MODELS)}: {model}")
                     content = self._call_siliconflow_api(image_url, model)
+
+                    # 检查是否被中断
+                    if self._interrupted:
+                        print("⚠️ Kimi 任务已被中断")
+                        return
+
                     total_elapsed = time.time() - start_time
                     print(f"✅ 备选模型调用成功 (耗时: {total_elapsed:.2f}s)")
-                    
+
                     # 备选模型成功，更新状态
                     self.__class__._backup_success_count += 1
                     self.__class__._current_backup_index = (backup_index + 1) % len(self.BACKUP_MODELS)
-                    
+
                     # 在结果前添加使用的模型信息
                     result_with_model = f"[使用模型: {model}]\n\n{content}"
                     self.kimi_completed.emit(result_with_model, total_elapsed)
                     return
-                    
+
                 except Exception as e:
+                    if self._interrupted:
+                        print("✅ Kimi 任务已安全中断")
+                        return
                     print(f"⚠️ 备选模型 {model} 调用失败: {str(e)}")
                     # 备选模型也失败，重置成功计数，尝试下一个
                     self.__class__._backup_success_count = 0
                     self.__class__._current_backup_index = (backup_index + 1) % len(self.BACKUP_MODELS)
-            
+
             # 所有尝试都失败
-            self.error_occurred.emit(f"所有模型均调用失败（主模型 + 备选模型）")
-            
+            if not self._interrupted:
+                self.error_occurred.emit(f"所有模型均调用失败（主模型 + 备选模型）")
+            else:
+                print("✅ Kimi 任务已安全中断")
+
         except Exception as e:
+            if self._interrupted:
+                print("✅ Kimi 任务已安全中断")
+                return
             import traceback
             error_detail = traceback.format_exc()
             print(f"Kimi 工作线程错误详情:\n{error_detail}")
             self.error_occurred.emit(f"图片分析失败: {str(e)}")
+
+    def interrupt(self):
+        """中断当前任务"""
+        self._interrupted = True
+        print("🛑 Kimi 任务收到中断信号")
     
     @classmethod
     def reset_model_state(cls):
