@@ -15,7 +15,8 @@ import asyncio
 import websockets
 import socket
 from PySide6.QtCore import QThread, Signal, Slot
-
+import warnings
+warnings.filterwarnings('ignore', message=".*pin_memory.*")
 
 class ScreenshotWorker(QThread):
     """截图工作线程 - 监听热键并截图"""
