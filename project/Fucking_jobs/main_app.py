@@ -79,6 +79,9 @@ class MainWindow(QMainWindow):
         # 延迟启动快速分析快捷键（Alt+Z）
         QTimer.singleShot(1000, self.start_quick_analysis_hotkey)
         
+        # 延迟启动模型切换快捷键（Alt+1）
+        QTimer.singleShot(1200, self.start_model_toggle_hotkey)
+        
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
         
@@ -940,6 +943,13 @@ class MainWindow(QMainWindow):
 <li><b>自动触发：</b>程序启动后自动启用 Alt+Z 快捷键监听</li>
 </ul>
 
+<h3 style='color: #4ecca3;'>⌨️ 快捷键列表</h3>
+<ul>
+<li><b>Alt + X：</b>Case1 工作流 - 截图 → OCR → LLM</li>
+<li><b>Alt + Z：</b>Case2 工作流 - 截图 → Kimi 直接分析</li>
+<li><b>Alt + 1：</b>切换 OCR 模型（DeepSeek-OCR ↔ EasyOCR）</li>
+</ul>
+
 <h3 style='color: #4ecca3;'>🔄 模型降级策略</h3>
 <p>当主模型 Kimi-K2.5 连续失败2次后，会自动切换到备选模型：</p>
 <ol>
@@ -1128,6 +1138,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ 快速分析快捷键启动失败: {e}")
     
+    def start_model_toggle_hotkey(self):
+        """启动模型切换快捷键（Alt+1）"""
+        try:
+            from pynput import keyboard
+            
+            # 创建全局热键监听器
+            self.model_toggle_listener = keyboard.GlobalHotKeys({
+                '<alt>+1': self.on_model_toggle_triggered
+            })
+            self.model_toggle_listener.start()
+            
+            self.statusBar().showMessage("模型切换快捷键已启用 (Alt+1)")
+            print("✅ 模型切换快捷键 Alt+1 已启用")
+            
+        except Exception as e:
+            print(f"❌ 模型切换快捷键启动失败: {e}")
+    
     @Slot()
     def toggle_screenshot(self, checked):
         """切换截图监听状态"""
@@ -1261,6 +1288,27 @@ class MainWindow(QMainWindow):
         
         # 1. 先进行截图
         self.perform_quick_screenshot()
+    
+    def on_model_toggle_triggered(self):
+        """模型切换快捷键触发（Alt+1）"""
+        try:
+            from workers import OCRWorker
+            
+            # 调用切换方法
+            current_model = OCRWorker.toggle_model()
+            
+            # 显示提示消息
+            self.statusBar().showMessage(f"OCR 模型已切换为: {current_model}")
+            
+            # 如果 WebSocket 已连接，通知手机端
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message(f"[STATUS:OCR模型切换为{current_model}]", silent=True)
+            
+            print(f"✅ 当前 OCR 模型: {current_model}")
+            
+        except Exception as e:
+            print(f"❌ 模型切换失败: {e}")
+            self.statusBar().showMessage(f"模型切换失败: {str(e)}")
     
     def perform_quick_screenshot(self):
         """执行快速截图"""
@@ -1870,6 +1918,15 @@ class MainWindow(QMainWindow):
             except:
                 pass
         
+        # 停止模型切换监听器
+        if hasattr(self, 'model_toggle_listener') and self.model_toggle_listener:
+            try:
+                print("⏳ 正在停止模型切换监听...")
+                self.model_toggle_listener.stop()
+                print("✅ 模型切换监听已停止")
+            except:
+                pass
+        
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
             from workers import OCRWorker
@@ -1946,6 +2003,15 @@ class MainWindow(QMainWindow):
                 print("⏳ 正在停止快捷键监听...")
                 self.quick_analysis_listener.stop()
                 print("✅ 快捷键监听已停止")
+            except:
+                pass
+        
+        # 停止模型切换监听器
+        if hasattr(self, 'model_toggle_listener') and self.model_toggle_listener:
+            try:
+                print("⏳ 正在停止模型切换监听...")
+                self.model_toggle_listener.stop()
+                print("✅ 模型切换监听已停止")
             except:
                 pass
         

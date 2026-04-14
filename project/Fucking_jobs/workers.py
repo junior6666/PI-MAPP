@@ -382,6 +382,23 @@ class OCRWorker(QThread):
         cls._switched_to_backup = False
         cls._backup_success_count = 0
         print("⚡ 已强制切换至 DeepSeek-OCR 主模型")
+    
+    @classmethod
+    def toggle_model(cls):
+        """切换 OCR 模型（DeepSeek-OCR ↔ EasyOCR）"""
+        if cls._switched_to_backup:
+            # 当前是 EasyOCR，切换到 DeepSeek-OCR
+            cls._switched_to_backup = False
+            cls._primary_model_fail_count = 0
+            cls._backup_success_count = 0
+            print("🔄 OCR 模型已切换: EasyOCR → DeepSeek-OCR")
+            return "DeepSeek-OCR"
+        else:
+            # 当前是 DeepSeek-OCR，切换到 EasyOCR
+            cls._switched_to_backup = True
+            cls._backup_success_count = 0
+            print("🔄 OCR 模型已切换: DeepSeek-OCR → EasyOCR")
+            return "EasyOCR"
 
 
 class LLMWorker(QThread):
