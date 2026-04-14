@@ -99,18 +99,58 @@ class ScreenshotWorker(QThread):
 
 
 class OCRWorker(QThread):
-    """OCR 工作线程 - 文字识别"""
+    """OCR 工作线程 - 文字识别（使用单例 Reader 避免内存泄漏）"""
 
     ocr_completed = Signal(str, float)  # OCR 完成信号，参数为识别文本和耗时（秒）
     error_occurred = Signal(str)  # 错误信号
+    
+    # 类级别的单例 Reader（避免重复加载模型导致内存泄漏）
+    _reader_instance = None
+    _reader_lock = threading.Lock()
 
     def __init__(self, image_path):
         super().__init__()
         self.image_path = image_path
         self._interrupted = False
+    
+    @classmethod
+    def get_reader(cls):
+        """获取或创建 OCR Reader 单例"""
+        if cls._reader_instance is None:
+            with cls._reader_lock:
+                # 双重检查锁定
+                if cls._reader_instance is None:
+                    print("🔍 正在初始化 OCR 引擎（首次加载，可能需要几秒）...")
+                    try:
+                        # 禁用 verbose 输出，减少日志干扰
+                        cls._reader_instance = easyocr.Reader(
+                            ['ch_sim', 'en'], 
+                            gpu=False,  # 强制使用 CPU
+                            verbose=False,
+                            download_enabled=True
+                        )
+                        print("✅ OCR 引擎初始化完成")
+                    except Exception as e:
+                        print(f"❌ OCR 引擎初始化失败: {e}")
+                        raise
+        return cls._reader_instance
+    
+    @classmethod
+    def cleanup_reader(cls):
+        """清理 OCR Reader（程序退出时调用）"""
+        if cls._reader_instance is not None:
+            with cls._reader_lock:
+                if cls._reader_instance is not None:
+                    try:
+                        del cls._reader_instance
+                        cls._reader_instance = None
+                        print("🗑️ OCR 引擎已清理")
+                    except:
+                        pass
 
     def run(self):
         """运行 OCR 识别"""
+        reader = None
         try:
             # 检查文件是否存在
             if not os.path.exists(self.image_path):
@@ -119,20 +159,33 @@ class OCRWorker(QThread):
 
             start_time = time.time()
 
-            # 初始化 OCR 阅读器
-            reader = easyocr.Reader(['ch_sim', 'en'])
+            # 获取单例 Reader
+            reader = self.get_reader()
+            
+            # 检查是否已被中断
+            if self._interrupted:
+                print("⚠️ OCR 任务在开始前已被中断")
+                return
 
-            # 执行识别
-            result = reader.readtext(self.image_path)
+            # 执行识别（设置较短的超时时间）
+            # 注意：easyocr 不支持原生中断，所以我们依赖线程终止
+            result = reader.readtext(
+                self.image_path,
+                paragraph=False,  # 不合并段落，提高速度
+                detail=0,  # 只返回文本，不返回坐标和置信度
+                batch_size=1  # 单张图片处理
+            )
 
             # 检查是否被中断
             if self._interrupted:
                 print("⚠️ OCR 任务已被中断")
                 return
 
-            # 提取文本
-            texts = [text for bbox, text, prob in result]
-            full_text = '\n'.join(texts)
+            # 提取文本（detail=0 时直接返回文本列表）
+            if isinstance(result, list) and len(result) > 0:
+                full_text = '\n'.join(result)
+            else:
+                full_text = ""
 
             elapsed_time = time.time() - start_time
 
@@ -146,18 +199,26 @@ class OCRWorker(QThread):
 
         except Exception as e:
             if not self._interrupted:
+                import traceback
+                error_detail = traceback.format_exc()
+                print(f"OCR 错误详情:\n{error_detail}")
                 self.error_occurred.emit(f"OCR 识别失败: {str(e)}")
             else:
                 print("✅ OCR 任务已安全中断")
+        finally:
+            # 注意：不要在这里删除 reader，它是单例
+            pass
 
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 OCR 任务收到中断信号")
+        # 注意：由于 easyocr 不支持原生中断，我们依赖主程序的 terminate()
+        # 这里只是设置标志位，实际中断由线程终止完成
 
 
 class LLMWorker(QThread):
-    """LLM 工作线程 - 调用大语言模型 API"""
+    """LLM 工作线程 - 调用大语言模型 API（支持安全中断）"""
 
     llm_completed = Signal(str, float)  # LLM 完成信号，参数为响应文本和耗时（秒）
     error_occurred = Signal(str)  # 错误信号
@@ -168,12 +229,17 @@ class LLMWorker(QThread):
         self.model = model
         self.prompt = prompt
         self._interrupted = False
+        self._session = None  # 用于管理 requests session
 
     def run(self):
         """调用 LLM API"""
+        self._session = None
         try:
             start_time = time.time()
 
+            # 创建 Session 以便更好地控制连接
+            self._session = requests.Session()
+            
             url = "https://api.longcat.chat/openai/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -189,7 +255,18 @@ class LLMWorker(QThread):
                 "temperature": 0.7
             }
 
-            response = requests.post(url, headers=headers, json=data, timeout=60)
+            # 检查是否已被中断
+            if self._interrupted:
+                print("⚠️ LLM 任务在请求前已被中断")
+                return
+
+            # 发送请求（设置合理的超时）
+            response = self._session.post(
+                url, 
+                headers=headers, 
+                json=data, 
+                timeout=(10, 60)  # (连接超时, 读取超时)
+            )
             response.raise_for_status()
 
             # 检查是否被中断
@@ -218,17 +295,39 @@ class LLMWorker(QThread):
         except requests.exceptions.Timeout:
             if not self._interrupted:
                 self.error_occurred.emit("LLM API 请求超时，请重试")
+        except requests.exceptions.ConnectionError:
+            if not self._interrupted:
+                self.error_occurred.emit("LLM API 连接失败，请检查网络")
         except requests.exceptions.RequestException as e:
             if not self._interrupted:
-                self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
+                # 忽略因中断导致的异常
+                if "Interrupted function call" not in str(e):
+                    self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
         except Exception as e:
             if not self._interrupted:
+                import traceback
+                error_detail = traceback.format_exc()
+                print(f"LLM 错误详情:\n{error_detail}")
                 self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
+        finally:
+            # 清理 Session
+            if self._session:
+                try:
+                    self._session.close()
+                except:
+                    pass
+                self._session = None
 
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 LLM 任务收到中断信号")
+        # 关闭 Session 以中断正在进行的请求
+        if self._session:
+            try:
+                self._session.close()
+            except:
+                pass
 
 class KimiWorker(QThread):
     """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型+智能降级）"""
@@ -268,6 +367,7 @@ class KimiWorker(QThread):
 
     def run(self):
         """调用 Kimi API（失败时自动切换备选模型）"""
+        client = None
         try:
             import base64
             from openai import OpenAI
@@ -309,7 +409,40 @@ class KimiWorker(QThread):
                 # 尝试主模型
                 try:
                     print(f"🤖 正在调用主模型: Kimi-K2.5 (Moonshot)")
-                    content = self._call_moonshot_api(image_url)
+                    client = OpenAI(
+                        api_key=self.api_key,
+                        base_url="https://api.moonshot.cn/v1",
+                        timeout=60  # 设置超时
+                    )
+                    
+                    # 检查是否已被中断
+                    if self._interrupted:
+                        print("⚠️ Kimi 任务在调用前已被中断")
+                        return
+                    
+                    completion = client.chat.completions.create(
+                        model="kimi-k2.5",
+                        messages=[
+                            {"role": "system", "content": "你是专业的面试助手。"},
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": image_url,
+                                        },
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": self.prompt,
+                                    },
+                                ],
+                            },
+                        ],
+                    )
+                    
+                    content = completion.choices[0].message.content
 
                     # 检查是否被中断
                     if self._interrupted:
@@ -355,7 +488,41 @@ class KimiWorker(QThread):
 
                 try:
                     print(f"🤖 使用备选模型 {backup_index + 1}/{len(self.BACKUP_MODELS)}: {model}")
-                    content = self._call_siliconflow_api(image_url, model)
+                    
+                    # 创建客户端
+                    client = OpenAI(
+                        api_key=self.SILICONFLOW_API_KEY,
+                        base_url=self.SILICONFLOW_BASE_URL,
+                        timeout=60
+                    )
+                    
+                    # 检查是否已被中断
+                    if self._interrupted:
+                        print("⚠️ Kimi 任务在备选模型调用前已被中断")
+                        return
+                    
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": image_url
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": self.prompt
+                                    }
+                                ]
+                            }
+                        ]
+                    )
+                    
+                    content = response.choices[0].message.content
 
                     # 检查是否被中断
                     if self._interrupted:
@@ -397,11 +564,15 @@ class KimiWorker(QThread):
             error_detail = traceback.format_exc()
             print(f"Kimi 工作线程错误详情:\n{error_detail}")
             self.error_occurred.emit(f"图片分析失败: {str(e)}")
+        finally:
+            # 清理客户端
+            client = None
 
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 Kimi 任务收到中断信号")
+        # 注意：OpenAI SDK 不支持原生中断，依赖线程终止
     
     @classmethod
     def reset_model_state(cls):
@@ -419,71 +590,6 @@ class KimiWorker(QThread):
         cls._switched_to_backup = False
         cls._backup_success_count = 0
         print("⚡ 已强制切换至主模型")
-    
-    def _call_moonshot_api(self, image_url):
-        """调用 Moonshot (Kimi) API"""
-        from openai import OpenAI
-        
-        client = OpenAI(
-            api_key=self.api_key,
-            base_url="https://api.moonshot.cn/v1",
-        )
-        
-        completion = client.chat.completions.create(
-            model="kimi-k2.5",
-            messages=[
-                {"role": "system", "content": "你是专业的面试助手。"},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_url,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": self.prompt,
-                        },
-                    ],
-                },
-            ],
-        )
-        
-        return completion.choices[0].message.content
-    
-    def _call_siliconflow_api(self, image_url, model):
-        """调用 SiliconFlow API"""
-        from openai import OpenAI
-        
-        client = OpenAI(
-            api_key=self.SILICONFLOW_API_KEY,
-            base_url=self.SILICONFLOW_BASE_URL,
-        )
-        
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_url
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": self.prompt
-                        }
-                    ]
-                }
-            ]
-        )
-        
-        return response.choices[0].message.content
 
 
 class WebSocketServerWorker(QThread):

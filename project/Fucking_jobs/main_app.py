@@ -1193,29 +1193,43 @@ class MainWindow(QMainWindow):
         # 中断 OCR 任务
         if self.ocr_worker and self.ocr_worker.isRunning():
             print("🛑 检测到旧 OCR 任务，立即中断...")
-            self.ocr_worker.interrupt()
-            self.ocr_worker.terminate()
-            self.ocr_worker.wait(1000)
-            self.ocr_worker = None
-            interrupted = True
+            try:
+                self.ocr_worker.interrupt()
+                # 使用 terminate 强制终止（因为 easyocr 不支持原生中断）
+                self.ocr_worker.terminate()
+                # 等待线程结束，设置较短超时避免阻塞
+                self.ocr_worker.wait(500)
+            except Exception as e:
+                print(f"⚠️ OCR 任务中断异常: {e}")
+            finally:
+                self.ocr_worker = None
+                interrupted = True
 
         # 中断 LLM 任务
         if self.llm_worker and self.llm_worker.isRunning():
             print("🛑 检测到旧 LLM 任务，立即中断...")
-            self.llm_worker.interrupt()
-            self.llm_worker.terminate()
-            self.llm_worker.wait(1000)
-            self.llm_worker = None
-            interrupted = True
+            try:
+                self.llm_worker.interrupt()  # 先关闭 session
+                self.llm_worker.terminate()   # 再强制终止
+                self.llm_worker.wait(500)     # 短暂等待
+            except Exception as e:
+                print(f"⚠️ LLM 任务中断异常: {e}")
+            finally:
+                self.llm_worker = None
+                interrupted = True
 
         # 中断 Kimi 任务
         if self.kimi_worker and self.kimi_worker.isRunning():
             print("🛑 检测到旧 Kimi 任务，立即中断...")
-            self.kimi_worker.interrupt()
-            self.kimi_worker.terminate()
-            self.kimi_worker.wait(1000)
-            self.kimi_worker = None
-            interrupted = True
+            try:
+                self.kimi_worker.interrupt()
+                self.kimi_worker.terminate()
+                self.kimi_worker.wait(500)
+            except Exception as e:
+                print(f"⚠️ Kimi 任务中断异常: {e}")
+            finally:
+                self.kimi_worker = None
+                interrupted = True
 
         if interrupted:
             print("✅ 旧任务已全部中断，准备处理新任务")
@@ -1337,9 +1351,12 @@ class MainWindow(QMainWindow):
         # 【关键】如果已有 LLM 任务在运行，先中断
         if self.llm_worker and self.llm_worker.isRunning():
             print("⚠️ 检测到正在运行的 LLM 任务，先中断...")
-            self.llm_worker.interrupt()
-            self.llm_worker.terminate()
-            self.llm_worker.wait(1000)
+            try:
+                self.llm_worker.interrupt()
+                self.llm_worker.terminate()
+                self.llm_worker.wait(500)
+            except Exception as e:
+                print(f"⚠️ LLM 任务中断异常: {e}")
         # 禁用按钮
         self.btn_llm.setEnabled(False)
         self.btn_llm.setText("分析中...")
@@ -1460,9 +1477,12 @@ class MainWindow(QMainWindow):
             # 【关键】如果已有 Kimi 任务在运行，先中断
             if self.kimi_worker and self.kimi_worker.isRunning():
                 print("⚠️ 检测到正在运行的 Kimi 任务，先中断...")
-                self.kimi_worker.interrupt()
-                self.kimi_worker.terminate()
-                self.kimi_worker.wait(1000)
+                try:
+                    self.kimi_worker.interrupt()
+                    self.kimi_worker.terminate()
+                    self.kimi_worker.wait(500)
+                except Exception as e:
+                    print(f"⚠️ Kimi 任务中断异常: {e}")
             # 创建并启动 Kimi 工作线程
             self.kimi_worker = KimiWorker(api_key, image_path, prompt)
             self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)
@@ -1831,6 +1851,14 @@ class MainWindow(QMainWindow):
             except:
                 pass
         
+        # 【新增】清理 OCR 引擎单例，释放内存
+        try:
+            from workers import OCRWorker
+            OCRWorker.cleanup_reader()
+            print("✅ OCR 引擎已清理")
+        except Exception as e:
+            print(f"⚠️ OCR 引擎清理失败: {e}")
+        
         # 移除托盘图标
         if hasattr(self, 'tray_icon'):
             self.tray_icon.hide()
@@ -1901,6 +1929,14 @@ class MainWindow(QMainWindow):
                 print("✅ 快捷键监听已停止")
             except:
                 pass
+        
+        # 【新增】清理 OCR 引擎单例，释放内存
+        try:
+            from workers import OCRWorker
+            OCRWorker.cleanup_reader()
+            print("✅ OCR 引擎已清理")
+        except Exception as e:
+            print(f"⚠️ OCR 引擎清理失败: {e}")
         
         # 移除托盘图标
         if hasattr(self, 'tray_icon'):
