@@ -6,7 +6,7 @@ client = OpenAI(
     api_key="sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln",
     base_url="https://api.siliconflow.cn/v1"
 )
-image_path = r"H:\pycharm_project\github_projects\PI-MAPP\project\Fucking_jobs\screenshots\quick_20260413_150359_424.png"
+image_path = r"/project/Fucking_jobs/screenshots/quick_20260413_150359_424.png"
 
 with open(image_path, "rb") as f:
     image_data = f.read()

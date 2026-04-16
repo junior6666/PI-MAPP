@@ -30,7 +30,7 @@ class WindowsServiceManager:
             return sys.executable
         else:
             # 开发环境
-            return f'"{sys.executable}" "{os.path.abspath("main_app.py")}"'
+            return f'"{sys.executable}" "{os.path.abspath("../main_app.py")}"'
     
     def _get_guardian_script_path(self):
         """获取守护脚本路径"""

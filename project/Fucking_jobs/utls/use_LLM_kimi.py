@@ -9,7 +9,7 @@ client = OpenAI(
 )
 
 # 在这里，你需要将 kimi.png 文件替换为你想让 Kimi 识别的图片的地址
-image_path = r"H:\pycharm_project\github_projects\PI-MAPP\project\Fucking_jobs\screenshots\screenshot_20260412_234054_264.png"
+image_path = r"/project/Fucking_jobs/screenshots/screenshot_20260412_234054_264.png"
 
 with open(image_path, "rb") as f:
     image_data = f.read()

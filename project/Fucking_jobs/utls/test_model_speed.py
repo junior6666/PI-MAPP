@@ -11,7 +11,7 @@ client = OpenAI(
 )
 
 # 测试图片路径
-image_path = r"H:\pycharm_project\github_projects\PI-MAPP\project\Fucking_jobs\screenshots\screenshot_20260412_234054_264.png"
+image_path = r"/project/Fucking_jobs/screenshots/screenshot_20260412_234054_264.png"
 
 # 读取并编码图片
 with open(image_path, "rb") as f:

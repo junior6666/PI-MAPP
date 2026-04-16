@@ -6,21 +6,20 @@
 import sys
 import os
 import time
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                                QHBoxLayout, QPushButton, QLabel, QTextEdit,
-                                QGroupBox, QFormLayout, QLineEdit, QSpinBox,
-                                QCheckBox, QMessageBox, QSplitter, QStatusBar,
-                                QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
-                                QTableWidget, QTableWidgetItem, QHeaderView)
-from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer, QEvent
-from PySide6.QtGui import QFont, QTextCursor, QIcon, QPalette, QColor
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                               QHBoxLayout, QPushButton, QLabel, QTextEdit,
+                               QGroupBox, QFormLayout, QLineEdit, QSpinBox,
+                               QCheckBox, QMessageBox, QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
+                               QTableWidget, QTableWidgetItem, QHeaderView)
+from PySide6.QtCore import Qt, Slot, QTimer, QEvent
+from PySide6.QtGui import QFont, QIcon
 
 # 导入工作线程类
-from workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
+from project.Fucking_jobs.utls.workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
 
 # 导入自启管理器
 try:
-    from autostart_manager import AutoStartManager
+    from project.Fucking_jobs.utls.autostart_manager import AutoStartManager
     AUTOSTART_AVAILABLE = True
 except ImportError:
     AUTOSTART_AVAILABLE = False
@@ -28,7 +27,7 @@ except ImportError:
 
 # 导入 Windows 服务管理器
 try:
-    from windows_service_manager import WindowsServiceManager
+    from project.Fucking_jobs.utls.windows_service_manager import WindowsServiceManager
     SERVICE_MANAGER_AVAILABLE = True
 except ImportError:
     SERVICE_MANAGER_AVAILABLE = False
@@ -570,7 +569,6 @@ class MainWindow(QMainWindow):
         self.files_table.setRowCount(8)
         
         # 填充一些假的文件数据
-        import datetime
         fake_files = [
             ["document.docx", "2024-01-15 14:30", "2.5 MB"],
             ["report.xlsx", "2024-01-15 13:20", "1.8 MB"],
@@ -1366,7 +1364,7 @@ class MainWindow(QMainWindow):
         """启动后备模型快捷键（Alt+3 ~ Alt+7）"""
         try:
             from pynput import keyboard
-            from workers import KimiWorker
+            from project.Fucking_jobs.utls.workers import KimiWorker
             
             # 定义后备模型映射
             backup_models = {
@@ -1429,7 +1427,6 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def on_screenshot_taken(self, image_path):
         """截图完成回调"""
-        from datetime import datetime
         # 【关键】记录快捷键触发时间（Case1: Alt+X）
         self.screenshot_timestamp = time.time()
         self.current_image_path = image_path
@@ -1532,7 +1529,7 @@ class MainWindow(QMainWindow):
     def on_model_toggle_triggered(self):
         """模型切换快捷键触发（Alt+1）"""
         try:
-            from workers import OCRWorker
+            from project.Fucking_jobs.utls.workers import OCRWorker
             
             # 调用切换方法
             current_model = OCRWorker.toggle_model()
@@ -1553,7 +1550,7 @@ class MainWindow(QMainWindow):
     def on_kimi_model_toggle_triggered(self):
         """Kimi 模型切换快捷键触发（Alt+2）"""
         try:
-            from workers import KimiWorker
+            from project.Fucking_jobs.utls.workers import KimiWorker
             
             # 调用切换方法
             current_model = KimiWorker.toggle_kimi_model()
@@ -1574,7 +1571,7 @@ class MainWindow(QMainWindow):
     def on_backup_model_triggered(self, model_name):
         """后备模型快捷键触发（Alt+3~7）"""
         try:
-            from workers import KimiWorker
+            from project.Fucking_jobs.utls.workers import KimiWorker
             
             # 设置为主模型
             model_short = KimiWorker.set_primary_model(model_name)
@@ -2406,7 +2403,7 @@ class MainWindow(QMainWindow):
         
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
-            from workers import OCRWorker
+            from project.Fucking_jobs.utls.workers import OCRWorker
             OCRWorker.cleanup_reader()
             print("✅ OCR 引擎已清理")
         except Exception as e:
@@ -2512,7 +2509,7 @@ class MainWindow(QMainWindow):
         
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
-            from workers import OCRWorker
+            from project.Fucking_jobs.utls.workers import OCRWorker
             OCRWorker.cleanup_reader()
             print("✅ OCR 引擎已清理")
         except Exception as e:

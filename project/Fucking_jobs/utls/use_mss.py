@@ -139,7 +139,7 @@ if __name__ == "__main__":
     # 方式1：使用默认配置
     screenshot_tool = HotkeyScreenshot(
         hotkey="<alt>+x",  # 截图热键
-        save_dir="./screenshots"  # 保存目录
+        save_dir="../screenshots"  # 保存目录
     )
 
     # 保持程序运行

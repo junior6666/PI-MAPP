@@ -6,7 +6,7 @@ client = OpenAI(
     api_key="sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln",
     base_url="https://api.siliconflow.cn/v1"
 )
-image_path = r"H:\pycharm_project\github_projects\PI-MAPP\project\Fucking_jobs\screenshots\ScreenShot_2026-04-13_140714_532.png"
+image_path = r"/project/Fucking_jobs/screenshots/quick_20260414_183043_645.png"
 
 with open(image_path, "rb") as f:
     image_data = f.read()
@@ -19,7 +19,7 @@ print(f"📸 图片编码耗时: {encode_elapsed:.4f}秒")
 model_backup_list = ['Qwen/Qwen3-Omni-30B-A3B-Instruct','Qwen/Qwen3-VL-8B-Instruct','Qwen/Qwen3-VL-32B-Instruct','Qwen/Qwen3-VL-235B-A22B-Instruct','zai-org/GLM-4.5V','Pro/moonshotai/Kimi-K2.5']
 start_time = time.time()
 response = client.chat.completions.create(
-    model="Qwen/Qwen3-Omni-30B-A3B-Instruct",
+    model="zai-org/GLM-4.5V",
     messages=[
         {
             "role": "user",

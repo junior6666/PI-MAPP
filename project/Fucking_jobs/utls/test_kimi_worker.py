@@ -16,7 +16,7 @@ def test_kimi_worker():
     print("=" * 50)
     
     # 检查是否有可用的截图文件
-    screenshot_dir = "./screenshots"
+    screenshot_dir = "../screenshots"
     if not os.path.exists(screenshot_dir):
         print(f"❌ 截图目录不存在: {screenshot_dir}")
         return
