@@ -14,24 +14,16 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from PySide6.QtGui import QFont, QIcon
 
-# 导入工作线程类
-from project.Fucking_jobs.utls.workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
-
-# 导入自启管理器
-try:
-    from project.Fucking_jobs.utls.autostart_manager import AutoStartManager
-    AUTOSTART_AVAILABLE = True
-except ImportError:
-    AUTOSTART_AVAILABLE = False
-    print("⚠️ 自启管理器不可用")
-
-# 导入 Windows 服务管理器
-try:
-    from project.Fucking_jobs.utls.windows_service_manager import WindowsServiceManager
-    SERVICE_MANAGER_AVAILABLE = True
-except ImportError:
-    SERVICE_MANAGER_AVAILABLE = False
-    print("⚠️ Windows服务管理器不可用")
+# 导入工作线程类和管理器（统一从 workers 模块导入）
+from utls.workers import (
+    ScreenshotWorker, 
+    OCRWorker, 
+    LLMWorker, 
+    KimiWorker, 
+    WebSocketServerWorker,
+    AutoStartManager,
+    WindowsServiceManager
+)
 
 
 class MainWindow(QMainWindow):
@@ -55,18 +47,16 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
         
         # 初始化自启管理器
-        if AUTOSTART_AVAILABLE:
-            self.autostart_manager = AutoStartManager(
-                app_name="AceInterview",
-                app_path=sys.executable if getattr(sys, 'frozen', False) else None
-            )
+        self.autostart_manager = AutoStartManager(
+            app_name="AceInterview",
+            app_path=sys.executable if getattr(sys, 'frozen', False) else None
+        )
         
         # 初始化 Windows 服务管理器
-        if SERVICE_MANAGER_AVAILABLE:
-            self.service_manager = WindowsServiceManager(
-                task_name="AceInterviewGuardian",
-                app_path=sys.executable if getattr(sys, 'frozen', False) else None
-            )
+        self.service_manager = WindowsServiceManager(
+            task_name="AceInterviewGuardian",
+            app_path=sys.executable if getattr(sys, 'frozen', False) else None
+        )
         
         # 工作线程实例
         self.screenshot_worker = None
@@ -156,8 +146,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tab_widget)
         
         # 添加自启控制到状态栏
-        if AUTOSTART_AVAILABLE:
-            self.add_autostart_control_to_statusbar()
+        self.add_autostart_control_to_statusbar()
         
         # 禁用资源监控定时器（避免打包后闪烁）
         # 如需启用，将下面一行注释去掉
@@ -1083,86 +1072,85 @@ class MainWindow(QMainWindow):
         layout.setSpacing(15)
         
         # 开机自启设置组
-        if AUTOSTART_AVAILABLE:
-            autostart_group = QGroupBox("🔄 开机自启设置")
-            autostart_layout = QVBoxLayout()
-            autostart_layout.setSpacing(10)
-            
-            # 说明文字
-            autostart_info = QLabel(
-                "启用后，程序将在 Windows 启动时自动运行。\n"
-                "适合需要7×24小时持续运行的场景。"
-            )
-            autostart_info.setStyleSheet("color: #666; font-size: 12px;")
-            autostart_layout.addWidget(autostart_info)
-            
-            # 状态和控制按钮横向布局
-            control_layout = QHBoxLayout()
-            
-            self.autostart_status_label = QLabel("加载中...")
-            control_layout.addWidget(self.autostart_status_label)
-            
-            control_layout.addStretch()
-            
-            self.btn_toggle_autostart = QPushButton("启用开机自启")
-            self.btn_toggle_autostart.setMinimumWidth(120)
-            self.btn_toggle_autostart.clicked.connect(self.toggle_autostart)
-            control_layout.addWidget(self.btn_toggle_autostart)
-            
-            autostart_layout.addLayout(control_layout)
-            
-            # 更新自启状态
-            self.update_autostart_status()
-            
-            autostart_group.setLayout(autostart_layout)
-            layout.addWidget(autostart_group)
+        autostart_group = QGroupBox("🔄 开机自启设置")
+        autostart_layout = QVBoxLayout()
+        autostart_layout.setSpacing(10)
+        
+        # 说明文字
+        autostart_info = QLabel(
+            "启用后，程序将在 Windows 启动时自动运行。\n"
+            "适合需要7×24小时持续运行的场景。"
+        )
+        autostart_info.setStyleSheet("color: #666; font-size: 12px;")
+        autostart_layout.addWidget(autostart_info)
+        
+        # 状态和控制按钮横向布局
+        control_layout = QHBoxLayout()
+        
+        self.autostart_status_label = QLabel("加载中...")
+        control_layout.addWidget(self.autostart_status_label)
+        
+        control_layout.addStretch()
+        
+        self.btn_toggle_autostart = QPushButton("启用开机自启")
+        self.btn_toggle_autostart.setMinimumWidth(120)
+        self.btn_toggle_autostart.clicked.connect(self.toggle_autostart)
+        control_layout.addWidget(self.btn_toggle_autostart)
+        
+        autostart_layout.addLayout(control_layout)
+        
+        # 更新自启状态
+        self.update_autostart_status()
+        
+        autostart_group.setLayout(autostart_layout)
+        layout.addWidget(autostart_group)
         
         # Windows 服务管理组（更可靠的方案）
-        if SERVICE_MANAGER_AVAILABLE:
-            service_group = QGroupBox("🛡️  Windows 系统服务（推荐）")
-            service_layout = QVBoxLayout()
-            service_layout.setSpacing(10)
-            
-            # 说明文字
-            service_info = QLabel(
-                "将程序注册为 Windows 计划任务，实现真正的7×24小时守护。\n"
-                "✅ 无需外部脚本  ✅ 系统级保护  ✅ 崩溃自动重启"
-            )
-            service_info.setStyleSheet("color: #4ecca3; font-size: 12px; font-weight: bold;")
-            service_layout.addWidget(service_info)
-            
-            # 服务状态显示
-            status_layout = QHBoxLayout()
-            self.service_status_label = QLabel("检查中...")
-            status_layout.addWidget(self.service_status_label)
-            status_layout.addStretch()
-            service_layout.addLayout(status_layout)
-            
-            # 控制按钮
-            btn_layout = QHBoxLayout()
-            
-            self.btn_install_service = QPushButton("📥 安装服务")
-            self.btn_install_service.setMinimumWidth(100)
-            self.btn_install_service.clicked.connect(self.install_windows_service)
-            btn_layout.addWidget(self.btn_install_service)
-            
-            self.btn_uninstall_service = QPushButton("🗑️ 卸载服务")
-            self.btn_uninstall_service.setMinimumWidth(100)
-            self.btn_uninstall_service.clicked.connect(self.uninstall_windows_service)
-            btn_layout.addWidget(self.btn_uninstall_service)
-            
-            self.btn_check_service = QPushButton("🔄 刷新状态")
-            self.btn_check_service.setMinimumWidth(100)
-            self.btn_check_service.clicked.connect(self.check_service_status)
-            btn_layout.addWidget(self.btn_check_service)
-            
-            service_layout.addLayout(btn_layout)
-            
-            # 初始检查状态
-            QTimer.singleShot(1500, self.check_service_status)
-            
-            service_group.setLayout(service_layout)
-            layout.addWidget(service_group)
+        service_group = QGroupBox("🛡️  Windows 系统服务（推荐）")
+        service_layout = QVBoxLayout()
+        service_layout.setSpacing(10)
+        
+        # 说明文字
+        service_info = QLabel(
+            "将程序注册为 Windows 计划任务，实现真正的7×24小时守护。\n"
+            "⚠️ 注意：需要以管理员身份运行才能安装服务\n"
+            "✅ 系统级保护  ✅ 崩溃自动重启  ✅ 登录自动启动"
+        )
+        service_info.setStyleSheet("color: #4ecca3; font-size: 12px; font-weight: bold;")
+        service_layout.addWidget(service_info)
+        
+        # 服务状态显示
+        status_layout = QHBoxLayout()
+        self.service_status_label = QLabel("检查中...")
+        status_layout.addWidget(self.service_status_label)
+        status_layout.addStretch()
+        service_layout.addLayout(status_layout)
+        
+        # 控制按钮
+        btn_layout = QHBoxLayout()
+        
+        self.btn_install_service = QPushButton("📥 安装服务")
+        self.btn_install_service.setMinimumWidth(100)
+        self.btn_install_service.clicked.connect(self.install_windows_service)
+        btn_layout.addWidget(self.btn_install_service)
+        
+        self.btn_uninstall_service = QPushButton("🗑️ 卸载服务")
+        self.btn_uninstall_service.setMinimumWidth(100)
+        self.btn_uninstall_service.clicked.connect(self.uninstall_windows_service)
+        btn_layout.addWidget(self.btn_uninstall_service)
+        
+        self.btn_check_service = QPushButton("🔄 刷新状态")
+        self.btn_check_service.setMinimumWidth(100)
+        self.btn_check_service.clicked.connect(self.check_service_status)
+        btn_layout.addWidget(self.btn_check_service)
+        
+        service_layout.addLayout(btn_layout)
+        
+        # 初始检查状态
+        QTimer.singleShot(1500, self.check_service_status)
+        
+        service_group.setLayout(service_layout)
+        layout.addWidget(service_group)
         
         # 守护进程说明组（传统方案，作为备选）
         guardian_group = QGroupBox("📝 传统守护方案（备选）")
@@ -1364,8 +1352,7 @@ class MainWindow(QMainWindow):
         """启动后备模型快捷键（Alt+3 ~ Alt+7）"""
         try:
             from pynput import keyboard
-            from project.Fucking_jobs.utls.workers import KimiWorker
-            
+
             # 定义后备模型映射
             backup_models = {
                 '<alt>+3': KimiWorker.BACKUP_MODELS[0],  # Qwen/Qwen3-VL-8B-Instruct
@@ -1529,8 +1516,7 @@ class MainWindow(QMainWindow):
     def on_model_toggle_triggered(self):
         """模型切换快捷键触发（Alt+1）"""
         try:
-            from project.Fucking_jobs.utls.workers import OCRWorker
-            
+
             # 调用切换方法
             current_model = OCRWorker.toggle_model()
             
@@ -1559,8 +1545,7 @@ class MainWindow(QMainWindow):
     def on_kimi_model_toggle_triggered(self):
         """Kimi 模型切换快捷键触发（Alt+2）"""
         try:
-            from project.Fucking_jobs.utls.workers import KimiWorker
-            
+
             # 调用切换方法
             current_model = KimiWorker.toggle_kimi_model()
             
@@ -1581,8 +1566,6 @@ class MainWindow(QMainWindow):
     def on_backup_model_triggered(self, model_name):
         """后备模型快捷键触发（Alt+3~7）"""
         try:
-            from project.Fucking_jobs.utls.workers import KimiWorker
-            
             # 设置为主模型
             model_short = KimiWorker.set_primary_model(model_name)
             
@@ -2116,7 +2099,7 @@ class MainWindow(QMainWindow):
     
     def update_statusbar_autostart(self):
         """更新状态栏自启状态显示"""
-        if hasattr(self, 'statusbar_autostart_label') and AUTOSTART_AVAILABLE:
+        if hasattr(self, 'statusbar_autostart_label'):
             is_enabled = self.autostart_manager.is_enabled()
             if is_enabled:
                 self.statusbar_autostart_label.setText("🔄 自启: 已启用")
@@ -2127,27 +2110,22 @@ class MainWindow(QMainWindow):
     
     def update_autostart_status(self):
         """更新自启状态显示"""
-        if AUTOSTART_AVAILABLE:
-            is_enabled = self.autostart_manager.is_enabled()
-            if is_enabled:
-                self.autostart_status_label.setText("✅ 开机自启已启用")
-                self.autostart_status_label.setStyleSheet("color: #4ecca3; font-weight: bold;")
-                self.btn_toggle_autostart.setText("禁用开机自启")
-            else:
-                self.autostart_status_label.setText("❌ 开机自启未启用")
-                self.autostart_status_label.setStyleSheet("color: #e94560; font-weight: bold;")
-                self.btn_toggle_autostart.setText("启用开机自启")
-            
-            # 同时更新状态栏
-            self.update_statusbar_autostart()
+        is_enabled = self.autostart_manager.is_enabled()
+        if is_enabled:
+            self.autostart_status_label.setText("✅ 开机自启已启用")
+            self.autostart_status_label.setStyleSheet("color: #4ecca3; font-weight: bold;")
+            self.btn_toggle_autostart.setText("禁用开机自启")
+        else:
+            self.autostart_status_label.setText("❌ 开机自启未启用")
+            self.autostart_status_label.setStyleSheet("color: #e94560; font-weight: bold;")
+            self.btn_toggle_autostart.setText("启用开机自启")
+        
+        # 同时更新状态栏
+        self.update_statusbar_autostart()
     
     @Slot()
     def toggle_autostart(self):
         """切换开机自启状态"""
-        if not AUTOSTART_AVAILABLE:
-            QMessageBox.warning(self, "警告", "自启管理器不可用！")
-            return
-        
         success, message = self.autostart_manager.toggle_startup()
         
         if success:
@@ -2240,18 +2218,16 @@ class MainWindow(QMainWindow):
     @Slot()
     def install_windows_service(self):
         """安装 Windows 系统服务"""
-        if not SERVICE_MANAGER_AVAILABLE:
-            QMessageBox.warning(self, "错误", "Windows服务管理器不可用")
-            return
-        
         # 确认对话框
         reply = QMessageBox.question(
             self,
             "确认安装",
+            "⚠️ 重要提示：此操作需要管理员权限！\n\n"
             "将安装 AceInterview 为 Windows 计划任务。\n\n"
             "✅ 登录时自动启动\n"
-            "✅ 崩溃后自动重启（最多5次）\n"
-            "✅ 以系统账户运行，更稳定\n\n"
+            "✅ 崩溃后自动重启（最多10次）\n"
+            "✅ 系统级保护，更加稳定可靠\n\n"
+            "如果当前不是以管理员身份运行，安装将会失败。\n\n"
             "是否继续？",
             QMessageBox.Yes | QMessageBox.No
         )
@@ -2274,10 +2250,6 @@ class MainWindow(QMainWindow):
     @Slot()
     def uninstall_windows_service(self):
         """卸载 Windows 系统服务"""
-        if not SERVICE_MANAGER_AVAILABLE:
-            QMessageBox.warning(self, "错误", "Windows服务管理器不可用")
-            return
-        
         reply = QMessageBox.question(
             self,
             "确认卸载",
@@ -2302,10 +2274,6 @@ class MainWindow(QMainWindow):
     @Slot()
     def check_service_status(self):
         """检查 Windows 服务状态"""
-        if not SERVICE_MANAGER_AVAILABLE:
-            self.service_status_label.setText("❌ 服务管理器不可用")
-            return
-        
         try:
             status = self.service_manager.get_service_status()
             
@@ -2414,7 +2382,6 @@ class MainWindow(QMainWindow):
         
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
-            from project.Fucking_jobs.utls.workers import OCRWorker
             OCRWorker.cleanup_reader()
             print("✅ OCR 引擎已清理")
         except Exception as e:
@@ -2520,7 +2487,6 @@ class MainWindow(QMainWindow):
         
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
-            from project.Fucking_jobs.utls.workers import OCRWorker
             OCRWorker.cleanup_reader()
             print("✅ OCR 引擎已清理")
         except Exception as e:
