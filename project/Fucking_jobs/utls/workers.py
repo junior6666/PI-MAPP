@@ -14,6 +14,11 @@ import requests
 import asyncio
 import websockets
 import socket
+import subprocess
+import signal
+import logging
+import sys
+import winreg
 from PySide6.QtCore import QThread, Signal, Slot
 import warnings
 warnings.filterwarnings('ignore', message=".*pin_memory.*")
@@ -1025,3 +1030,416 @@ class WebSocketServerWorker(QThread):
                 pass
         
         self.wait(3000)  # 等待线程结束
+
+
+class AutoStartManager:
+    """Windows开机自启管理器"""
+    
+    def __init__(self, app_name="windows_ace_process", app_path=None):
+        """
+        初始化自启管理器
+        
+        Args:
+            app_name: 应用程序名称（注册表中的显示名称）
+            app_path: 应用程序路径（默认为当前可执行文件路径）
+        """
+        self.app_name = app_name
+        self.app_path = app_path or self._get_executable_path()
+        
+        # Windows注册表启动项路径
+        self.reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    
+    def _get_executable_path(self):
+        """获取可执行文件路径"""
+        if getattr(sys, 'frozen', False):
+            # 打包后的exe路径
+            return sys.executable
+        else:
+            # 开发环境：Python脚本路径
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(script_dir)
+            main_app = os.path.join(parent_dir, "main_app.py")
+            return f'"{sys.executable}" "{main_app}"'
+    
+    def add_to_startup(self):
+        """
+        添加到开机自启
+        
+        Returns:
+            bool: 是否成功添加
+        """
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                self.reg_path,
+                0,
+                winreg.KEY_SET_VALUE
+            )
+            
+            # 确保路径用引号包裹（处理空格）
+            app_path = self.app_path
+            if not app_path.startswith('"'):
+                app_path = f'"{app_path}"'
+            
+            winreg.SetValueEx(key, self.app_name, 0, winreg.REG_SZ, app_path)
+            winreg.CloseKey(key)
+            
+            print(f"✅ 已添加到开机自启: {self.app_name}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 添加到开机自启失败: {e}")
+            return False
+    
+    def remove_from_startup(self):
+        """
+        从开机自启中移除
+        
+        Returns:
+            bool: 是否成功移除
+        """
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                self.reg_path,
+                0,
+                winreg.KEY_SET_VALUE
+            )
+            
+            winreg.DeleteValue(key, self.app_name)
+            winreg.CloseKey(key)
+            
+            print(f"✅ 已从开机自启中移除: {self.app_name}")
+            return True
+            
+        except FileNotFoundError:
+            print(f"⚠️ 未在开机自启中找到: {self.app_name}")
+            return True
+        except Exception as e:
+            print(f"❌ 从开机自启移除失败: {e}")
+            return False
+    
+    def is_enabled(self):
+        """
+        检查是否已启用开机自启
+        
+        Returns:
+            bool: 是否已启用
+        """
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                self.reg_path,
+                0,
+                winreg.KEY_READ
+            )
+            
+            value, _ = winreg.QueryValueEx(key, self.app_name)
+            winreg.CloseKey(key)
+            
+            return True
+            
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            print(f"❌ 检查开机自启状态失败: {e}")
+            return False
+    
+    def toggle_startup(self):
+        """
+        切换开机自启状态
+        
+        Returns:
+            tuple: (bool success, str message)
+        """
+        if self.is_enabled():
+            if self.remove_from_startup():
+                return True, "已禁用开机自启"
+            else:
+                return False, "禁用开机自启失败"
+        else:
+            if self.add_to_startup():
+                return True, "已启用开机自启"
+            else:
+                return False, "启用开机自启失败"
+
+
+class WindowsServiceManager:
+    """Windows服务管理器 - 使用schtasks创建计划任务实现自启和守护"""
+    
+    def __init__(self, task_name="windows_ace_process", app_path=None):
+        """
+        初始化服务管理器
+        
+        Args:
+            task_name: 计划任务名称
+            app_path: 应用程序路径
+        """
+        self.task_name = task_name
+        self.app_path = app_path or self._get_executable_path()
+    
+    def _get_executable_path(self):
+        """获取可执行文件路径"""
+        if getattr(sys, 'frozen', False):
+            # 打包后的exe路径
+            return sys.executable
+        else:
+            # 开发环境
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(script_dir)
+            main_app = os.path.join(parent_dir, "main_app.py")
+            return f'"{sys.executable}" "{main_app}"'
+    
+    def _get_main_app_path(self):
+        """获取主程序路径"""
+        if getattr(sys, 'frozen', False):
+            # 打包后，直接运行exe
+            return sys.executable
+        else:
+            # 开发环境，返回main_app.py的路径
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(script_dir)
+            main_app_path = os.path.join(parent_dir, "main_app.py")
+            return main_app_path
+    
+    def install_as_service(self, max_restarts=10, restart_delay=3):
+        """
+        安装为系统服务（使用计划任务）
+        
+        注意: 此操作需要管理员权限
+        
+        Args:
+            max_restarts: 最大重启次数
+            restart_delay: 重启延迟
+            
+        Returns:
+            tuple: (bool success, str message)
+        """
+        try:
+            main_app_path = self._get_main_app_path()
+            
+            if not os.path.exists(main_app_path):
+                return False, f"找不到主程序: {main_app_path}"
+            
+            # 构建命令 - 直接运行主程序，不再需要守护脚本
+            if getattr(sys, 'frozen', False):
+                # 打包环境：直接运行exe
+                cmd = sys.executable
+            else:
+                # 开发环境：运行Python脚本
+                python_exe = sys.executable
+                cmd = f'{python_exe} "{main_app_path}"'
+            
+            # 删除旧任务（如果存在）
+            self.uninstall_service()
+            
+            # 使用 schtasks 创建计划任务（登录时启动 + 崩溃后重启）
+            # 注意: 这需要管理员权限
+            create_task_cmd = [
+                'schtasks', '/Create',
+                '/TN', self.task_name,
+                '/TR', cmd,
+                '/SC', 'ONLOGON',  # 登录时启动
+                '/RL', 'HIGHEST',   # 最高权限（需要管理员）
+                '/F'                # 强制覆盖
+            ]
+            
+            result = subprocess.run(
+                create_task_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                return True, "✅ 已成功安装为系统服务（计划任务）"
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                
+                # 检查是否是权限问题
+                if "access is denied" in error_msg.lower() or "拒绝访问" in error_msg or "unauthorized" in error_msg.lower():
+                    return False, (
+                        "❌ 权限不足，无法创建计划任务。\n\n"
+                        "⚠️ 重要提示：计划任务功能必须以管理员身份运行！\n\n"
+                        "请按照以下步骤操作：\n"
+                        "1. 关闭当前程序\n"
+                        "2. 右键点击程序图标\n"
+                        "3. 选择「以管理员身份运行」\n"
+                        "4. 再次尝试安装服务\n\n"
+                        "💡 替代方案：\n"
+                        "如果不方便使用管理员权限，可以使用「开机自启」功能\n"
+                        "（设置标签页 → 开机自启设置），无需管理员权限。\n\n"
+                        f"详细错误：{error_msg[:200]}"
+                    )
+                
+                return False, f"❌ 安装失败: {error_msg[:300]}"
+                
+        except Exception as e:
+            return False, f"❌ 安装异常: {str(e)}"
+    
+    def uninstall_service(self):
+        """
+        卸载系统服务
+        
+        Returns:
+            tuple: (bool success, str message)
+        """
+        try:
+            delete_task_cmd = [
+                'schtasks', '/Delete',
+                '/TN', self.task_name,
+                '/F'  # 强制删除，不提示
+            ]
+            
+            result = subprocess.run(
+                delete_task_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                return True, "✅ 已成功卸载系统服务"
+            else:
+                # 任务不存在也算成功
+                if "cannot find the file" in result.stderr.lower():
+                    return True, "ℹ️ 服务未安装"
+                return False, f"❌ 卸载失败: {result.stderr}"
+                
+        except Exception as e:
+            return False, f"❌ 卸载异常: {str(e)}"
+    
+    def is_installed(self):
+        """
+        检查服务是否已安装
+        
+        Returns:
+            bool: 是否已安装
+        """
+        try:
+            query_task_cmd = [
+                'schtasks', '/Query',
+                '/TN', self.task_name,
+                '/FO', 'LIST'
+            ]
+            
+            result = subprocess.run(
+                query_task_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            return result.returncode == 0
+            
+        except:
+            return False
+    
+    def start_service(self):
+        """
+        立即启动服务
+        
+        Returns:
+            tuple: (bool success, str message)
+        """
+        try:
+            run_task_cmd = [
+                'schtasks', '/Run',
+                '/TN', self.task_name
+            ]
+            
+            result = subprocess.run(
+                run_task_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                return True, "✅ 服务已启动"
+            else:
+                return False, f"❌ 启动失败: {result.stderr}"
+                
+        except Exception as e:
+            return False, f"❌ 启动异常: {str(e)}"
+    
+    def stop_service(self):
+        """
+        停止服务
+        
+        Returns:
+            tuple: (bool success, str message)
+        """
+        try:
+            end_task_cmd = [
+                'schtasks', '/End',
+                '/TN', self.task_name
+            ]
+            
+            result = subprocess.run(
+                end_task_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                return True, "✅ 服务已停止"
+            else:
+                return False, f"❌ 停止失败: {result.stderr}"
+                
+        except Exception as e:
+            return False, f"❌ 停止异常: {str(e)}"
+    
+    def get_service_status(self):
+        """
+        获取服务状态
+        
+        Returns:
+            dict: 服务状态信息
+        """
+        status = {
+            'installed': False,
+            'running': False,
+            'last_run': None,
+            'next_run': None
+        }
+        
+        try:
+            if not self.is_installed():
+                return status
+            
+            status['installed'] = True
+            
+            # 查询详细信息
+            query_cmd = [
+                'schtasks', '/Query',
+                '/TN', self.task_name,
+                '/FO', 'LIST',
+                '/V'
+            ]
+            
+            result = subprocess.run(
+                query_cmd,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                output = result.stdout
+                
+                # 解析状态
+                for line in output.split('\n'):
+                    if 'Status:' in line:
+                        if 'Running' in line:
+                            status['running'] = True
+                    elif 'Last Run Time:' in line:
+                        status['last_run'] = line.split(':', 1)[1].strip()
+                    elif 'Next Run Time:' in line:
+                        status['next_run'] = line.split(':', 1)[1].strip()
+            
+        except Exception as e:
+            print(f"获取服务状态失败: {e}")
+        
+        return status
