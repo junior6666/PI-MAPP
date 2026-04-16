@@ -42,6 +42,129 @@
             overflow: hidden;
         }
 
+        /* 教程面板（桌面端） */
+        .tutorial-panel {
+            display: none;
+            width: 280px;
+            border-right: 2px solid #2a2a4a;
+            background: #16213e;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tutorial-panel.collapsed {
+            width: 0;
+            min-width: 0;
+            border-right: none;
+            overflow: hidden;
+        }
+
+        .tutorial-content {
+            padding: 15px;
+            min-width: 280px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .tutorial-panel.collapsed .tutorial-content {
+            opacity: 0;
+        }
+
+        .tutorial-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .tutorial-header h3 {
+            color: #4ecca3;
+            font-size: 14px;
+            margin: 0;
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        .toggle-tutorial-btn {
+            background: #0f3460;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .toggle-tutorial-btn:hover {
+            background: #1a4a7a;
+        }
+
+        .tutorial-section {
+            margin-bottom: 15px;
+        }
+
+        .tutorial-section h4 {
+            color: #4ecca3;
+            font-size: 12px;
+            margin: 10px 0 5px 0;
+            padding-left: 8px;
+            border-left: 2px solid #4ecca3;
+            animation: fadeInLeft 0.5s ease-out;
+        }
+
+        @keyframes fadeInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .tutorial-item {
+            background: rgba(15, 52, 96, 0.3);
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.5;
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+        }
+
+        .tutorial-item:hover {
+            background: rgba(78, 204, 163, 0.15);
+            border-left-color: #4ecca3;
+            transform: translateX(3px);
+        }
+
+        .tutorial-item strong {
+            color: #ff79c6;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .tutorial-item code {
+            background: rgba(255, 121, 198, 0.15);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-family: 'Consolas', monospace;
+            color: #ff79c6;
+            font-size: 10px;
+        }
+
         /* 消息显示区 */
         .message-panel {
             flex: 1;
@@ -90,6 +213,12 @@
             font-size: 14px;
             color: #4ecca3;
             font-weight: 600;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
         }
 
         #status {
@@ -533,14 +662,23 @@
                 flex: 4;
             }
 
-            /* 移动端抽屉隐藏 */
+            /* 移动端抽屉完全隐藏（包括触发条和控制按钮） */
             .drawer-trigger,
             .drawer {
                 display: none;
             }
 
-            .controls {
-                padding: 15px;
+            /* 在顶部显示控制按钮 */
+            .header-controls {
+                gap: 6px;
+            }
+
+            .header-controls button,
+            .desktop-only-btn,
+            #expandTutorialBtn {
+                display: inline-block !important;
+                padding: 4px 10px;
+                font-size: 11px;
             }
 
             button {
@@ -560,6 +698,11 @@
                 flex-direction: row;
             }
 
+            /* 教程面板默认显示 */
+            .tutorial-panel {
+                display: block;
+            }
+
             .message-panel {
                 flex: 6;
             }
@@ -571,10 +714,23 @@
                 max-width: 500px;
             }
 
-            /* 移动端抽屉隐藏 */
+            /* 移动端抽屉完全隐藏（包括触发条和控制按钮） */
             .drawer-trigger,
             .drawer {
                 display: none;
+            }
+
+            /* 在顶部显示控制按钮 */
+            .header-controls {
+                gap: 8px;
+            }
+
+            .header-controls button,
+            .desktop-only-btn,
+            #expandTutorialBtn {
+                display: inline-block !important;
+                padding: 5px 12px;
+                font-size: 12px;
             }
 
             .header {
@@ -685,14 +841,74 @@
     <!-- 顶部状态栏 -->
     <div class="header">
         <h2>📡 消息接收器</h2>
-        <!-- PC端工作状态显示 -->
-        <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin: 0 8px; white-space: nowrap;">⏳ 待命</span>
-        <span id="status">未连接</span>
+        <div class="header-controls">
+            <!-- PC端工作状态显示 -->
+            <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin-right: 8px; white-space: nowrap;">⏳ 待命</span>
+            <span id="status">未连接</span>
+            <!-- 教程展开按钮（仅电脑端，教程收起时显示） -->
+            <button id="expandTutorialBtn" onclick="toggleTutorial()" title="显示教程" style="display:none; margin-left: 8px;">📖 教程</button>
+            <!-- 桌面端控制按钮（默认隐藏，通过媒体查询显示） -->
+            <button onclick="openConfig()" style="display:none" class="desktop-only-btn">⚙️</button>
+            <button class="primary desktop-only-btn" onclick="connectLocal()" style="display:none">🖥️本地</button>
+            <button class="desktop-only-btn" onclick="connect()" style="display:none">连接</button>
+            <button class="danger desktop-only-btn" onclick="disconnect()" style="display:none">断开</button>
+        </div>
     </div>
 
     <!-- 内容区域（左右分栏） -->
     <div class="content-area">
-        <!-- 左侧：消息显示区 -->
+        <!-- 左侧：教程面板（仅电脑端） -->
+        <div class="tutorial-panel" id="tutorialPanel">
+            <div class="tutorial-content">
+                <div class="tutorial-header">
+                    <h3>✨ 快速上手</h3>
+                    <button class="toggle-tutorial-btn" onclick="toggleTutorial()" title="隐藏教程">◀</button>
+                </div>
+
+                <div class="tutorial-section">
+                    <h4>🚀 一键分析</h4>
+                    <div class="tutorial-item">
+                        <strong>⚡ Alt + Z</strong>
+                        截图 → AI分析 → 手机看结果
+                    </div>
+                    <div class="tutorial-item">
+                        <strong>🔍 Alt + X</strong>
+                        OCR识别 → 文字分析 → 推送
+                    </div>
+                </div>
+
+                <div class="tutorial-section">
+                    <h4>🎯 切换模型</h4>
+                    <div class="tutorial-item">
+                        <code>Alt+1</code> OCR模型 | <code>Alt+2</code> 主模型
+                    </div>
+                    <div class="tutorial-item">
+                        <code>Alt+3~7</code> 快速换大模型 🧠
+                    </div>
+                </div>
+
+                <div class="tutorial-section">
+                    <h4>📱 手机连接</h4>
+                    <div class="tutorial-item">
+                        <code>ws://你的IP:8765</code>
+                    </div>
+                    <div class="tutorial-item">
+                        ✨ 实时接收 • 💾 历史记录<br>
+                        🎨 Markdown • 📋 代码复制
+                    </div>
+                </div>
+
+                <div class="tutorial-section">
+                    <h4>💡 小贴士</h4>
+                    <div class="tutorial-item">
+                        🌐 同一WiFi • 🔥 开放8765端口<br>
+                        ⌨️ 快捷键别冲突 • 🗑️ 定期清截图
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中间：消息显示区 -->
         <div class="message-panel">
             <div id="messages">
                 <div class="empty-state">
@@ -1419,6 +1635,49 @@
 
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
+
+    // ========== 教程面板功能 ==========
+
+    // 切换教程面板显示/隐藏
+    function toggleTutorial() {
+        const tutorialPanel = document.getElementById('tutorialPanel');
+        const expandBtn = document.getElementById('expandTutorialBtn');
+        
+        if (tutorialPanel.classList.contains('collapsed')) {
+            // 展开教程
+            tutorialPanel.classList.remove('collapsed');
+            if (expandBtn) {
+                expandBtn.style.display = 'none';
+            }
+            localStorage.setItem('tutorial_visible', 'true');
+        } else {
+            // 收起教程
+            tutorialPanel.classList.add('collapsed');
+            if (expandBtn) {
+                expandBtn.style.display = 'inline-block';
+            }
+            localStorage.setItem('tutorial_visible', 'false');
+        }
+    }
+
+    // 页面加载时恢复教程面板状态
+    window.addEventListener('load', function() {
+        // 检查是否为电脑端
+        if (window.innerWidth >= 1024) {
+            const tutorialVisible = localStorage.getItem('tutorial_visible');
+            const expandBtn = document.getElementById('expandTutorialBtn');
+            
+            if (tutorialVisible === 'false') {
+                const tutorialPanel = document.getElementById('tutorialPanel');
+                if (tutorialPanel) {
+                    tutorialPanel.classList.add('collapsed');
+                    if (expandBtn) {
+                        expandBtn.style.display = 'inline-block';
+                    }
+                }
+            }
+        }
+    });
 </script>
 
 </body>
