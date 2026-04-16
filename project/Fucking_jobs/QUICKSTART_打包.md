@@ -25,8 +25,13 @@ pip install pyinstaller
 在项目目录下运行：
 
 ```bash
-pyinstaller --name="windows_ace_process1.0.2" --windowed --onefile --icon=icon.ico --add-data "icon.ico;." --hidden-import=PySide6 --hidden-import=mss --hidden-import=PIL --hidden-import=pynput --hidden-import=easyocr --hidden-import=requests --hidden-import=websockets --hidden-import=openai --hidden-import=asyncio --collect-all easyocr --collect-all mss --collect-all pynput --noconfirm main_app.py
+pyinstaller --name="windows_ace_process1.0.3" --windowed --onefile --icon=icon.ico --add-data "icon.ico;." --add-data "process_guardian.py;." --add-data "windows_service_manager.py;." --add-data "autostart_manager.py;." --hidden-import=PySide6 --hidden-import=mss --hidden-import=PIL --hidden-import=pynput --hidden-import=easyocr --hidden-import=requests --hidden-import=websockets --hidden-import=openai --hidden-import=asyncio --collect-all easyocr --collect-all mss --collect-all pynput --noconfirm main_app.py
 ```
+
+**注意**：新增了守护相关文件的打包参数：
+- `--add-data "process_guardian.py;."` - 传统守护脚本
+- `--add-data "windows_service_manager.py;."` - Windows服务管理器
+- `--add-data "autostart_manager.py;."` - 开机自启管理器
 
 ### 步骤 3: 获取可执行文件
 
@@ -85,6 +90,17 @@ pyinstaller --name="windows_ace_process1.0.2" --windowed --onefile --icon=icon.i
 ### Q5: 如何分发给用户？
 **A**: 只需发送 `dist/AceInterview.exe` 单个文件即可，用户无需安装 Python。
 
+### Q6: 如何实现开机自启和自动重启？
+**A**: 
+- **推荐方案**：使用 Windows 系统服务（内置功能）
+  1. 运行程序后打开「帮助」→「⚙️ 设置」
+  2. 点击「📥 安装服务」按钮
+  3. 程序会自动注册为Windows计划任务
+  4. 实现登录自启 + 崩溃守护
+- **备选方案**：使用传统脚本守护
+  - 打包时已包含 `process_guardian.py`
+  - 用户可手动运行守护脚本
+
 ---
 
 ## 📦 分发给用户
@@ -99,6 +115,7 @@ AceInterview.exe    # 主程序
 ```
 AceInterview/
 ├── AceInterview.exe      # 主程序
+├── process_guardian.py    # 守护脚本（备选方案）
 ├── README.md              # 使用说明
 └── screenshots/           # 截图目录（可选，程序会自动创建）
 ```
@@ -112,6 +129,7 @@ AceInterview/
 - [ ] 所有依赖已安装 (`pip install -r requirements.txt`)
 - [ ] icon.ico 文件存在且格式正确
 - [ ] 清理旧的 build/dist 目录
+- [ ] 守护相关文件存在（process_guardian.py, windows_service_manager.py, autostart_manager.py）
 
 ### 打包后测试
 - [ ] exe 能正常启动
@@ -121,6 +139,8 @@ AceInterview/
 - [ ] OCR 识别功能正常
 - [ ] WebSocket 连接正常
 - [ ] 退出时程序完全关闭（无残留进程）
+- [ ] Windows服务管理功能正常（帮助 → ⚙️ 设置）
+- [ ] 开机自启功能可用
 
 ---
 

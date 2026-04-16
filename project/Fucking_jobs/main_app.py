@@ -18,6 +18,22 @@ from PySide6.QtGui import QFont, QTextCursor, QIcon, QPalette, QColor
 # 导入工作线程类
 from workers import (ScreenshotWorker, OCRWorker, LLMWorker, KimiWorker, WebSocketServerWorker)
 
+# 导入自启管理器
+try:
+    from autostart_manager import AutoStartManager
+    AUTOSTART_AVAILABLE = True
+except ImportError:
+    AUTOSTART_AVAILABLE = False
+    print("⚠️ 自启管理器不可用")
+
+# 导入 Windows 服务管理器
+try:
+    from windows_service_manager import WindowsServiceManager
+    SERVICE_MANAGER_AVAILABLE = True
+except ImportError:
+    SERVICE_MANAGER_AVAILABLE = False
+    print("⚠️ Windows服务管理器不可用")
+
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -38,6 +54,20 @@ class MainWindow(QMainWindow):
         icon_path = self._get_resource_path("icon.ico")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
+        
+        # 初始化自启管理器
+        if AUTOSTART_AVAILABLE:
+            self.autostart_manager = AutoStartManager(
+                app_name="AceInterview",
+                app_path=sys.executable if getattr(sys, 'frozen', False) else None
+            )
+        
+        # 初始化 Windows 服务管理器
+        if SERVICE_MANAGER_AVAILABLE:
+            self.service_manager = WindowsServiceManager(
+                task_name="AceInterviewGuardian",
+                app_path=sys.executable if getattr(sys, 'frozen', False) else None
+            )
         
         # 工作线程实例
         self.screenshot_worker = None
@@ -125,6 +155,10 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.help_tab, "❓ 帮助")
         
         main_layout.addWidget(self.tab_widget)
+        
+        # 添加自启控制到状态栏
+        if AUTOSTART_AVAILABLE:
+            self.add_autostart_control_to_statusbar()
         
         # 禁用资源监控定时器（避免打包后闪烁）
         # 如需启用，将下面一行注释去掉
@@ -582,6 +616,10 @@ class MainWindow(QMainWindow):
         self.r_tab = self.create_r_tab()
         self.help_inner_tabs.addTab(self.r_tab, "📊 R - 结果")
         
+        # 设置标签：开机自启和守护配置
+        self.settings_tab = self.create_settings_tab()
+        self.help_inner_tabs.addTab(self.settings_tab, "⚙️ 设置")
+        
         layout.addWidget(self.help_inner_tabs)
         
         return widget
@@ -1036,6 +1074,145 @@ class MainWindow(QMainWindow):
         
         llm_result_group.setLayout(llm_result_layout)
         layout.addWidget(llm_result_group)
+        
+        return widget
+    
+    def create_settings_tab(self):
+        """创建设置标签页（开机自启和守护配置）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 开机自启设置组
+        if AUTOSTART_AVAILABLE:
+            autostart_group = QGroupBox("🔄 开机自启设置")
+            autostart_layout = QVBoxLayout()
+            autostart_layout.setSpacing(10)
+            
+            # 说明文字
+            autostart_info = QLabel(
+                "启用后，程序将在 Windows 启动时自动运行。\n"
+                "适合需要7×24小时持续运行的场景。"
+            )
+            autostart_info.setStyleSheet("color: #666; font-size: 12px;")
+            autostart_layout.addWidget(autostart_info)
+            
+            # 状态和控制按钮横向布局
+            control_layout = QHBoxLayout()
+            
+            self.autostart_status_label = QLabel("加载中...")
+            control_layout.addWidget(self.autostart_status_label)
+            
+            control_layout.addStretch()
+            
+            self.btn_toggle_autostart = QPushButton("启用开机自启")
+            self.btn_toggle_autostart.setMinimumWidth(120)
+            self.btn_toggle_autostart.clicked.connect(self.toggle_autostart)
+            control_layout.addWidget(self.btn_toggle_autostart)
+            
+            autostart_layout.addLayout(control_layout)
+            
+            # 更新自启状态
+            self.update_autostart_status()
+            
+            autostart_group.setLayout(autostart_layout)
+            layout.addWidget(autostart_group)
+        
+        # Windows 服务管理组（更可靠的方案）
+        if SERVICE_MANAGER_AVAILABLE:
+            service_group = QGroupBox("🛡️  Windows 系统服务（推荐）")
+            service_layout = QVBoxLayout()
+            service_layout.setSpacing(10)
+            
+            # 说明文字
+            service_info = QLabel(
+                "将程序注册为 Windows 计划任务，实现真正的7×24小时守护。\n"
+                "✅ 无需外部脚本  ✅ 系统级保护  ✅ 崩溃自动重启"
+            )
+            service_info.setStyleSheet("color: #4ecca3; font-size: 12px; font-weight: bold;")
+            service_layout.addWidget(service_info)
+            
+            # 服务状态显示
+            status_layout = QHBoxLayout()
+            self.service_status_label = QLabel("检查中...")
+            status_layout.addWidget(self.service_status_label)
+            status_layout.addStretch()
+            service_layout.addLayout(status_layout)
+            
+            # 控制按钮
+            btn_layout = QHBoxLayout()
+            
+            self.btn_install_service = QPushButton("📥 安装服务")
+            self.btn_install_service.setMinimumWidth(100)
+            self.btn_install_service.clicked.connect(self.install_windows_service)
+            btn_layout.addWidget(self.btn_install_service)
+            
+            self.btn_uninstall_service = QPushButton("🗑️ 卸载服务")
+            self.btn_uninstall_service.setMinimumWidth(100)
+            self.btn_uninstall_service.clicked.connect(self.uninstall_windows_service)
+            btn_layout.addWidget(self.btn_uninstall_service)
+            
+            self.btn_check_service = QPushButton("🔄 刷新状态")
+            self.btn_check_service.setMinimumWidth(100)
+            self.btn_check_service.clicked.connect(self.check_service_status)
+            btn_layout.addWidget(self.btn_check_service)
+            
+            service_layout.addLayout(btn_layout)
+            
+            # 初始检查状态
+            QTimer.singleShot(1500, self.check_service_status)
+            
+            service_group.setLayout(service_layout)
+            layout.addWidget(service_group)
+        
+        # 守护进程说明组（传统方案，作为备选）
+        guardian_group = QGroupBox("📝 传统守护方案（备选）")
+        guardian_layout = QVBoxLayout()
+        guardian_layout.setSpacing(10)
+        
+        guardian_info = QTextEdit()
+        guardian_info.setReadOnly(True)
+        guardian_info.setMaximumHeight(220)
+        guardian_content = """
+<h3 style='color: #4ecca3;'>⚠️ 注意</h3>
+<p>以下为传统的脚本守护方案，<b>推荐使用上方的 Windows 系统服务</b>，更加稳定可靠。</p>
+
+<h3 style='color: #4ecca3;'>🔧 配置参数</h3>
+<ul>
+<li><b>--max-restarts:</b> 最大重启次数（默认10次）</li>
+<li><b>--restart-delay:</b> 重启延迟秒数（默认3秒）</li>
+<li><b>--log-file:</b> 日志文件路径（默认guardian.log）</li>
+</ul>
+
+<h3 style='color: #4ecca3;'>📊 查看日志</h3>
+<p>所有重启事件都会记录到 <code>guardian.log</code> 文件中。</p>
+        """
+        guardian_info.setHtml(guardian_content)
+        guardian_info.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 10px;
+                font-size: 12px;
+            }
+        """)
+        guardian_layout.addWidget(guardian_info)
+        
+        # 快速操作按钮
+        quick_btn_layout = QHBoxLayout()
+        
+        btn_open_log_file = QPushButton("📄 查看守护日志")
+        btn_open_log_file.clicked.connect(self.open_guardian_log)
+        quick_btn_layout.addWidget(btn_open_log_file)
+        
+        guardian_layout.addLayout(quick_btn_layout)
+        
+        guardian_group.setLayout(guardian_layout)
+        layout.addWidget(guardian_group)
+        
+        layout.addStretch()
         
         return widget
     
@@ -1918,6 +2095,80 @@ class MainWindow(QMainWindow):
             }
         """)
     
+    def add_autostart_control_to_statusbar(self):
+        """在状态栏添加自启控制"""
+        status_bar = self.statusBar()
+        
+        # 创建自启状态标签
+        self.statusbar_autostart_label = QLabel()
+        self.update_statusbar_autostart()
+        
+        # 添加到状态栏永久部件
+        status_bar.addPermanentWidget(self.statusbar_autostart_label)
+    
+    def update_statusbar_autostart(self):
+        """更新状态栏自启状态显示"""
+        if hasattr(self, 'statusbar_autostart_label') and AUTOSTART_AVAILABLE:
+            is_enabled = self.autostart_manager.is_enabled()
+            if is_enabled:
+                self.statusbar_autostart_label.setText("🔄 自启: 已启用")
+                self.statusbar_autostart_label.setStyleSheet("color: #4ecca3;")
+            else:
+                self.statusbar_autostart_label.setText("🔄 自启: 未启用")
+                self.statusbar_autostart_label.setStyleSheet("color: #999;")
+    
+    def update_autostart_status(self):
+        """更新自启状态显示"""
+        if AUTOSTART_AVAILABLE:
+            is_enabled = self.autostart_manager.is_enabled()
+            if is_enabled:
+                self.autostart_status_label.setText("✅ 开机自启已启用")
+                self.autostart_status_label.setStyleSheet("color: #4ecca3; font-weight: bold;")
+                self.btn_toggle_autostart.setText("禁用开机自启")
+            else:
+                self.autostart_status_label.setText("❌ 开机自启未启用")
+                self.autostart_status_label.setStyleSheet("color: #e94560; font-weight: bold;")
+                self.btn_toggle_autostart.setText("启用开机自启")
+            
+            # 同时更新状态栏
+            self.update_statusbar_autostart()
+    
+    @Slot()
+    def toggle_autostart(self):
+        """切换开机自启状态"""
+        if not AUTOSTART_AVAILABLE:
+            QMessageBox.warning(self, "警告", "自启管理器不可用！")
+            return
+        
+        success, message = self.autostart_manager.toggle_startup()
+        
+        if success:
+            self.update_autostart_status()
+            QMessageBox.information(self, "成功", message)
+            self.statusBar().showMessage(message, 3000)
+        else:
+            QMessageBox.critical(self, "错误", f"操作失败: {message}")
+    
+    @Slot()
+    def open_guardian_script(self):
+        """打开守护启动脚本"""
+        script_path = os.path.abspath("start_with_guardian.bat")
+        if os.path.exists(script_path):
+            os.startfile(script_path)
+            self.statusBar().showMessage(f"已启动守护脚本: {script_path}")
+        else:
+            QMessageBox.warning(self, "警告", f"找不到启动脚本:\n{script_path}")
+    
+    @Slot()
+    def open_guardian_log(self):
+        """打开守护日志文件"""
+        log_path = os.path.abspath("guardian.log")
+        if os.path.exists(log_path):
+            os.startfile(log_path)
+            self.statusBar().showMessage(f"已打开日志文件: {log_path}")
+        else:
+            QMessageBox.information(self, "提示", f"日志文件尚不存在:\n{log_path}\n\n请先运行守护进程后再生成日志。")
+    
     def init_system_tray(self):
         """初始化系统托盘"""
         # 检查系统是否支持托盘图标
@@ -1977,6 +2228,109 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+    
+    @Slot()
+    def install_windows_service(self):
+        """安装 Windows 系统服务"""
+        if not SERVICE_MANAGER_AVAILABLE:
+            QMessageBox.warning(self, "错误", "Windows服务管理器不可用")
+            return
+        
+        # 确认对话框
+        reply = QMessageBox.question(
+            self,
+            "确认安装",
+            "将安装 AceInterview 为 Windows 计划任务。\n\n"
+            "✅ 登录时自动启动\n"
+            "✅ 崩溃后自动重启（最多5次）\n"
+            "✅ 以系统账户运行，更稳定\n\n"
+            "是否继续？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                success, message = self.service_manager.install_as_service(
+                    max_restarts=10,
+                    restart_delay=3
+                )
+                
+                if success:
+                    QMessageBox.information(self, "成功", message)
+                    self.check_service_status()
+                else:
+                    QMessageBox.critical(self, "失败", message)
+            except Exception as e:
+                QMessageBox.critical(self, "异常", f"安装失败: {str(e)}")
+    
+    @Slot()
+    def uninstall_windows_service(self):
+        """卸载 Windows 系统服务"""
+        if not SERVICE_MANAGER_AVAILABLE:
+            QMessageBox.warning(self, "错误", "Windows服务管理器不可用")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "确认卸载",
+            "将卸载 AceInterview 的 Windows 计划任务。\n\n"
+            "程序将不再自动启动和重启。\n\n"
+            "是否继续？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                success, message = self.service_manager.uninstall_service()
+                
+                if success:
+                    QMessageBox.information(self, "成功", message)
+                    self.check_service_status()
+                else:
+                    QMessageBox.critical(self, "失败", message)
+            except Exception as e:
+                QMessageBox.critical(self, "异常", f"卸载失败: {str(e)}")
+    
+    @Slot()
+    def check_service_status(self):
+        """检查 Windows 服务状态"""
+        if not SERVICE_MANAGER_AVAILABLE:
+            self.service_status_label.setText("❌ 服务管理器不可用")
+            return
+        
+        try:
+            status = self.service_manager.get_service_status()
+            
+            if not status['installed']:
+                self.service_status_label.setText("⚪ 未安装")
+                self.btn_install_service.setEnabled(True)
+                self.btn_uninstall_service.setEnabled(False)
+            else:
+                if status['running']:
+                    status_text = "🟢 运行中"
+                else:
+                    status_text = "🔴 已停止"
+                
+                self.service_status_label.setText(f"{status_text} (已安装)")
+                self.btn_install_service.setEnabled(False)
+                self.btn_uninstall_service.setEnabled(True)
+                
+                # 显示详细信息
+                if status.get('last_run'):
+                    print(f"上次运行: {status['last_run']}")
+                if status.get('next_run'):
+                    print(f"下次运行: {status['next_run']}")
+        except Exception as e:
+            self.service_status_label.setText(f"❌ 检查失败: {str(e)}")
+    
+    @Slot()
+    def open_guardian_log(self):
+        """打开守护日志文件"""
+        log_path = os.path.abspath("guardian.log")
+        if os.path.exists(log_path):
+            os.startfile(log_path)
+        else:
+            QMessageBox.information(self, "提示", "日志文件不存在\n请先运行守护进程")
     
     def quit_application(self):
         """退出应用程序 - 真正关闭整个系统"""
