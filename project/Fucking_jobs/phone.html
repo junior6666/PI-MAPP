@@ -27,6 +27,54 @@
             overflow: hidden;
         }
 
+        /* 主容器 - 用于桌面端分栏布局 */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* 内容区域 */
+        .content-area {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* 消息显示区 */
+        .message-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 历史记录面板（桌面端） */
+        .history-panel {
+            display: none;
+            width: 40%;
+            border-left: 2px solid #2a2a4a;
+            background: #16213e;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .history-panel .history-section {
+            padding: 15px;
+            border-top: none;
+            max-height: none;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .history-panel .history-list {
+            max-height: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+
         /* 顶部状态栏 */
         .header {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -189,14 +237,14 @@
         /* 底部触发条 */
         .drawer-trigger {
             background: #16213e;
-            padding: 3px;
+            padding: 5px;
             border-top: 1px solid #2a2a4a;
             display: flex;
             justify-content: center;
             align-items: center;
             cursor: pointer;
             transition: all 0.3s;
-            min-height: 20px;
+            min-height: 28px;
         }
 
         .drawer-trigger:active {
@@ -204,7 +252,7 @@
         }
 
         .drawer-trigger-icon {
-            font-size: 10px;
+            font-size: 12px;
             color: #4ecca3;
             transition: transform 0.3s;
         }
@@ -471,7 +519,25 @@
         }
 
         /* 适配平板 */
-        @media (min-width: 768px) {
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .content-area {
+                flex-direction: row;
+            }
+
+            .message-panel {
+                flex: 6;
+            }
+
+            .history-panel {
+                display: block;
+                flex: 4;
+            }
+
+            /* 移动端抽屉隐藏 */
+            .drawer-trigger,
+            .drawer {
+                display: none;
+            }
 
             .controls {
                 padding: 15px;
@@ -481,53 +547,198 @@
                 padding: 10px 18px;
                 font-size: 14px;
             }
-            .drawer-trigger {
-
-            min-height: 28px;
         }
+
+        /* 适配电脑端 - 优化布局和间距 */
+        @media (min-width: 1024px) {
+            body {
+                margin: 0 auto;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            }
+
+            .content-area {
+                flex-direction: row;
+            }
+
+            .message-panel {
+                flex: 6;
+            }
+
+            .history-panel {
+                display: block;
+                flex: 4;
+                min-width: 350px;
+                max-width: 500px;
+            }
+
+            /* 移动端抽屉隐藏 */
+            .drawer-trigger,
+            .drawer {
+                display: none;
+            }
+
+            .header {
+                padding: 10px 20px;
+                min-height: 50px;
+            }
+
+            .header h2 {
+                font-size: 18px;
+            }
+
+            #status {
+                font-size: 13px;
+                padding: 5px 12px;
+            }
+
+            #pc-status {
+                font-size: 12px !important;
+                padding: 4px 10px !important;
+            }
+
+            #messages {
+                font-size: 14px;
+                padding: 15px;
+                line-height: 1.6;
+            }
+
+            #messages h1 { font-size: 18px; }
+            #messages h2 { font-size: 16px; }
+            #messages h3 { font-size: 15px; }
+
+            #messages pre code {
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+            }
+
+            .code-language {
+                font-size: 11px;
+                padding: 2px 6px;
+            }
+
+            .copy-btn {
+                font-size: 11px;
+                padding: 2px 8px;
+            }
+
+            .controls {
+                padding: 15px;
+                gap: 8px;
+            }
+
+            button {
+                padding: 10px 20px;
+                font-size: 14px;
+                min-width: 60px;
+            }
+
+            .history-panel .history-section {
+                padding: 15px;
+            }
+
+            .history-header h4 {
+                font-size: 14px;
+            }
+
+            .clear-history-btn {
+                padding: 5px 12px;
+                font-size: 12px;
+            }
+
+            .history-item {
+                padding: 12px;
+            }
+
+            .history-item-time {
+                font-size: 12px;
+            }
+
+            .history-item-preview {
+                font-size: 13px;
+                max-height: 50px;
+            }
+
+            .modal-content {
+                max-width: 450px;
+                padding: 30px;
+            }
+
+            .modal-content h3 {
+                font-size: 22px;
+            }
+
+            .modal-content label {
+                font-size: 15px;
+            }
+
+            .modal-content input[type=text],
+            .modal-content input[type=number] {
+                padding: 12px;
+                font-size: 16px;
+            }
         }
     </style>
 </head>
 <body>
 
-<!-- 顶部状态栏 -->
-<div class="header">
-    <h2>📡 消息接收器</h2>
-    <!-- PC端工作状态显示 -->
-    <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin: 0 8px; white-space: nowrap;">⏳ 待命</span>
-    <span id="status">未连接</span>
-</div>
-
-<!-- 主消息显示区 -->
-<div id="messages">
-    <div class="empty-state">
-        <div class="empty-state-icon">📭</div>
-        <div>等待接收消息...</div>
-    </div>
-</div>
-
-<!-- 底部触发条 -->
-<div class="drawer-trigger" onclick="toggleDrawer()">
-    <span class="drawer-trigger-icon">▲</span>
-</div>
-
-<!-- 抽屉容器 -->
-<div class="drawer" id="controlDrawer">
-    <div class="controls">
-        <button onclick="openConfig()">⚙️</button>
-        <button class="primary" onclick="connectLocal()">🖥️本地</button>
-        <button onclick="connect()">连接</button>
-        <button class="danger" onclick="disconnect()">断开</button>
+<div class="main-container">
+    <!-- 顶部状态栏 -->
+    <div class="header">
+        <h2>📡 消息接收器</h2>
+        <!-- PC端工作状态显示 -->
+        <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin: 0 8px; white-space: nowrap;">⏳ 待命</span>
+        <span id="status">未连接</span>
     </div>
 
-    <!-- 历史记录区域 -->
-    <div class="history-section">
-        <div class="history-header">
-            <h4>📜 历史记录</h4>
-            <button class="clear-history-btn" onclick="clearAllHistory()">清空</button>
+    <!-- 内容区域（左右分栏） -->
+    <div class="content-area">
+        <!-- 左侧：消息显示区 -->
+        <div class="message-panel">
+            <div id="messages">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <div>等待接收消息...</div>
+                </div>
+            </div>
+
+            <!-- 底部触发条（仅移动端） -->
+            <div class="drawer-trigger" onclick="toggleDrawer()">
+                <span class="drawer-trigger-icon">▲</span>
+            </div>
+
+            <!-- 抽屉容器（仅移动端） -->
+            <div class="drawer" id="controlDrawer">
+                <div class="controls">
+                    <button onclick="openConfig()">⚙️</button>
+                    <button class="primary" onclick="connectLocal()">🖥️本地</button>
+                    <button onclick="connect()">连接</button>
+                    <button class="danger" onclick="disconnect()">断开</button>
+                </div>
+
+                <!-- 历史记录区域（仅移动端） -->
+                <div class="history-section">
+                    <div class="history-header">
+                        <h4>📜 历史记录</h4>
+                        <button class="clear-history-btn" onclick="clearAllHistory()">清空</button>
+                    </div>
+                    <div class="history-list" id="historyList">
+                        <div class="empty-history">暂无历史记录</div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="history-list" id="historyList">
-            <div class="empty-history">暂无历史记录</div>
+
+        <!-- 右侧：历史记录面板（平板/电脑端） -->
+        <div class="history-panel">
+            <div class="history-section">
+                <div class="history-header">
+                    <h4>📜 历史记录</h4>
+                    <button class="clear-history-btn" onclick="clearAllHistory()">清空</button>
+                </div>
+                <div class="history-list" id="historyListDesktop">
+                    <div class="empty-history">暂无历史记录</div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -540,9 +751,16 @@
         <input type="text" id="ipInput" placeholder="如 192.168.1.100">
         <label>端口号：</label>
         <input type="number" id="portInput" placeholder="如 8765">
+        
+        <hr style="border: none; border-top: 1px solid #2a2a4a; margin: 15px 0;">
+        
+        <label>最大历史记录条数：</label>
+        <input type="number" id="historyLimitInput" placeholder="默认 100" min="10" max="200">
+        <small style="color: #888; font-size: 11px; display: block; margin-top: 4px;">范围：10-200 条，修改后需重新加载页面生效</small>
+        
         <div class="modal-buttons">
             <button onclick="loadConfig()">读取配置</button>
-            <button onclick="saveConfig()">保存配置</button>
+            <button class="primary" onclick="saveAndConnect()">💾 保存并连接</button>
         </div>
         <div class="modal-buttons" style="justify-content:center; margin-top:10px;">
             <button onclick="closeConfig()">关闭</button>
@@ -558,6 +776,12 @@
     let workflowStartTime = null;  // 工作流开始时间
     let statusTimerInterval = null;  // 状态计时器ID
     let currentStatusStartTime = null;  // 当前状态开始时间
+    let autoReconnectEnabled = true;  // 自动重连开关
+    let reconnectTimer = null;  // 重连定时器
+    let reconnectAttempts = 0;  // 重连尝试次数
+    const MAX_RECONNECT_ATTEMPTS = 10;  // 最大重连次数
+    const RECONNECT_INTERVAL = 3000;  // 重连间隔(毫秒)
+    let maxHistoryItems = 100;  // 最大历史记录条数
 
     // 页面加载时自动读配置和加载历史记录
     window.onload = function () {
@@ -601,11 +825,19 @@
     function loadConfig() {
         const savedIP = localStorage.getItem('pc_ip');
         const savedPort = localStorage.getItem('pc_port');
+        const savedHistoryLimit = localStorage.getItem('history_limit');
+        
         if (savedIP) {
             document.getElementById('ipInput').value = savedIP;
         }
         if (savedPort) {
             document.getElementById('portInput').value = savedPort;
+        }
+        if (savedHistoryLimit) {
+            document.getElementById('historyLimitInput').value = savedHistoryLimit;
+            maxHistoryItems = parseInt(savedHistoryLimit);
+        } else {
+            document.getElementById('historyLimitInput').value = '100';
         }
     }
 
@@ -620,6 +852,42 @@
         localStorage.setItem('pc_ip', ip);
         localStorage.setItem('pc_port', port);
         alert('配置已保存，下次打开自动加载');
+    }
+
+    // 保存配置并立即连接
+    function saveAndConnect() {
+        const ip = document.getElementById('ipInput').value.trim();
+        const port = document.getElementById('portInput').value.trim();
+        if (!ip || !port) {
+            alert('请填写 IP 和端口');
+            return;
+        }
+        
+        // 保存配置
+        localStorage.setItem('pc_ip', ip);
+        localStorage.setItem('pc_port', port);
+        
+        // 保存历史记录限制
+        const historyLimit = document.getElementById('historyLimitInput').value.trim();
+        if (historyLimit) {
+            const limit = parseInt(historyLimit);
+            if (limit >= 10 && limit <= 200) {
+                localStorage.setItem('history_limit', limit);
+                maxHistoryItems = limit;
+            } else {
+                alert('历史记录条数必须在 10-200 之间');
+                return;
+            }
+        }
+        
+        // 关闭配置弹窗
+        closeConfig();
+        
+        // 重置重连计数
+        reconnectAttempts = 0;
+        
+        // 立即连接
+        connect();
     }
 
     function connectLocal() {
@@ -681,6 +949,13 @@
                 console.log('连接关闭:', event.code, event.reason);
                 updateStatus(false);
                 showMessage('❌ 连接已断开', 'error');
+                
+                // 尝试自动重连（如果不是手动断开）
+                if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    attemptReconnect();
+                } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                    showMessage('⚠️ 已达到最大重连次数，请手动重新连接', 'error');
+                }
             };
 
             ws.onerror = (error) => {
@@ -697,6 +972,9 @@
     // 更新PC端工作状态
     function updatePCStatus(status, elapsed = null) {
         const pcStatusEl = document.getElementById('pc-status');
+        
+        // 确保状态元素可见
+        pcStatusEl.style.display = 'inline-block';
 
         // 定义状态样式映射
         const statusConfig = {
@@ -824,14 +1102,18 @@
 
     function updateStatus(connected) {
         const statusEl = document.getElementById('status');
+        const pcStatusEl = document.getElementById('pc-status');
+        
         if (connected) {
             statusEl.textContent = '✅ 已连接';
             statusEl.classList.remove('disconnected');
+            // 连接成功时显示待命状态
+            updatePCStatus('待命');
         } else {
             statusEl.textContent = '❌ 未连接';
             statusEl.classList.add('disconnected');
-            // 连接断开时重置PC状态
-            updatePCStatus('待命');
+            // 连接断开时隐藏PC状态
+            pcStatusEl.style.display = 'none';
         }
     }
 
@@ -953,10 +1235,40 @@
     }
 
     function disconnect() {
+        // 禁用自动重连
+        autoReconnectEnabled = false;
+        
+        // 清除重连定时器
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        
+        // 重置重连计数
+        reconnectAttempts = 0;
+        
         if (ws) {
             ws.close();
         }
         closeDrawerAfterAction();
+    }
+
+    // 尝试自动重连
+    function attemptReconnect() {
+        reconnectAttempts++;
+        const messagesEl = document.getElementById('messages');
+        messagesEl.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔄</div><div>正在尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})</div></div>`;
+        
+        console.log(`尝试第 ${reconnectAttempts} 次重连...`);
+        
+        reconnectTimer = setTimeout(() => {
+            const ip = document.getElementById('ipInput').value.trim();
+            const port = document.getElementById('portInput').value.trim();
+            
+            if (ip && port) {
+                connect();
+            }
+        }, RECONNECT_INTERVAL);
     }
 
     // ========== 历史记录功能 ==========
@@ -989,9 +1301,9 @@
             // 添加到数组开头（最新的在前）
             history.unshift(historyItem);
 
-            // 限制历史记录数量（最多50条）
-            if (history.length > 50) {
-                history = history.slice(0, 50);
+            // 限制历史记录数量（使用配置的条数）
+            if (history.length > maxHistoryItems) {
+                history = history.slice(0, maxHistoryItems);
             }
 
             // 保存到 localStorage
@@ -1018,14 +1330,17 @@
         return hash.toString(36); // 转换为36进制字符串
     }
 
-    // 加载并显示历史记录
+    // 加载并显示历史记录（同时更新移动端和桌面端）
     function loadHistory() {
         try {
-            const historyList = document.getElementById('historyList');
+            const historyListMobile = document.getElementById('historyList');
+            const historyListDesktop = document.getElementById('historyListDesktop');
             const history = JSON.parse(localStorage.getItem('message_history') || '[]');
 
             if (history.length === 0) {
-                historyList.innerHTML = '<div class="empty-history">暂无历史记录</div>';
+                const emptyHtml = '<div class="empty-history">暂无历史记录</div>';
+                if (historyListMobile) historyListMobile.innerHTML = emptyHtml;
+                if (historyListDesktop) historyListDesktop.innerHTML = emptyHtml;
                 return;
             }
 
@@ -1046,7 +1361,9 @@
                 `;
             });
 
-            historyList.innerHTML = html;
+            // 同时更新两个列表
+            if (historyListMobile) historyListMobile.innerHTML = html;
+            if (historyListDesktop) historyListDesktop.innerHTML = html;
         } catch (error) {
             console.error('加载历史记录失败:', error);
         }
