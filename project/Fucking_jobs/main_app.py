@@ -1547,6 +1547,15 @@ class MainWindow(QMainWindow):
             print(f"❌ 模型切换失败: {e}")
             self.statusBar().showMessage(f"模型切换失败: {str(e)}")
     
+    def _simplify_model_name(self, model_name):
+        """简化模型名称显示：超过15字符时截取前7后8"""
+        if not model_name:
+            return model_name
+        
+        if len(model_name) > 15:
+            return f"{model_name[:3]}...{model_name[10:18]}..."
+        return model_name
+    
     def on_kimi_model_toggle_triggered(self):
         """Kimi 模型切换快捷键触发（Alt+2）"""
         try:
@@ -1558,9 +1567,10 @@ class MainWindow(QMainWindow):
             # 显示提示消息
             self.statusBar().showMessage(f"Kimi 主模型已切换为: {current_model}")
             
-            # 如果 WebSocket 已连接，通知手机端
+            # 如果 WebSocket 已连接，通知手机端（去掉Kimi字样，简化长名称）
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                self.websocket_worker.send_message(f"[STATUS:Kimi主模型切换为{current_model}]", silent=True)
+                simplified_model = self._simplify_model_name(current_model)
+                self.websocket_worker.send_message(f"[STATUS:主模型切换为{simplified_model}]", silent=True)
             
             print(f"✅ 当前 Kimi 主模型: {current_model}")
             
@@ -1579,9 +1589,10 @@ class MainWindow(QMainWindow):
             # 显示提示消息
             self.statusBar().showMessage(f"Kimi 主模型已设置为: {model_short}")
             
-            # 如果 WebSocket 已连接，通知手机端
+            # 如果 WebSocket 已连接，通知手机端（去掉Kimi字样，简化长名称）
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                self.websocket_worker.send_message(f"[STATUS:Kimi主模型设置为{model_short}]", silent=True)
+                simplified_model = self._simplify_model_name(model_short)
+                self.websocket_worker.send_message(f"[STATUS:主模型设置为{simplified_model}]", silent=True)
             
             print(f"✅ 当前 Kimi 主模型: {model_short}")
             
