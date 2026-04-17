@@ -1554,7 +1554,7 @@ class MainWindow(QMainWindow):
             
             # 如果 WebSocket 已连接，通知手机端（去掉Kimi字样，简化长名称）
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                simplified_model = self._simplify_model_name(current_model)
+                simplified_model = current_model
                 self.websocket_worker.send_message(f"[STATUS:主模型切换为{simplified_model}]", silent=True)
             
             print(f"✅ 当前 Kimi 主模型: {current_model}")
@@ -1574,8 +1574,8 @@ class MainWindow(QMainWindow):
             
             # 如果 WebSocket 已连接，通知手机端（去掉Kimi字样，简化长名称）
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                simplified_model = self._simplify_model_name(model_short)
-                self.websocket_worker.send_message(f"[STATUS:主模型设置为{simplified_model}]", silent=True)
+
+                self.websocket_worker.send_message(f"[STATUS:主模型设置为{model_short}]", silent=True)
             
             print(f"✅ 当前 Kimi 主模型: {model_short}")
             

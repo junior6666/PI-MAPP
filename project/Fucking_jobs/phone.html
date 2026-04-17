@@ -219,20 +219,22 @@
             display: flex;
             gap: 4px;
             align-items: center;
+            justify-content: center;
         }
 
         #status {
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 10px;
-            background: rgba(78, 204, 163, 0.1);
-            color: #4ecca3;
-            font-weight: 500;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e94560;
+            display: inline-block;
+            transition: all 0.3s;
+            box-shadow: 0 0 5px rgba(233, 69, 96, 0.5);
         }
 
-        #status.disconnected {
-            background: rgba(233, 69, 96, 0.1);
-            color: #e94560;
+        #status.connected {
+            background: #4ecca3;
+            box-shadow: 0 0 5px rgba(78, 204, 163, 0.5);
         }
 
         #messages {
@@ -497,18 +499,25 @@
             border: none;
             width: 18px;
             height: 18px;
-            border-radius: 50%;
+            border-radius: 10%;
             font-size: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            opacity: 0;
+            opacity: 1;
             transition: opacity 0.2s;
         }
 
-        .history-item:hover .history-item-delete {
-            opacity: 1;
+        /* 电脑端：默认隐藏删除按钮，悬停时显示 */
+        @media (min-width: 768px) {
+            .history-item-delete {
+                opacity: 0;
+            }
+
+            .history-item:hover .history-item-delete {
+                opacity: 1;
+            }
         }
 
         .history-item-delete:active {
@@ -744,7 +753,6 @@
 
             #status {
                 font-size: 13px;
-                padding: 5px 12px;
             }
 
             #pc-status {
@@ -767,15 +775,7 @@
                 line-height: 1.5 !important;
             }
 
-            .code-language {
-                font-size: 11px;
-                padding: 2px 6px;
-            }
 
-            .copy-btn {
-                font-size: 11px;
-                padding: 2px 8px;
-            }
 
             .controls {
                 padding: 15px;
@@ -843,15 +843,16 @@
         <h2>📡 消息接收器</h2>
         <div class="header-controls">
             <!-- PC端工作状态显示 -->
-            <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin-right: 8px; white-space: nowrap;">⏳ 待命</span>
-            <span id="status">未连接</span>
+            <span id="pc-status" style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); color: #ffc107; font-weight: 500; margin-right: 8px; white-space: nowrap;">⏳ 未连接</span>
+            <!-- 连接状态指示器（红点=未连接，绿点=已连接） -->
+            <span id="status" title="未连接"></span>
             <!-- 教程展开按钮（仅电脑端，教程收起时显示） -->
             <button id="expandTutorialBtn" onclick="toggleTutorial()" title="显示教程" style="display:none; margin-left: 8px;">📖 教程</button>
             <!-- 桌面端控制按钮（默认隐藏，通过媒体查询显示） -->
-            <button onclick="openConfig()" style="display:none" class="desktop-only-btn">⚙️</button>
-            <button class="primary desktop-only-btn" onclick="connectLocal()" style="display:none">🖥️本地</button>
+            <button class="desktop-only-btn" onclick="connectLocal()" style="display:none">🖥️本地</button>
             <button class="desktop-only-btn" onclick="connect()" style="display:none">连接</button>
-            <button class="danger desktop-only-btn" onclick="disconnect()" style="display:none">断开</button>
+            <button class="desktop-only-btn" onclick="disconnect()" style="display:none">断开</button>
+            <button onclick="openConfig()" style="display:none" class="desktop-only-btn">⚙️</button>
         </div>
     </div>
 
@@ -926,7 +927,8 @@
             <div class="drawer" id="controlDrawer">
                 <div class="controls">
                     <button onclick="openConfig()">⚙️</button>
-                    <button class="primary" onclick="connectLocal()">🖥️本地</button>
+                    <button onclick="toggleTutorial()">📖 教程</button>
+                    <button onclick="connectLocal()">🖥️本地</button>
                     <button onclick="connect()">连接</button>
                     <button class="danger" onclick="disconnect()">断开</button>
                 </div>
@@ -1321,13 +1323,15 @@
         const pcStatusEl = document.getElementById('pc-status');
         
         if (connected) {
-            statusEl.textContent = '✅ 已连接';
-            statusEl.classList.remove('disconnected');
+            // 连接成功：显示绿点
+            statusEl.classList.add('connected');
+            statusEl.title = '已连接';
             // 连接成功时显示待命状态
             updatePCStatus('待命');
         } else {
-            statusEl.textContent = '❌ 未连接';
-            statusEl.classList.add('disconnected');
+            // 连接断开：显示红点
+            statusEl.classList.remove('connected');
+            statusEl.title = '未连接';
             // 连接断开时隐藏PC状态
             pcStatusEl.style.display = 'none';
         }
@@ -1557,8 +1561,20 @@
                 const emptyHtml = '<div class="empty-history">暂无历史记录</div>';
                 if (historyListMobile) historyListMobile.innerHTML = emptyHtml;
                 if (historyListDesktop) historyListDesktop.innerHTML = emptyHtml;
+                
+                // 隐藏所有清空按钮
+                const clearButtons = document.querySelectorAll('.clear-history-btn');
+                clearButtons.forEach(btn => {
+                    btn.style.display = 'none';
+                });
                 return;
             }
+
+            // 显示所有清空按钮
+            const clearButtons = document.querySelectorAll('.clear-history-btn');
+            clearButtons.forEach(btn => {
+                btn.style.display = 'inline-block';
+            });
 
             // 按时间倒序排列（最新的在前）
             history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -1643,20 +1659,142 @@
         const tutorialPanel = document.getElementById('tutorialPanel');
         const expandBtn = document.getElementById('expandTutorialBtn');
         
-        if (tutorialPanel.classList.contains('collapsed')) {
-            // 展开教程
-            tutorialPanel.classList.remove('collapsed');
-            if (expandBtn) {
-                expandBtn.style.display = 'none';
-            }
-            localStorage.setItem('tutorial_visible', 'true');
+        // 检查是否为移动端
+        const isMobile = window.innerWidth < 768;
+        
+        if (isMobile) {
+            // 移动端：使用弹窗显示教程
+            showMobileTutorial();
         } else {
-            // 收起教程
-            tutorialPanel.classList.add('collapsed');
-            if (expandBtn) {
-                expandBtn.style.display = 'inline-block';
+            // 桌面端：使用侧边栏
+            if (tutorialPanel.classList.contains('collapsed')) {
+                // 展开教程
+                tutorialPanel.classList.remove('collapsed');
+                if (expandBtn) {
+                    expandBtn.style.display = 'none';
+                }
+                localStorage.setItem('tutorial_visible', 'true');
+            } else {
+                // 收起教程
+                tutorialPanel.classList.add('collapsed');
+                if (expandBtn) {
+                    expandBtn.style.display = 'inline-block';
+                }
+                localStorage.setItem('tutorial_visible', 'false');
             }
-            localStorage.setItem('tutorial_visible', 'false');
+        }
+    }
+
+    // 移动端教程弹窗
+    function showMobileTutorial() {
+        // 创建或获取教程弹窗
+        let modal = document.getElementById('mobileTutorialModal');
+        
+        if (!modal) {
+            // 创建弹窗HTML
+            modal = document.createElement('div');
+            modal.id = 'mobileTutorialModal';
+            modal.style.cssText = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.85);
+                z-index: 2000;
+                align-items: center;
+                justify-content: center;
+                padding: 15px;
+            `;
+            
+            // 点击背景关闭
+            modal.onclick = function(e) {
+                if (e.target === modal) {
+                    closeMobileTutorial();
+                }
+            };
+            
+            modal.innerHTML = `
+                <div style="
+                    background: #16213e;
+                    border-radius: 12px;
+                    width: 100%;
+                    max-width: 400px;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    border: 1px solid #2a2a4a;
+                    padding: 20px;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="color: #4ecca3; font-size: 16px; margin: 0;">✨ 快速上手</h3>
+                        <button onclick="closeMobileTutorial()" style="
+                            background: #0f3460;
+                            color: white;
+                            border: none;
+                            padding: 5px 10px;
+                            border-radius: 4px;
+                            font-size: 12px;
+                            cursor: pointer;
+                        ">✕ 关闭</button>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">🚀 一键分析</h4>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            <strong style="color: #ff79c6; display: block; margin-bottom: 3px;">⚡ Alt + Z</strong>
+                            截图 → AI分析 → 手机看结果
+                        </div>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            <strong style="color: #ff79c6; display: block; margin-bottom: 3px;">🔍 Alt + X</strong>
+                            OCR识别 → 文字分析 → 推送
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">🎯 切换模型</h4>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+1</code> OCR模型 | 
+                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+2</code> 主模型
+                        </div>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+3~7</code> 快速换大模型 🧠
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">📱 手机连接</h4>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">ws://你的IP:8765</code>
+                        </div>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            ✨ 实时接收 • 💾 历史记录<br>
+                            🎨 Markdown • 📋 代码复制
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">💡 小贴士</h4>
+                        <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                            🌐 同一WiFi • 🔥 开放8765端口<br>
+                            ⌨️ 快捷键别冲突 • 🗑️ 定期清截图
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        // 显示弹窗
+        modal.style.display = 'flex';
+    }
+
+    // 关闭移动端教程弹窗
+    function closeMobileTutorial() {
+        const modal = document.getElementById('mobileTutorialModal');
+        if (modal) {
+            modal.style.display = 'none';
         }
     }
 
