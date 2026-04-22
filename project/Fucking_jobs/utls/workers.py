@@ -1,6 +1,7 @@
 """
 工作线程模块 - 包含所有后台任务的线程类
 """
+import random
 
 import mss
 from PIL import Image
@@ -19,7 +20,8 @@ import signal
 import logging
 import sys
 import winreg
-from PySide6.QtCore import QThread, Signal, Slot
+from PySide6.QtWidgets import QApplication as QtApp
+from PySide6.QtCore import QThread, Signal
 import warnings
 warnings.filterwarnings('ignore', message=".*pin_memory.*")
 
@@ -1443,3 +1445,352 @@ class WindowsServiceManager:
             print(f"获取服务状态失败: {e}")
         
         return status
+
+
+class CodeOrganizeWorker(QThread):
+    """代码整理工作线程 - 将API结果整理为面试代码并自动写入"""
+    
+    organize_completed = Signal(str, float)  # 整理完成信号，参数为整理后的代码和耗时(秒)
+    error_occurred = Signal(str)  # 错误信号
+    status_update = Signal(str)  # 状态更新信号（用于UI显示）
+    file_saved = Signal(str)  # 文件保存信号，参数为文件路径
+    
+    # LongCat API 配置
+    LONGCAT_API_KEY = "ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y"
+    LONGCAT_BASE_URL = "https://api.longcat.chat/openai/v1/chat/completions"
+    LONGCAT_MODEL = "LongCat-Flash-Chat"
+    
+    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output"):
+        super().__init__()
+        self.kimi_result = kimi_result  # KimiWorker的结果（优先使用）
+        self.llm_result = llm_result    # LLMWorker的结果（备选）
+        self.save_dir = save_dir
+        self._interrupted = False
+        self._session = None
+        os.makedirs(save_dir, exist_ok=True)
+    
+    def run(self):
+        """执行代码整理流程"""
+        self._session = None
+        try:
+            start_time = time.time()
+            
+            # 步骤1: 确定输入源
+            if self.kimi_result:
+                input_text = self.kimi_result
+                source = "Kimi"
+            elif self.llm_result:
+                input_text = self.llm_result
+                source = "LLM"
+            else:
+                self.error_occurred.emit("没有可用的API结果进行整理")
+                return
+            
+            print(f"📝 开始整理 {source} 的代码结果...")
+            self.status_update.emit("正在整理代码...")
+            
+            # 步骤2: 调用LLM API进行代码整理
+            organized_code = self._organize_code(input_text)
+            
+            # 检查是否被中断
+            if self._interrupted:
+                return
+            
+            elapsed_time = time.time() - start_time
+            print(f"✅ 代码整理完成 ({elapsed_time:.2f}s)")
+            self.status_update.emit("代码整理完成")
+            
+            # 步骤3: 保存为txt文件
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"interview_code_{timestamp}.txt"
+            filepath = os.path.join(self.save_dir, filename)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(organized_code)
+            
+            print(f"💾 代码已保存: {filepath}")
+            self.file_saved.emit(filepath)
+            self.status_update.emit("文件已保存")
+            
+            # 步骤4: 发送完成信号
+            self.organize_completed.emit(organized_code, elapsed_time)
+            
+        except Exception as e:
+            if not self._interrupted:
+                import traceback
+                error_detail = traceback.format_exc()
+                print(f"❌ 代码整理失败: {str(e)}\n{error_detail}")
+                self.error_occurred.emit(f"代码整理失败: {str(e)}")
+        finally:
+            if self._session:
+                try:
+                    self._session.close()
+                except:
+                    pass
+                self._session = None
+    
+    def _organize_code(self, raw_text):
+        """调用LLM API整理代码"""
+        try:
+            self._session = requests.Session()
+            
+            headers = {
+                "Authorization": f"Bearer {self.LONGCAT_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            # 优化的提示词
+            system_prompt = """角色设定：你是一名正在参加技术面试的候选人，需要在白板上写出最优解。
+
+任务指令：请根据以下要求，对提供的代码进行重构和整理：
+
+解法选择：
+- 仅保留最经典/最优的解法，舍弃其他非主流解法及所有文字分析
+- 如果有多种解法，只保留时间复杂度最优的那个
+
+代码规范（面试级）：
+- 去噪：删除代码中所有的注释和多余的空行，仅保留核心逻辑
+- 命名：使用最符合 Python 语法的极简变量名（如 x, y, k, v, i, j, t, l, r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 风格：模拟人在面试高压环境下书写的极简风格
+
+输出约束：
+- 直接输出 Markdown 代码块，不要包含任何前置的解释、标题或后置的说明
+- 只输出一个代码块，格式为：```python\n...代码...\n```
+- 如果原内容包含多个题目，用 --- 分隔每个题目的代码块"""
+            
+            data = {
+                "model": self.LONGCAT_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"请整理以下代码：\n\n{raw_text}"}
+                ],
+                "max_tokens": 2000,
+                "temperature": 0.3  # 降低温度以获得更确定的输出
+            }
+            
+            # 检查是否已被中断
+            if self._interrupted:
+                return ""
+            
+            response = self._session.post(
+                self.LONGCAT_BASE_URL,
+                headers=headers,
+                json=data,
+                timeout=(10, 60)
+            )
+            response.raise_for_status()
+            
+            # 检查是否被中断
+            if self._interrupted:
+                return ""
+            
+            result = response.json()
+            
+            # 提取回复内容
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content']
+                
+                # 最后检查是否被中断
+                if self._interrupted:
+                    return ""
+                
+                return content
+            else:
+                raise Exception("LLM API 返回格式异常")
+                
+        except requests.exceptions.Timeout:
+            raise Exception("LLM API 请求超时")
+        except requests.exceptions.ConnectionError:
+            raise Exception("LLM API 连接失败")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"LLM API 请求失败: {str(e)}")
+        except Exception as e:
+            raise e
+    
+    def interrupt(self):
+        """中断当前任务"""
+        self._interrupted = True
+        print("🛑 代码整理任务收到中断信号")
+        if self._session:
+            try:
+                self._session.close()
+            except:
+                pass
+
+
+class AutoTypeWorker(QThread):
+    """自动写入工作线程 - 将整理好的代码自动输入到目标窗口"""
+    
+    typing_started = Signal()  # 开始输入信号
+    typing_paused = Signal()  # 暂停输入信号
+    typing_resumed = Signal()  # 恢复输入信号
+    typing_completed = Signal(float)  # 完成输入信号，参数为总耗时(秒)
+    error_occurred = Signal(str)  # 错误信号
+    status_update = Signal(str)  # 状态更新信号
+    progress_update = Signal(int, int)  # 进度更新信号，参数为(当前行, 总行数)
+    
+    def __init__(self, code_file_path, delay=0.05):
+        super().__init__()
+        self.code_file_path = code_file_path
+        self.delay = delay
+        self._stop_flag = False
+        self._paused = False
+    
+    def run(self):
+        """执行自动写入"""
+        import pyautogui
+        import ctypes
+        from pynput import keyboard
+        
+        typing_start_time = time.time()
+        
+        try:
+            # 读取文件内容
+            if not os.path.exists(self.code_file_path):
+                self.error_occurred.emit(f"代码文件不存在: {self.code_file_path}")
+                return
+            
+            with open(self.code_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 过滤Markdown代码块标记行（```python 和 ```）
+            filtered_lines = []
+            for line in lines:
+                stripped = line.strip()
+                # 跳过代码块开始标记（如 ```python, ```, ```java 等）
+                if stripped.startswith('```'):
+                    print(f"⏭️ 跳过代码块标记: {stripped}")
+                    continue
+                filtered_lines.append(line)
+            lines = filtered_lines
+            
+            total_chars = sum(len(line) for line in lines)
+            print(f"准备输入 {len(lines)} 行（已过滤Markdown标记），共 {total_chars} 个字符")
+            
+            self.typing_started.emit()
+            self.status_update.emit("准备输入...")
+            
+            # 给用户3秒时间切换到目标窗口
+            self.status_update.emit("请在3秒内切换到目标窗口...")
+            time.sleep(3)
+            
+            # 检测并切换到英文输入模式
+            if not self._is_english_input():
+                print("检测到非英文输入状态，正在切换...")
+                self._switch_to_english()
+            else:
+                print("当前已是英文输入状态")
+            
+            print("开始输入...")
+            self.status_update.emit("正在输入代码...")
+            
+            need_home_next = False
+            
+            # 逐行输入
+            for line_idx, line in enumerate(lines):
+                # 检查停止信号
+                if self._stop_flag:
+                    print("\n用户中断输入！")
+                    self.status_update.emit("输入已中断")
+                    return
+                
+                # 检查暂停状态
+                while self._paused and not self._stop_flag:
+                    time.sleep(0.1)
+                
+                if self._stop_flag:
+                    return
+                
+                # 发送进度更新
+                self.progress_update.emit(line_idx + 1, len(lines))
+                
+                if need_home_next:
+                    pyautogui.press('home')
+                    need_home_next = False
+                    line_content = line
+                    for char in line_content:
+                        if char == '\n':
+                            pyautogui.typewrite(' ')
+                        pyautogui.typewrite(char, interval=self.delay)
+                    print(f"已输入行 {line_idx + 1} (inter下一行)")
+                
+                elif 'return' in line or 'if' in line or 'elif' in line  or 'while' in line or 'for' in line or 'def' in line or 'else' in line :
+                    pyautogui.press('home')
+                    line_content = line
+                    for char in line_content:
+                        if char == '\n':
+                            pyautogui.typewrite(' ')
+                        pyautogui.typewrite(char, interval=self.delay)
+                    need_home_next = True
+                    print(f"inter 已输入行 {line_idx + 1}")
+                else:
+                    line_content = line.strip()
+                    for char in line_content:
+                        pyautogui.typewrite(char, interval=self.delay)
+                    pyautogui.typewrite(' ')
+                    pyautogui.typewrite('\n')
+                    
+                    # 随机延迟模拟思考时间
+                    think_time = 0.5  # 固定0.5秒
+                    time.sleep(think_time)
+                
+                # 长行随机换行
+                if line_content and len(line_content) > 18 and random.random() > 0.7:
+                    pyautogui.press('enter')
+                    pause_time = random.uniform(0.4, 0.8)
+                    time.sleep(pause_time)
+                
+                # 每10行显示进度
+                if (line_idx + 1) % 10 == 0 or line_idx == len(lines) - 1:
+                    print(f"已输入 {line_idx + 1}/{len(lines)} 行")
+                    self.status_update.emit(f"已输入 {line_idx + 1}/{len(lines)} 行")
+            
+            total_elapsed = time.time() - typing_start_time
+            print(f"✅ 输入完成! (总耗时: {total_elapsed:.2f}s)")
+            self.status_update.emit("写入完成")
+            self.typing_completed.emit(total_elapsed)
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"❌ 自动写入失败: {str(e)}\n{error_detail}")
+            self.error_occurred.emit(f"自动写入失败: {str(e)}")
+    
+    def _is_english_input(self):
+        """检测当前是否为英文输入状态"""
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        thread_id = user32.GetWindowThreadProcessId(hwnd, 0)
+        layout = user32.GetKeyboardLayout(thread_id)
+        lang_id = layout & 0xFFFF
+        return (lang_id == 0x0409) or (lang_id & 0xFF == 0x09)
+    
+    def _switch_to_english(self):
+        """切换到英文输入状态"""
+        import pyautogui
+        print("正在切换到英文输入模式...")
+        pyautogui.hotkey('alt', 'shift')
+        time.sleep(0.8)
+        if not self._is_english_input():
+            pyautogui.hotkey('alt', 'shift')
+            time.sleep(0.5)
+        print("已切换到英文输入模式")
+    
+    def stop_typing(self):
+        """停止自动输入"""
+        self._stop_flag = True
+        print("\n正在停止输入...")
+    
+    def toggle_pause(self):
+        """切换暂停/恢复状态"""
+        self._paused = not self._paused
+        if self._paused:
+            print("\n[已暂停]")
+            self.typing_paused.emit()
+            self.status_update.emit("已暂停")
+        else:
+            print("\n[已恢复] 继续输入...")
+            self.typing_resumed.emit()
+            self.status_update.emit("恢复输入")

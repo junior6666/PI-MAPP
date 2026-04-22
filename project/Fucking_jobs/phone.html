@@ -1216,7 +1216,32 @@
                 bg: 'rgba(156, 39, 176, 0.1)',
                 color: '#9c27b0'
             },
+            '整体代码中': {
+                icon: '📝',
+                bg: 'rgba(255, 152, 0, 0.1)',
+                color: '#ff9800'
+            },
+            '自动写入中': {
+                icon: '⌨️',
+                bg: 'rgba(63, 81, 181, 0.1)',
+                color: '#3f51b5'
+            },
+            '暂停写入': {
+                icon: '⏸️',
+                bg: 'rgba(255, 87, 34, 0.1)',
+                color: '#ff5722'
+            },
+            '恢复写入': {
+                icon: '▶️',
+                bg: 'rgba(76, 175, 80, 0.1)',
+                color: '#4caf50'
+            },
             '已完成': {
+                icon: '✅',
+                bg: 'rgba(76, 175, 80, 0.1)',
+                color: '#4caf50'
+            },
+            '写入完成': {
                 icon: '✅',
                 bg: 'rgba(76, 175, 80, 0.1)',
                 color: '#4caf50'
@@ -1231,7 +1256,8 @@
         const config = statusConfig[status] || statusConfig['待命'];
 
         // 如果需要计时的状态，启动计时器
-        if (status === 'OCR分析中' || status === 'LLM分析中') {
+        if (status === 'OCR分析中' || status === 'LLM分析中' || 
+            status === '整体代码中' || status === '自动写入中') {
             // 如果计时器未运行或状态改变，重新启动计时器
             if (!statusTimerInterval || currentStatusStartTime === null) {
                 currentStatusStartTime = Date.now();

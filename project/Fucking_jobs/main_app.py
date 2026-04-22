@@ -22,7 +22,9 @@ from utls.workers import (
     KimiWorker, 
     WebSocketServerWorker,
     AutoStartManager,
-    WindowsServiceManager
+    WindowsServiceManager,
+    CodeOrganizeWorker,
+    AutoTypeWorker
 )
 
 
@@ -64,12 +66,16 @@ class MainWindow(QMainWindow):
         self.llm_worker = None
         self.kimi_worker = None
         self.websocket_worker = None
+        self.code_organize_worker = None  # 代码整理Worker
+        self.auto_type_worker = None      # 自动写入Worker
         
         # 数据存储
         self.current_image_path = None
         self.ocr_result = ""
         self.llm_result = ""
         self.kimi_result = ""
+        self.organized_code = ""  # 整理后的代码
+        self.code_file_path = None  # 代码文件路径
         
         # 时间记录
         self.screenshot_timestamp = None  # 快捷键触发时间
@@ -106,6 +112,9 @@ class MainWindow(QMainWindow):
         
         # 延迟启动后备模型快捷键（Alt+3 ~ Alt+7）
         QTimer.singleShot(1600, self.start_backup_model_hotkeys)
+        
+        # 延迟启动自动写入快捷键（Alt+S）
+        QTimer.singleShot(1800, self.start_auto_type_hotkey)
         
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
@@ -1583,6 +1592,179 @@ class MainWindow(QMainWindow):
             print(f"❌ 设置主模型失败: {e}")
             self.statusBar().showMessage(f"设置主模型失败: {str(e)}")
     
+    def start_auto_type_hotkey(self):
+        """启动自动写入快捷键（Alt+S）"""
+        try:
+            from pynput import keyboard
+            
+            # 创建全局热键监听器
+            self.auto_type_listener = keyboard.GlobalHotKeys({
+                '<alt>+s': self.on_auto_type_triggered
+            })
+            self.auto_type_listener.start()
+            
+            self.statusBar().showMessage("自动写入快捷键已启用 (Alt+S)")
+            print("✅ 自动写入快捷键 Alt+S 已启用")
+            
+        except Exception as e:
+            print(f"❌ 自动写入快捷键启动失败: {e}")
+    
+    def on_auto_type_triggered(self):
+        """自动写入快捷键触发（Alt+S）- 完整流程：代码整理 -> 保存 -> 自动写入"""
+        print("🚀 自动写入流程启动...")
+        
+        # 检查是否有可用的API结果
+        if not self.kimi_result and not self.llm_result:
+            print("⚠️ 没有可用的API结果，请先执行 Case1 或 Case2 工作流")
+            self.statusBar().showMessage("⚠️ 请先执行截图分析工作流")
+            return
+        
+        # 【关键】记录开始时间
+        self.auto_type_start_time = time.time()
+        
+        # 步骤1: 发送状态到手机 - 整体代码中
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:整体代码中]", silent=True)
+        
+        self.statusBar().showMessage("正在整理代码...")
+        print("📝 开始整理代码...")
+        
+        # 步骤2: 启动代码整理Worker
+        self.start_code_organize()
+    
+    def start_code_organize(self):
+        """启动代码整理流程"""
+        try:
+            # 创建代码整理Worker
+            self.code_organize_worker = CodeOrganizeWorker(
+                kimi_result=self.kimi_result,
+                llm_result=self.llm_result,
+                save_dir="./code_output"
+            )
+            
+            # 连接信号
+            self.code_organize_worker.organize_completed.connect(self.on_code_organize_completed)
+            self.code_organize_worker.error_occurred.connect(self.on_error)
+            self.code_organize_worker.status_update.connect(self.on_code_status_update)
+            self.code_organize_worker.file_saved.connect(self.on_code_file_saved)
+            
+            # 启动
+            self.code_organize_worker.start()
+            
+        except Exception as e:
+            print(f"❌ 代码整理启动失败: {e}")
+            self.statusBar().showMessage(f"代码整理失败: {str(e)}")
+    
+    @Slot(str)
+    def on_code_status_update(self, status):
+        """代码整理状态更新"""
+        self.statusBar().showMessage(status)
+    
+    @Slot(str)
+    def on_code_file_saved(self, filepath):
+        """代码文件保存完成"""
+        self.code_file_path = filepath
+        print(f"💾 代码文件已保存: {filepath}")
+    
+    @Slot(str, float)
+    def on_code_organize_completed(self, organized_code, elapsed_time):
+        """代码整理完成回调"""
+        self.organized_code = organized_code
+        organize_elapsed = elapsed_time
+        
+        print(f"✅ 代码整理完成 (耗时: {organize_elapsed:.2f}s)")
+        self.statusBar().showMessage(f"代码整理完成 ({organize_elapsed:.2f}s)，准备写入...")
+        
+        # 发送状态到手机 - 自动写入中
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
+        
+        # 步骤3: 启动自动写入
+        if self.code_file_path:
+            self.start_auto_type()
+        else:
+            print("❌ 代码文件路径不存在")
+            self.statusBar().showMessage("代码文件路径错误")
+    
+    def start_auto_type(self):
+        """启动自动写入流程"""
+        try:
+            if not self.code_file_path or not os.path.exists(self.code_file_path):
+                print("❌ 代码文件不存在")
+                self.statusBar().showMessage("代码文件不存在")
+                return
+            
+            # 创建自动写入Worker
+            self.auto_type_worker = AutoTypeWorker(
+                code_file_path=self.code_file_path,
+                delay=0.05
+            )
+            
+            # 连接信号
+            self.auto_type_worker.typing_started.connect(self.on_typing_started)
+            self.auto_type_worker.typing_paused.connect(self.on_typing_paused)
+            self.auto_type_worker.typing_resumed.connect(self.on_typing_resumed)
+            self.auto_type_worker.typing_completed.connect(self.on_typing_completed)
+            self.auto_type_worker.error_occurred.connect(self.on_error)
+            self.auto_type_worker.status_update.connect(self.on_auto_type_status_update)
+            self.auto_type_worker.progress_update.connect(self.on_typing_progress_update)
+            
+            # 启动
+            self.auto_type_worker.start()
+            
+        except Exception as e:
+            print(f"❌ 自动写入启动失败: {e}")
+            self.statusBar().showMessage(f"自动写入失败: {str(e)}")
+    
+    @Slot()
+    def on_typing_started(self):
+        """自动写入开始"""
+        print("⌨️ 自动写入已开始")
+        self.statusBar().showMessage("自动写入中...（按Alt+L暂停/恢复）")
+    
+    @Slot()
+    def on_typing_paused(self):
+        """自动写入暂停"""
+        print("⏸️ 自动写入已暂停")
+        self.statusBar().showMessage("写入已暂停（按Alt+L恢复）")
+        
+        # 发送状态到手机 - 暂停写入
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:暂停写入]", silent=True)
+    
+    @Slot()
+    def on_typing_resumed(self):
+        """自动写入恢复"""
+        print("▶️ 自动写入已恢复")
+        self.statusBar().showMessage("恢复写入...")
+        
+        # 发送状态到手机 - 恢复写入
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:恢复写入]", silent=True)
+    
+    @Slot(float)
+    def on_typing_completed(self, total_elapsed):
+        """自动写入完成"""
+        overall_elapsed = time.time() - self.auto_type_start_time
+        print(f"✅ 自动写入完成! (写入耗时: {total_elapsed:.2f}s, 总耗时: {overall_elapsed:.2f}s)")
+        self.statusBar().showMessage(f"写入完成! (总耗时: {overall_elapsed:.2f}s)")
+        
+        # 发送状态到手机 - 写入完成（总耗时）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message(f"[STATUS:写入完成] [ELAPSED:{overall_elapsed:.2f}]", silent=True)
+    
+    @Slot(int, int)
+    def on_typing_progress_update(self, current_line, total_lines):
+        """写入进度更新"""
+        if current_line % 10 == 0 or current_line == total_lines:
+            progress_text = f"已输入 {current_line}/{total_lines} 行"
+            self.statusBar().showMessage(progress_text)
+    
+    @Slot(str)
+    def on_auto_type_status_update(self, status):
+        """自动写入状态更新"""
+        self.statusBar().showMessage(status)
+    
     def perform_quick_screenshot(self):
         """执行快速截图"""
         try:
@@ -2484,6 +2666,31 @@ class MainWindow(QMainWindow):
                 print("✅ 后备模型监听已停止")
             except:
                 pass
+        
+        # 停止自动写入监听器
+        if hasattr(self, 'auto_type_listener') and self.auto_type_listener:
+            try:
+                print("⏳ 正在停止自动写入监听...")
+                self.auto_type_listener.stop()
+                print("✅ 自动写入监听已停止")
+            except:
+                pass
+        
+        # 停止代码整理Worker
+        if self.code_organize_worker and self.code_organize_worker.isRunning():
+            print("⏳ 正在停止代码整理...")
+            self.code_organize_worker.interrupt()
+            self.code_organize_worker.terminate()
+            self.code_organize_worker.wait(1000)
+            print("✅ 代码整理已停止")
+        
+        # 停止自动写入Worker
+        if self.auto_type_worker and self.auto_type_worker.isRunning():
+            print("⏳ 正在停止自动写入...")
+            self.auto_type_worker.stop_typing()
+            self.auto_type_worker.terminate()
+            self.auto_type_worker.wait(1000)
+            print("✅ 自动写入已停止")
         
         # 【新增】清理 OCR 引擎单例，释放内存
         try:
