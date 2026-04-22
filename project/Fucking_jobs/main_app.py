@@ -929,6 +929,7 @@ class MainWindow(QMainWindow):
 <p><b>快捷键：</b>Alt + S &nbsp;&nbsp; <b>特点：</b>自动将整理后的代码输入到目标窗口</p>
 <p><b>工作流程：</b>按下 Alt+S → 读取代码文件 → 模拟键盘输入 → 完成写入</p>
 <p><b>适用场景：</b>面试时需要快速输入代码、自动化代码提交</p>
+<p><b>控制方式：</b>Alt+L 暂停/恢复 | Ctrl+K 停止</p>
         """
         workflow_info.setHtml(workflow_content)
         workflow_info.setStyleSheet("""
@@ -1113,6 +1114,7 @@ class MainWindow(QMainWindow):
 <ul>
 <li><b>Alt + S：</b>启动自动写入流程</li>
 <li><b>Alt + L：</b>暂停/恢复自动写入</li>
+<li><b>Ctrl + K：</b>停止自动写入（新增）</li>
 </ul>
 
 <h3 style='color: #4ecca3;'>🎯 最佳实践</h3>
@@ -1122,6 +1124,7 @@ class MainWindow(QMainWindow):
 <li><b>慢速输入：</b>延迟设置为 0.15~0.30s，适合需要观察的场景</li>
 <li><b>思考时间：</b>建议设置为 1.0~2.0s，模拟真实思考过程</li>
 <li><b>提示词优化：</b>根据实际需求调整代码整理规则，提高输出质量</li>
+<li><b>控制技巧：</b>输入过程中按 Alt+L 暂停/恢复，按 Ctrl+K 完全停止</li>
 </ul>
         """
         info_text.setHtml(info_content)
@@ -1889,19 +1892,20 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"设置主模型失败: {str(e)}")
     
     def start_auto_type_hotkey(self):
-        """启动自动写入快捷键（Alt+S启动，Alt+L暂停/恢复）"""
+        """启动自动写入快捷键（Alt+S启动，Alt+L暂停/恢复，Ctrl+K停止）"""
         try:
             from pynput import keyboard
             
             # 创建全局热键监听器
             self.auto_type_listener = keyboard.GlobalHotKeys({
                 '<alt>+s': self.on_auto_type_triggered,
-                '<alt>+l': self.on_auto_type_toggle_pause
+                '<alt>+l': self.on_auto_type_toggle_pause,
+                '<ctrl>+k': self.on_auto_type_stop  # 停止功能
             })
             self.auto_type_listener.start()
             
-            self.statusBar().showMessage("自动写入快捷键已启用 (Alt+S启动, Alt+L暂停/恢复)")
-            print("✅ 自动写入快捷键 Alt+S(启动) 和 Alt+L(暂停/恢复) 已启用")
+            self.statusBar().showMessage("自动写入快捷键已启用 (Alt+S启动, Alt+L暂停/恢复, Ctrl+K停止)")
+            print("✅ 自动写入快捷键已启用: Alt+S(启动), Alt+L(暂停/恢复), Ctrl+K(停止)")
             
         except Exception as e:
             print(f"❌ 自动写入快捷键启动失败: {e}")
@@ -1909,11 +1913,53 @@ class MainWindow(QMainWindow):
     def on_auto_type_toggle_pause(self):
         """自动写入暂停/恢复快捷键触发（Alt+L）"""
         if hasattr(self, 'auto_type_worker') and self.auto_type_worker and self.auto_type_worker.isRunning():
+            # 检查是否已经停止或即将停止
+            if hasattr(self.auto_type_worker, '_stop_flag') and self.auto_type_worker._stop_flag:
+                print("⚠️ 自动写入任务正在停止中，无法暂停/恢复")
+                self.statusBar().showMessage("⚠️ 任务正在停止中", 2000)
+                return
+            
             print("⏸️▶️ 切换自动写入暂停/恢复状态...")
             self.auto_type_worker.toggle_pause()
+            
+            # 根据当前状态显示不同的提示
+            if hasattr(self.auto_type_worker, '_paused'):
+                if self.auto_type_worker._paused:
+                    self.statusBar().showMessage("⏸️ 写入已暂停（Alt+L恢复 / Ctrl+K停止）", 3000)
+                else:
+                    self.statusBar().showMessage("▶️ 写入已恢复", 2000)
         else:
             print("⚠️ 当前没有正在运行的自动写入任务")
             self.statusBar().showMessage("⚠️ 当前没有正在运行的自动写入任务", 2000)
+    
+    def on_auto_type_stop(self):
+        """自动写入停止快捷键触发（Ctrl+K）"""
+        if hasattr(self, 'auto_type_worker') and self.auto_type_worker and self.auto_type_worker.isRunning():
+            print("🛑 正在停止自动写入...")
+            self.statusBar().showMessage("🛑 正在停止自动写入...", 2000)
+            
+            # 发送状态到手机 - 停止写入
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:停止写入]", silent=True)
+            
+            # 调用停止方法
+            self.auto_type_worker.stop_typing()
+            
+            # 等待线程结束（非阻塞）
+            QTimer.singleShot(500, self.check_auto_type_stopped)
+        else:
+            print("⚠️ 当前没有正在运行的自动写入任务")
+            self.statusBar().showMessage("⚠️ 当前没有正在运行的自动写入任务", 2000)
+    
+    def check_auto_type_stopped(self):
+        """检查自动写入是否已停止"""
+        if hasattr(self, 'auto_type_worker') and self.auto_type_worker:
+            if not self.auto_type_worker.isRunning():
+                print("✅ 自动写入已完全停止")
+                self.statusBar().showMessage("✅ 自动写入已停止", 3000)
+            else:
+                # 如果还在运行，继续等待
+                QTimer.singleShot(500, self.check_auto_type_stopped)
     
     def on_auto_type_triggered(self):
         """自动写入快捷键触发（Alt+S）- 完整流程：代码整理 -> 保存 -> 自动写入"""
@@ -2066,13 +2112,13 @@ class MainWindow(QMainWindow):
         """自动写入开始"""
         print("⌨️ 自动写入已开始")
         self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
-        self.statusBar().showMessage("自动写入中...（按Alt+L暂停/恢复）")
+        self.statusBar().showMessage("⌨️ 自动写入中...（Alt+L暂停/恢复 | Ctrl+K停止）")
     
     @Slot()
     def on_typing_paused(self):
         """自动写入暂停"""
         print("⏸️ 自动写入已暂停")
-        self.statusBar().showMessage("写入已暂停（按Alt+L恢复）")
+        self.statusBar().showMessage("⏸️ 写入已暂停（Alt+L恢复 | Ctrl+K停止）")
         
         # 发送状态到手机 - 暂停写入
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:

@@ -1818,13 +1818,18 @@ class AutoTypeWorker(QThread):
         print("\n正在停止输入...")
     
     def toggle_pause(self):
-        """切换暂停/恢复状态"""
+        """切换暂停/恢复状态（线程安全）"""
+        # 如果已经停止，不允许切换暂停状态
+        if self._stop_flag:
+            print("⚠️ 任务已停止，无法切换暂停状态")
+            return
+        
         self._paused = not self._paused
         if self._paused:
-            print("\n[已暂停]")
+            print("\n⏸️ [已暂停] - 按 Alt+L 恢复或 Ctrl+K 停止")
             self.typing_paused.emit()
             self.status_update.emit("已暂停")
         else:
-            print("\n[已恢复] 继续输入...")
+            print("\n▶️ [已恢复] 继续输入...")
             self.typing_resumed.emit()
             self.status_update.emit("恢复输入")
