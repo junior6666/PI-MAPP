@@ -1648,7 +1648,7 @@ class AutoTypeWorker(QThread):
     status_update = Signal(str)  # 状态更新信号
     progress_update = Signal(int, int)  # 进度更新信号，参数为(当前行, 总行数)
     
-    def __init__(self, code_file_path, delay=0.05):
+    def __init__(self, code_file_path, delay=0.4):
         super().__init__()
         self.code_file_path = code_file_path
         self.delay = delay
@@ -1725,6 +1725,8 @@ class AutoTypeWorker(QThread):
                 
                 if need_home_next:
                     pyautogui.press('home')
+                    think_time = random.uniform(1.5,3)
+                    time.sleep(think_time)
                     need_home_next = False
                     line_content = line
                     for char in line_content:
@@ -1735,6 +1737,8 @@ class AutoTypeWorker(QThread):
                 
                 elif 'return' in line or 'if' in line or 'elif' in line  or 'while' in line or 'for' in line or 'def' in line or 'else' in line :
                     pyautogui.press('home')
+                    think_time = random.uniform(2,3)
+                    time.sleep(think_time)
                     line_content = line
                     for char in line_content:
                         if char == '\n':
@@ -1750,13 +1754,13 @@ class AutoTypeWorker(QThread):
                     pyautogui.typewrite('\n')
                     
                     # 随机延迟模拟思考时间
-                    think_time = 0.5  # 固定0.5秒
+                    think_time = 2
                     time.sleep(think_time)
                 
                 # 长行随机换行
                 if line_content and len(line_content) > 18 and random.random() > 0.7:
                     pyautogui.press('enter')
-                    pause_time = random.uniform(0.4, 0.8)
+                    pause_time = random.uniform(1, 3)
                     time.sleep(pause_time)
                 
                 # 每10行显示进度
