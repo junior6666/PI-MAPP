@@ -1697,16 +1697,8 @@ class AutoTypeWorker(QThread):
             self.status_update.emit("准备输入...")
             
             # 给用户3秒时间切换到目标窗口
-            self.status_update.emit("请在3秒内切换到目标窗口...")
-            time.sleep(3)
-            
-            # 检测并切换到英文输入模式
-            if not self._is_english_input():
-                print("检测到非英文输入状态，正在切换...")
-                self._switch_to_english()
-            else:
-                print("当前已是英文输入状态")
-            
+            self.status_update.emit("请在5秒内切换到目标窗口...并检查是否为英文输入状态！！")
+            time.sleep(5)
             print("开始输入...")
             self.status_update.emit("正在输入代码...")
             
@@ -1790,28 +1782,7 @@ class AutoTypeWorker(QThread):
             error_detail = traceback.format_exc()
             print(f"❌ 自动写入失败: {str(e)}\n{error_detail}")
             self.error_occurred.emit(f"自动写入失败: {str(e)}")
-    
-    def _is_english_input(self):
-        """检测当前是否为英文输入状态"""
-        import ctypes
-        user32 = ctypes.windll.user32
-        hwnd = user32.GetForegroundWindow()
-        thread_id = user32.GetWindowThreadProcessId(hwnd, 0)
-        layout = user32.GetKeyboardLayout(thread_id)
-        lang_id = layout & 0xFFFF
-        return (lang_id == 0x0409) or (lang_id & 0xFF == 0x09)
-    
-    def _switch_to_english(self):
-        """切换到英文输入状态"""
-        import pyautogui
-        print("正在切换到英文输入模式...")
-        pyautogui.hotkey('alt', 'shift')
-        time.sleep(0.8)
-        if not self._is_english_input():
-            pyautogui.hotkey('alt', 'shift')
-            time.sleep(0.5)
-        print("已切换到英文输入模式")
-    
+
     def stop_typing(self):
         """停止自动输入"""
         self._stop_flag = True
