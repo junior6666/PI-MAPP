@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                QGroupBox, QFormLayout, QLineEdit, QSpinBox,
                                QCheckBox, QMessageBox, QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
-                               QTableWidget, QTableWidgetItem, QHeaderView)
+                               QTableWidget, QTableWidgetItem, QHeaderView, QSlider, QDoubleSpinBox)
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from PySide6.QtGui import QFont, QIcon
 
@@ -608,6 +608,10 @@ class MainWindow(QMainWindow):
         self.case2_tab = self.create_case2_tab()
         self.help_inner_tabs.addTab(self.case2_tab, "🚀 Case2 (Alt+Z)")
         
+        # Case3: Alt+S 工作流
+        self.case3_tab = self.create_case3_tab()
+        self.help_inner_tabs.addTab(self.case3_tab, "⌨️ Case3 (Alt+S)")
+        
         # R 标签：结果展示
         self.r_tab = self.create_r_tab()
         self.help_inner_tabs.addTab(self.r_tab, "📊 R - 结果")
@@ -907,6 +911,298 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         
         return widget
+    
+    def create_case3_tab(self):
+        """创建 Case3 (Alt+S) 自动写入配置标签页"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 工作流说明
+        workflow_info = QTextEdit()
+        workflow_info.setReadOnly(True)
+        workflow_info.setMaximumHeight(120)
+        workflow_info.setMinimumHeight(100)
+        workflow_content = """
+<h3 style='color: #4ecca3;'>⌨️ Case3: 自动写入模式</h3>
+<p><b>快捷键：</b>Alt + S &nbsp;&nbsp; <b>特点：</b>自动将整理后的代码输入到目标窗口</p>
+<p><b>工作流程：</b>按下 Alt+S → 读取代码文件 → 模拟键盘输入 → 完成写入</p>
+<p><b>适用场景：</b>面试时需要快速输入代码、自动化代码提交</p>
+        """
+        workflow_info.setHtml(workflow_content)
+        workflow_info.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 5px;
+                background-color: white;
+                padding: 8px;
+                font-size: 12px;
+            }
+        """)
+        layout.addWidget(workflow_info)
+        
+        # 顶部左右布局：延迟设置 + 代码整理提示词
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(15)
+        
+        # 左侧：延迟设置
+        delay_group = QGroupBox("⏱️ 输入延迟设置")
+        delay_layout = QFormLayout()
+        
+        # 延迟滑块
+        self.delay_slider = QSlider(Qt.Horizontal)
+        self.delay_slider.setRange(1, 50)  # 0.01 ~ 0.50
+        self.delay_slider.setValue(5)  # 默认 0.05
+        self.delay_slider.setTickPosition(QSlider.TicksBelow)
+        self.delay_slider.setTickInterval(5)
+        self.delay_slider.valueChanged.connect(self.update_delay_label)
+        
+        delay_widget = QWidget()
+        delay_hlayout = QHBoxLayout(delay_widget)
+        delay_hlayout.setContentsMargins(0, 0, 0, 0)
+        delay_hlayout.addWidget(self.delay_slider)
+        
+        self.delay_value_label = QLabel("0.05s")
+        self.delay_value_label.setMinimumWidth(60)
+        self.delay_value_label.setAlignment(Qt.AlignCenter)
+        self.delay_value_label.setStyleSheet("font-weight: bold; color: #4ecca3;")
+        delay_hlayout.addWidget(self.delay_value_label)
+        
+        delay_layout.addRow("字符间隔:", delay_widget)
+        
+        # 思考时间范围设置
+        think_time_widget = QWidget()
+        think_time_layout = QHBoxLayout(think_time_widget)
+        think_time_layout.setContentsMargins(0, 0, 0, 0)
+        think_time_layout.setSpacing(8)
+        
+        # 最小值
+        self.think_time_min_spinbox = QDoubleSpinBox()
+        self.think_time_min_spinbox.setRange(0.1, 10.0)
+        self.think_time_min_spinbox.setValue(1.0)
+        self.think_time_min_spinbox.setSingleStep(0.1)
+        self.think_time_min_spinbox.setSuffix("s")
+        self.think_time_min_spinbox.setMaximumWidth(120)
+        think_time_layout.addWidget(QLabel("最小:"))
+        think_time_layout.addWidget(self.think_time_min_spinbox)
+        
+
+        
+        # 最大值
+        self.think_time_max_spinbox = QDoubleSpinBox()
+        self.think_time_max_spinbox.setRange(0.1, 10.0)
+        self.think_time_max_spinbox.setValue(2.0)
+        self.think_time_max_spinbox.setSingleStep(0.1)
+        self.think_time_max_spinbox.setSuffix("s")
+        self.think_time_max_spinbox.setMaximumWidth(120)
+        think_time_layout.addWidget(QLabel("最大:"))
+        think_time_layout.addWidget(self.think_time_max_spinbox)
+        think_time_layout.addStretch()
+        delay_layout.addRow("思考时间:", think_time_widget)
+        
+        # 延迟说明
+        delay_info = QLabel("范围: 0.01s ~ 0.50s | 值越小输入越快")
+        delay_info.setStyleSheet("color: #666; font-size: 11px;")
+        delay_layout.addRow(delay_info)
+        
+        # 快捷模式按钮
+        mode_btn_widget = QWidget()
+        mode_btn_layout = QHBoxLayout(mode_btn_widget)
+        mode_btn_layout.setContentsMargins(0, 5, 0, 0)
+        mode_btn_layout.setSpacing(10)
+        
+        # 熟练模式按钮 - 快速输入 (0.02s)
+        expert_btn = QPushButton("🚀 熟练模式")
+        expert_btn.setToolTip("设置为快速输入模式 (0.02s)")
+        expert_btn.clicked.connect(lambda: self.set_delay_mode(2, "熟练模式"))
+        mode_btn_layout.addWidget(expert_btn)
+        
+        # 新手模式按钮 - 慢速输入 (0.15s)
+        beginner_btn = QPushButton("🐢 新手模式")
+        beginner_btn.setToolTip("设置为慢速输入模式 (0.15s)")
+        beginner_btn.clicked.connect(lambda: self.set_delay_mode(15, "新手模式"))
+        mode_btn_layout.addWidget(beginner_btn)
+        
+        mode_btn_layout.addStretch()
+        delay_layout.addRow("快捷模式:", mode_btn_widget)
+        
+        # 思考时间快捷设置按钮
+        think_quick_btn_widget = QWidget()
+        think_quick_btn_layout = QHBoxLayout(think_quick_btn_widget)
+        think_quick_btn_layout.setContentsMargins(0, 5, 0, 0)
+        think_quick_btn_layout.setSpacing(10)
+        
+        # 快速思考模式 (0.5~1.0s)
+        quick_think_btn = QPushButton("⚡ 快速思考")
+        quick_think_btn.setToolTip("设置思考时间为 0.5~1.0s")
+        quick_think_btn.clicked.connect(lambda: self.set_think_time_mode(0.5, 1.0, "快速思考"))
+        think_quick_btn_layout.addWidget(quick_think_btn)
+        
+        # 正常思考模式 (1.0~2.0s)
+        normal_think_btn = QPushButton("🎯 正常思考")
+        normal_think_btn.setToolTip("设置思考时间为 1.0~2.0s")
+        normal_think_btn.clicked.connect(lambda: self.set_think_time_mode(1.0, 2.0, "正常思考"))
+        think_quick_btn_layout.addWidget(normal_think_btn)
+        
+        # 深度思考模式 (2.0~3.5s)
+        deep_think_btn = QPushButton("🤔 深度思考")
+        deep_think_btn.setToolTip("设置思考时间为 2.0~3.5s")
+        deep_think_btn.clicked.connect(lambda: self.set_think_time_mode(2.0, 3.5, "深度思考"))
+        think_quick_btn_layout.addWidget(deep_think_btn)
+        
+        think_quick_btn_layout.addStretch()
+        delay_layout.addRow("思考模式:", think_quick_btn_widget)
+        
+        delay_group.setLayout(delay_layout)
+        top_layout.addWidget(delay_group, stretch=1)
+        
+        # 右侧：代码整理提示词
+        prompt_group = QGroupBox("📝 代码整理提示词")
+        prompt_layout = QVBoxLayout()
+        
+        self.case3_prompt_input = QTextEdit()
+        self.case3_prompt_input.setPlaceholderText("请输入代码整理提示词...")
+        self.case3_prompt_input.setText("""角色设定：你是一名正在参加技术面试的候选人，需要在白板上写出最优解。
+
+任务指令：请根据以下要求，对提供的代码进行重构和整理：
+
+解法选择：
+- 仅保留最经典/最优的解法，舍弃其他非主流解法及所有文字分析
+- 如果有多种解法，只保留时间复杂度最优的那个
+
+代码规范（面试级）：
+- 去噪：删除代码中所有的注释和多余的空行，仅保留核心逻辑
+- 命名：使用最符合 Python 语法的极简变量名（如 x, y, k, v, i, j, t, l, r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 风格：模拟人在面试高压环境下书写的极简风格
+
+输出约束：
+- 直接输出 Markdown 代码块，不要包含任何前置的解释、标题或后置的说明
+- 只输出一个代码块，格式为：```python\n...代码...\n```
+- 如果原内容包含多个题目，用 --- 分隔每个题目的代码块""")
+        self.case3_prompt_input.setMaximumHeight(300)
+        prompt_layout.addWidget(self.case3_prompt_input)
+        
+        # 保存按钮
+        save_prompt_btn = QPushButton("💾 保存提示词")
+        save_prompt_btn.clicked.connect(self.save_case3_config)
+        prompt_layout.addWidget(save_prompt_btn)
+        
+        prompt_group.setLayout(prompt_layout)
+        top_layout.addWidget(prompt_group, stretch=1)
+        
+        layout.addLayout(top_layout)
+        
+        # 使用说明
+        info_text = QTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setMaximumHeight(280)
+        info_text.setMinimumHeight(260)
+        info_content = """
+<h3 style='color: #4ecca3;'>💡 使用说明</h3>
+<ul>
+<li><b>调整延迟：</b>通过滑块调整字符输入间隔，值越小输入速度越快</li>
+<li><b>思考时间：</b>设置关键行（if/for/return等）前后的随机暂停时间范围</li>
+<li><b>自定义提示词：</b>可以修改代码整理的提示词，定制AI整理风格</li>
+<li><b>自动保存：</b>点击"💾 保存提示词"按钮后，配置会自动保存到本地</li>
+<li><b>触发方式：</b>程序启动后自动启用 Alt+S 快捷键监听</li>
+</ul>
+
+<h3 style='color: #4ecca3;'>⌨️ 相关快捷键</h3>
+<ul>
+<li><b>Alt + S：</b>启动自动写入流程</li>
+<li><b>Alt + L：</b>暂停/恢复自动写入</li>
+</ul>
+
+<h3 style='color: #4ecca3;'>🎯 最佳实践</h3>
+<ul>
+<li><b>快速输入：</b>延迟设置为 0.01~0.03s，适合熟练场景</li>
+<li><b>正常速度：</b>延迟设置为 0.05~0.10s，平衡速度和稳定性</li>
+<li><b>慢速输入：</b>延迟设置为 0.15~0.30s，适合需要观察的场景</li>
+<li><b>思考时间：</b>建议设置为 1.0~2.0s，模拟真实思考过程</li>
+<li><b>提示词优化：</b>根据实际需求调整代码整理规则，提高输出质量</li>
+</ul>
+        """
+        info_text.setHtml(info_content)
+        layout.addWidget(info_text)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def update_delay_label(self, value):
+        """更新延迟显示标签"""
+        delay = value / 100.0
+        self.delay_value_label.setText(f"{delay:.2f}s")
+    
+    def set_delay_mode(self, slider_value, mode_name):
+        """设置延迟模式"""
+        self.delay_slider.setValue(slider_value)
+        print(f"✅ 已切换到{mode_name}，延迟: {slider_value/100.0:.2f}s")
+    
+    def set_think_time_mode(self, min_val, max_val, mode_name):
+        """设置思考时间模式"""
+        self.think_time_min_spinbox.setValue(min_val)
+        self.think_time_max_spinbox.setValue(max_val)
+        print(f"✅ 已切换到{mode_name}模式，思考时间: {min_val}~{max_val}s")
+    
+    def save_case3_config(self):
+        """保存 Case3 配置"""
+        try:
+            import json
+            config_file = os.path.join(os.path.dirname(__file__), 'case3_config.json')
+            
+            config = {
+                'delay': self.delay_slider.value() / 100.0,
+                'think_time_min': self.think_time_min_spinbox.value(),
+                'think_time_max': self.think_time_max_spinbox.value(),
+                'prompt': self.case3_prompt_input.toPlainText()
+            }
+            
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, prompt_length={len(config['prompt'])}")
+            QMessageBox.information(self, "成功", "Case3 配置已保存！")
+            
+        except Exception as e:
+            print(f"❌ 保存 Case3 配置失败: {e}")
+            QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
+    
+    def load_case3_config(self):
+        """加载 Case3 配置"""
+        try:
+            import json
+            config_file = os.path.join(os.path.dirname(__file__), 'case3_config.json')
+            
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # 加载延迟设置
+                if 'delay' in config:
+                    delay_value = int(config['delay'] * 100)
+                    delay_value = max(1, min(50, delay_value))  # 限制在 1~50 范围内
+                    self.delay_slider.setValue(delay_value)
+                    self.delay_value_label.setText(f"{config['delay']:.2f}s")
+                
+                # 加载思考时间范围
+                if 'think_time_min' in config:
+                    self.think_time_min_spinbox.setValue(config['think_time_min'])
+                if 'think_time_max' in config:
+                    self.think_time_max_spinbox.setValue(config['think_time_max'])
+                
+                # 加载提示词
+                if 'prompt' in config and config['prompt']:
+                    self.case3_prompt_input.setText(config['prompt'])
+                
+                print(f"✅ Case3 配置已加载: delay={config.get('delay', 0.05)}, think_time={config.get('think_time_min', 1.0)}-{config.get('think_time_max', 2.0)}s")
+            else:
+                print("ℹ️ 未找到 Case3 配置文件，使用默认配置")
+                
+        except Exception as e:
+            print(f"⚠️ 加载 Case3 配置失败: {e}，使用默认配置")
     
     def create_case2_tab(self):
         """创建 Case2 (Alt+Z) 工作流配置标签页"""
@@ -1593,21 +1889,31 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"设置主模型失败: {str(e)}")
     
     def start_auto_type_hotkey(self):
-        """启动自动写入快捷键（Alt+S）"""
+        """启动自动写入快捷键（Alt+S启动，Alt+L暂停/恢复）"""
         try:
             from pynput import keyboard
             
             # 创建全局热键监听器
             self.auto_type_listener = keyboard.GlobalHotKeys({
-                '<alt>+s': self.on_auto_type_triggered
+                '<alt>+s': self.on_auto_type_triggered,
+                '<alt>+l': self.on_auto_type_toggle_pause
             })
             self.auto_type_listener.start()
             
-            self.statusBar().showMessage("自动写入快捷键已启用 (Alt+S)")
-            print("✅ 自动写入快捷键 Alt+S 已启用")
+            self.statusBar().showMessage("自动写入快捷键已启用 (Alt+S启动, Alt+L暂停/恢复)")
+            print("✅ 自动写入快捷键 Alt+S(启动) 和 Alt+L(暂停/恢复) 已启用")
             
         except Exception as e:
             print(f"❌ 自动写入快捷键启动失败: {e}")
+    
+    def on_auto_type_toggle_pause(self):
+        """自动写入暂停/恢复快捷键触发（Alt+L）"""
+        if hasattr(self, 'auto_type_worker') and self.auto_type_worker and self.auto_type_worker.isRunning():
+            print("⏸️▶️ 切换自动写入暂停/恢复状态...")
+            self.auto_type_worker.toggle_pause()
+        else:
+            print("⚠️ 当前没有正在运行的自动写入任务")
+            self.statusBar().showMessage("⚠️ 当前没有正在运行的自动写入任务", 2000)
     
     def on_auto_type_triggered(self):
         """自动写入快捷键触发（Alt+S）- 完整流程：代码整理 -> 保存 -> 自动写入"""
@@ -1722,9 +2028,16 @@ class MainWindow(QMainWindow):
                 return
             
             # 创建自动写入Worker，并传递过滤后的代码
+            # 从 UI 中获取 delay 和 think_time 参数
+            delay = self.delay_slider.value() / 100.0
+            think_time_min = self.think_time_min_spinbox.value()
+            think_time_max = self.think_time_max_spinbox.value()
+            
             self.auto_type_worker = AutoTypeWorker(
                 code_file_path=self.code_file_path,
-                delay=0.05
+                delay=delay,
+                think_time_min=think_time_min,
+                think_time_max=think_time_max
             )
             
             # 设置过滤后的代码，用于输入完成后复制到剪切板
@@ -1752,6 +2065,7 @@ class MainWindow(QMainWindow):
     def on_typing_started(self):
         """自动写入开始"""
         print("⌨️ 自动写入已开始")
+        self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
         self.statusBar().showMessage("自动写入中...（按Alt+L暂停/恢复）")
     
     @Slot()
@@ -1763,7 +2077,7 @@ class MainWindow(QMainWindow):
         # 发送状态到手机 - 暂停写入
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:暂停写入]", silent=True)
-    
+
     @Slot()
     def on_typing_resumed(self):
         """自动写入恢复"""

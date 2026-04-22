@@ -1461,11 +1461,12 @@ class CodeOrganizeWorker(QThread):
     LONGCAT_BASE_URL = "https://api.longcat.chat/openai/v1/chat/completions"
     LONGCAT_MODEL = "LongCat-Flash-Chat"
     
-    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output"):
+    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output", custom_prompt=None):
         super().__init__()
         self.kimi_result = kimi_result  # KimiWorker的结果（优先使用）
         self.llm_result = llm_result    # LLMWorker的结果（备选）
         self.save_dir = save_dir
+        self.custom_prompt = custom_prompt  # 自定义提示词
         self._interrupted = False
         self._session = None
         os.makedirs(save_dir, exist_ok=True)
@@ -1556,8 +1557,11 @@ class CodeOrganizeWorker(QThread):
                 "Content-Type": "application/json"
             }
             
-            # 优化的提示词
-            system_prompt = """角色设定：你是一名正在参加技术面试的候选人，需要在白板上写出最优解。
+            # 使用自定义提示词或默认提示词
+            if self.custom_prompt:
+                system_prompt = self.custom_prompt
+            else:
+                system_prompt = """角色设定：你是一名正在参加技术面试的候选人，需要在白板上写出最优解。
 
 任务指令：请根据以下要求，对提供的代码进行重构和整理：
 
@@ -1648,10 +1652,12 @@ class AutoTypeWorker(QThread):
     status_update = Signal(str)  # 状态更新信号
     progress_update = Signal(int, int)  # 进度更新信号，参数为(当前行, 总行数)
     
-    def __init__(self, code_file_path, delay=0.4):
+    def __init__(self, code_file_path, delay=0.05, think_time_min=1.0, think_time_max=2.0):
         super().__init__()
         self.code_file_path = code_file_path
         self.delay = delay
+        self.think_time_min = think_time_min  # 思考时间最小值
+        self.think_time_max = think_time_max  # 思考时间最大值
         self._stop_flag = False
         self._paused = False
         self.filtered_code = None  # 存储过滤后的代码，用于输入完成后复制到剪切板
@@ -1717,7 +1723,6 @@ class AutoTypeWorker(QThread):
                 # 检查暂停状态
                 while self._paused and not self._stop_flag:
                     time.sleep(0.1)
-                
                 if self._stop_flag:
                     return
                 
@@ -1726,7 +1731,7 @@ class AutoTypeWorker(QThread):
                 
                 if need_home_next:
                     pyautogui.press('home')
-                    think_time = random.uniform(1.5,3)
+                    think_time = random.uniform(self.think_time_min, self.think_time_max)
                     time.sleep(think_time)
                     need_home_next = False
                     line_content = line
@@ -1738,13 +1743,13 @@ class AutoTypeWorker(QThread):
                 
                 elif 'return' in line or 'if' in line or 'elif' in line  or 'while' in line or 'for' in line or 'def' in line or 'else' in line :
                     pyautogui.press('home')
-                    think_time = random.uniform(2,3)
+                    think_time = random.uniform(self.think_time_min, self.think_time_max)
                     time.sleep(think_time)
                     line_content = line
                     for char in line_content:
                         if char == '\n':
                             pyautogui.typewrite(' ')
-                        pyautogui.typewrite(char, interval= random.uniform(0.2,0.5))
+                        pyautogui.typewrite(char, interval= random.uniform(self.delay,self.delay+0.1))
                     need_home_next = True
                     print(f"inter 已输入行 {line_idx + 1}")
                 else:
@@ -1755,7 +1760,7 @@ class AutoTypeWorker(QThread):
                     pyautogui.typewrite('\n')
                     
                     # 随机延迟模拟思考时间
-                    think_time = 2
+                    think_time = random.uniform(self.think_time_min, self.think_time_max)
                     time.sleep(think_time)
                 
                 # 长行随机换行
