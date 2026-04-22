@@ -1454,6 +1454,7 @@ class CodeOrganizeWorker(QThread):
     error_occurred = Signal(str)  # 错误信号
     status_update = Signal(str)  # 状态更新信号（用于UI显示）
     file_saved = Signal(str)  # 文件保存信号，参数为文件路径
+    code_to_clipboard = Signal(str)  # 复制到剪切板信号，参数为过滤后的代码
     
     # LongCat API 配置
     LONGCAT_API_KEY = "ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y"
@@ -1495,6 +1496,23 @@ class CodeOrganizeWorker(QThread):
             # 检查是否被中断
             if self._interrupted:
                 return
+            
+            # 步骤2.5: 过滤Markdown代码块标记并复制到剪切板
+            filtered_code_lines = []
+            for line in organized_code.split('\n'):
+                stripped = line.strip()
+                # 跳过代码块标记（如 ```python, ```, ```java 等）
+                if stripped.startswith('```'):
+                    print(f"⏭️ 过滤代码块标记: {stripped}")
+                    continue
+                filtered_code_lines.append(line)
+            
+            filtered_code = '\n'.join(filtered_code_lines)
+            
+            # 发送信号到主线程处理剪切板操作
+            self.code_to_clipboard.emit(filtered_code)
+            print("📋 代码已发送至主线程进行剪切板复制")
+            self.status_update.emit("正在复制代码到剪切板...")
             
             elapsed_time = time.time() - start_time
             print(f"✅ 代码整理完成 ({elapsed_time:.2f}s)")

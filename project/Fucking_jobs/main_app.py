@@ -1647,6 +1647,7 @@ class MainWindow(QMainWindow):
             self.code_organize_worker.error_occurred.connect(self.on_error)
             self.code_organize_worker.status_update.connect(self.on_code_status_update)
             self.code_organize_worker.file_saved.connect(self.on_code_file_saved)
+            self.code_organize_worker.code_to_clipboard.connect(self.on_code_to_clipboard)
             
             # 启动
             self.code_organize_worker.start()
@@ -1665,6 +1666,18 @@ class MainWindow(QMainWindow):
         """代码文件保存完成"""
         self.code_file_path = filepath
         print(f"💾 代码文件已保存: {filepath}")
+    
+    @Slot(str)
+    def on_code_to_clipboard(self, filtered_code):
+        """将过滤后的代码复制到剪切板（在主线程中执行）"""
+        try:
+            from PySide6.QtWidgets import QApplication as QtApp
+            clipboard = QtApp.clipboard()
+            clipboard.setText(filtered_code)
+            print("📋 代码已成功复制到剪切板")
+            self.statusBar().showMessage("✅ 代码已复制到剪切板", 3000)
+        except Exception as e:
+            print(f"⚠️ 复制到剪切板失败: {str(e)}")
     
     @Slot(str, float)
     def on_code_organize_completed(self, organized_code, elapsed_time):
