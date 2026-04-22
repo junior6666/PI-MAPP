@@ -1733,7 +1733,7 @@ class AutoTypeWorker(QThread):
                     for char in line_content:
                         if char == '\n':
                             pyautogui.typewrite(' ')
-                        pyautogui.typewrite(char, interval=self.delay)
+                        pyautogui.typewrite(char, interval= self.delay)
                     print(f"已输入行 {line_idx + 1} (inter下一行)")
                 
                 elif 'return' in line or 'if' in line or 'elif' in line  or 'while' in line or 'for' in line or 'def' in line or 'else' in line :
@@ -1744,13 +1744,13 @@ class AutoTypeWorker(QThread):
                     for char in line_content:
                         if char == '\n':
                             pyautogui.typewrite(' ')
-                        pyautogui.typewrite(char, interval=self.delay)
+                        pyautogui.typewrite(char, interval= random.uniform(0.2,0.5))
                     need_home_next = True
                     print(f"inter 已输入行 {line_idx + 1}")
                 else:
                     line_content = line.strip()
                     for char in line_content:
-                        pyautogui.typewrite(char, interval=self.delay)
+                        pyautogui.typewrite(char, interval= self.delay)
                     pyautogui.typewrite(' ')
                     pyautogui.typewrite('\n')
                     

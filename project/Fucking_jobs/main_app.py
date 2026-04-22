@@ -1694,6 +1694,14 @@ class MainWindow(QMainWindow):
         else:
             self.filtered_code_for_clipboard = None
         
+        # 发送整理后的代码到手机端显示
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            code_message = f"""📝 整理后的代码\n
+{organized_code}```
+⏱️ 整理耗时: {organize_elapsed:.2f}s"""
+            self.websocket_worker.send_message(code_message)
+            print("📤 已将整理后的代码发送到手机端")
+        
         # 发送状态到手机 - 自动写入中
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
