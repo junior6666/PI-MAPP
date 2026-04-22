@@ -1647,7 +1647,6 @@ class MainWindow(QMainWindow):
             self.code_organize_worker.error_occurred.connect(self.on_error)
             self.code_organize_worker.status_update.connect(self.on_code_status_update)
             self.code_organize_worker.file_saved.connect(self.on_code_file_saved)
-            self.code_organize_worker.code_to_clipboard.connect(self.on_code_to_clipboard)
             
             # 启动
             self.code_organize_worker.start()
@@ -1688,6 +1687,13 @@ class MainWindow(QMainWindow):
         print(f"✅ 代码整理完成 (耗时: {organize_elapsed:.2f}s)")
         self.statusBar().showMessage(f"代码整理完成 ({organize_elapsed:.2f}s)，准备写入...")
         
+        # 保存过滤后的代码，用于自动输入完成后复制到剪切板
+        if hasattr(self.code_organize_worker, 'filtered_code'):
+            self.filtered_code_for_clipboard = self.code_organize_worker.filtered_code
+            print(f"💾 已保存过滤后的代码 ({len(self.filtered_code_for_clipboard)} 字符)")
+        else:
+            self.filtered_code_for_clipboard = None
+        
         # 发送状态到手机 - 自动写入中
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
@@ -1707,17 +1713,22 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("代码文件不存在")
                 return
             
-            # 创建自动写入Worker
+            # 创建自动写入Worker，并传递过滤后的代码
             self.auto_type_worker = AutoTypeWorker(
                 code_file_path=self.code_file_path,
                 delay=0.05
             )
+            
+            # 设置过滤后的代码，用于输入完成后复制到剪切板
+            if hasattr(self, 'filtered_code_for_clipboard'):
+                self.auto_type_worker.filtered_code = self.filtered_code_for_clipboard
             
             # 连接信号
             self.auto_type_worker.typing_started.connect(self.on_typing_started)
             self.auto_type_worker.typing_paused.connect(self.on_typing_paused)
             self.auto_type_worker.typing_resumed.connect(self.on_typing_resumed)
             self.auto_type_worker.typing_completed.connect(self.on_typing_completed)
+            self.auto_type_worker.clipboard_ready.connect(self.on_code_to_clipboard)  # 新增：自动输入完成后复制到剪切板
             self.auto_type_worker.error_occurred.connect(self.on_error)
             self.auto_type_worker.status_update.connect(self.on_auto_type_status_update)
             self.auto_type_worker.progress_update.connect(self.on_typing_progress_update)

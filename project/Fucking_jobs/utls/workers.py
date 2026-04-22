@@ -1509,10 +1509,9 @@ class CodeOrganizeWorker(QThread):
             
             filtered_code = '\n'.join(filtered_code_lines)
             
-            # 发送信号到主线程处理剪切板操作
-            self.code_to_clipboard.emit(filtered_code)
-            print("📋 代码已发送至主线程进行剪切板复制")
-            self.status_update.emit("正在复制代码到剪切板...")
+            # 保存过滤后的代码，等待自动输入完成后再复制到剪切板
+            self.filtered_code = filtered_code
+            print("💾 过滤后的代码已保存，等待自动输入完成后复制到剪切板")
             
             elapsed_time = time.time() - start_time
             print(f"✅ 代码整理完成 ({elapsed_time:.2f}s)")
@@ -1644,6 +1643,7 @@ class AutoTypeWorker(QThread):
     typing_paused = Signal()  # 暂停输入信号
     typing_resumed = Signal()  # 恢复输入信号
     typing_completed = Signal(float)  # 完成输入信号，参数为总耗时(秒)
+    clipboard_ready = Signal(str)  # 剪切板就绪信号，参数为过滤后的代码
     error_occurred = Signal(str)  # 错误信号
     status_update = Signal(str)  # 状态更新信号
     progress_update = Signal(int, int)  # 进度更新信号，参数为(当前行, 总行数)
@@ -1654,6 +1654,7 @@ class AutoTypeWorker(QThread):
         self.delay = delay
         self._stop_flag = False
         self._paused = False
+        self.filtered_code = None  # 存储过滤后的代码，用于输入完成后复制到剪切板
     
     def run(self):
         """执行自动写入"""
@@ -1771,6 +1772,12 @@ class AutoTypeWorker(QThread):
             total_elapsed = time.time() - typing_start_time
             print(f"✅ 输入完成! (总耗时: {total_elapsed:.2f}s)")
             self.status_update.emit("写入完成")
+            
+            # 自动输入完成后，发送信号触发剪切板复制
+            if self.filtered_code:
+                self.clipboard_ready.emit(self.filtered_code)
+                print("📋 自动输入完成，代码已发送至主线程进行剪切板复制")
+            
             self.typing_completed.emit(total_elapsed)
             
         except Exception as e:
