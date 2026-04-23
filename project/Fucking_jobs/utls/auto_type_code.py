@@ -29,16 +29,64 @@ def switch_to_english():
     print("已切换到英文输入模式")
 
 
-def type_code_from_file(file_path, delay=0.05):
+
+def get_nearby_keys(char):
+    """获取键盘上接近目标字符的其他字符"""
+    keyboard_layout = {
+        'q': ['w', 'a', 's'], 'w': ['q', 'e', 'a', 's', 'd'], 'e': ['w', 'r', 's', 'd', 'f'],
+        'r': ['e', 't', 'd', 'f', 'g'], 't': ['r', 'y', 'f', 'g', 'h'], 'y': ['t', 'u', 'g', 'h', 'j'],
+        'u': ['y', 'i', 'h', 'j', 'k'], 'i': ['u', 'o', 'j', 'k', 'l'], 'o': ['i', 'p', 'k', 'l'],
+        'p': ['o', 'l'], 'a': ['q', 'w', 's', 'z', 'x'], 's': ['q', 'w', 'e', 'a', 'd', 'z', 'x', 'c'],
+        'd': ['w', 'e', 'r', 's', 'f', 'x', 'c', 'v'], 'f': ['e', 'r', 't', 'd', 'g', 'c', 'v', 'b'],
+        'g': ['r', 't', 'y', 'f', 'h', 'v', 'b', 'n'], 'h': ['t', 'y', 'u', 'g', 'j', 'b', 'n', 'm'],
+        'j': ['y', 'u', 'i', 'h', 'k', 'n', 'm'], 'k': ['u', 'i', 'o', 'j', 'l', 'm'],
+        'l': ['i', 'o', 'p', 'k'], 'z': ['a', 's', 'x'], 'x': ['z', 's', 'd', 'c'],
+        'c': ['x', 'd', 'f', 'v'], 'v': ['c', 'f', 'g', 'b'], 'b': ['v', 'g', 'h', 'n'],
+        'n': ['b', 'h', 'j', 'm'], 'm': ['n', 'j', 'k']
+    }
+
+    lower_char = char.lower()
+    if lower_char in keyboard_layout:
+        nearby = keyboard_layout[lower_char]
+        return [c.upper() if char.isupper() else c for c in nearby]
+    return []
+
+
+def type_with_realistic_errors(char, delay=0.05, error_rate=0.08):
+    """
+    模拟真实打字，有一定概率打错并退格修正
+    :param char: 要输入的字符
+    :param delay: 输入延迟
+    :param error_rate: 出错概率 (默认8%)
+    """
+    if random.random() < error_rate:
+        nearby_chars = get_nearby_keys(char)
+        if nearby_chars:
+            num_errors = random.randint(1, min(3, len(nearby_chars)))
+            wrong_chars = random.sample(nearby_chars, num_errors)
+
+            for wrong_char in wrong_chars:
+                pyautogui.typewrite(wrong_char, interval=delay * 0.7)
+                time.sleep(random.uniform(0.1, 0.3))
+                pyautogui.press('backspace')
+                time.sleep(random.uniform(0.05, 0.15))
+            return
+
+
+
+def type_code_from_file(file_path, delay=0.01):
     """
     从txt文件中读取内容并使用pyautogui模拟输入
-    忽略所有空格、Tab等空白字符，只执行换行
-
-    Args:
-        file_path: txt文件路径
-        delay: 每个字符之间的延迟时间(秒)，默认0.05秒
+    核心逻辑：
+    - Tab 按 4 空格计算
+    - 若当前行空格数 < 上一行 → Home 手动处理
+    - 否则 → 换行自动处理
     """
-    # 读取文件内容
+
+    import pyautogui
+    import time
+    import random
+
     with open(file_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
@@ -46,52 +94,50 @@ def type_code_from_file(file_path, delay=0.05):
     print(f"准备输入 {len(lines)} 行，共 {total_chars} 个字符")
     print("请在3秒内切换到目标输入窗口...")
 
-    # 给用户3秒时间切换到目标窗口
     time.sleep(3)
-    # 检测并切换到英文输入模式
-    if not is_english_input():
-        print("检测到非英文输入状态，正在切换...")
-        switch_to_english()
-    else:
-        print("当前已是英文输入状态")
+
+    # if not is_english_input():
+    #     print("检测到非英文输入状态，正在切换...")
+    #     switch_to_english()
+    # else:
+    #     print("当前已是英文输入状态")
+
     print("开始输入...")
-    need_home_next = False  # 标记下一行是否需要回到行首
-    # 逐行输入，忽略空格和Tab
+
+    last_leading_spaces = None
+    need_home = False
+
     for line_idx, line in enumerate(lines):
-        # 检查是否收到停止信号
-        if hasattr(type_code_from_file, '_stop_flag') and type_code_from_file._stop_flag:
+
+        if getattr(type_code_from_file, '_stop_flag', False):
             print("\n用户中断输入！")
             return
-
-        # 检查暂停状态
-        while hasattr(type_code_from_file, '_paused') and type_code_from_file._paused:
+        while getattr(type_code_from_file, '_paused', False):
             time.sleep(0.1)
 
-        if need_home_next:
+        # ✅ Tab 按 4 空格展开后再计算缩进
+        expanded_line = line.expandtabs(4)
+        leading_spaces = len(expanded_line) - len(expanded_line.lstrip(" "))
+
+        if last_leading_spaces is not None and leading_spaces < last_leading_spaces:
+            need_home = True
+
+        if need_home:
             pyautogui.press('home')
-            need_home_next = False
+            need_home = False
             line_content = line
             for char in line_content:
                 if char == '\n':
                     pyautogui.typewrite(' ')
                 pyautogui.typewrite(char, interval=delay)
             print(f"已输入行 {line_idx + 1} inter的下一行")
-
-        # 去除所有空白字符（空格、Tab等）
-        elif 'return' in line:
-            pyautogui.press('home')
-            line_content = line
-            for char in line_content:
-                if char == '\n':
-                    pyautogui.typewrite(' ')
-                pyautogui.typewrite(char, interval=delay)
-            need_home_next = True
-            print(f"inter 已输入行 {line_idx + 1}")
+            print(f"[Home] 行 {line_idx + 1}")
         else:
 
             line_content = line.strip()
             # 只输入非空白字符
             for char in line_content:
+                type_with_realistic_errors(char,delay= delay) # 只负责写错别字和删除
                 pyautogui.typewrite(char, interval=delay)
             # pyautogui.press('enter')
             pyautogui.typewrite(' ')
@@ -100,18 +146,19 @@ def type_code_from_file(file_path, delay=0.05):
             think_time = random.uniform(0.5, 0.5)
             time.sleep(think_time)
 
-        # 每行输完后随机短暂停顿（0.1-0.5秒）
-        if line_content and len(line_content) > 18 and random.random() > 0.7:  # 如果不是空行 其比较长 就有一定概率触发再次换行
-            pyautogui.press('enter')  #
-            pause_time = random.uniform(0.4, 0.8)
-            time.sleep(pause_time)
+        # 随机思考停顿
+        time.sleep(random.uniform(0.3, 0.8))
 
-        # 每行完成后显示进度
-        if (line_idx + 1) % 10 == 0 or line_idx == len(lines) - 1:
+        if len(line_content) > 18 and random.random() > 0.9:
+            pyautogui.press('enter')
+            time.sleep(random.uniform(0.4, 0.8))
+
+        if (line_idx + 1) % 5 == 0 or line_idx == len(lines) - 1:
             print(f"已输入 {line_idx + 1}/{len(lines)} 行")
 
-    print("输入完成!")
+        last_leading_spaces = leading_spaces
 
+    print("输入完成!")
 
 def start_typing(file_path="code.txt", delay=0.05):
     """启动自动输入"""
