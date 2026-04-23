@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                QGroupBox, QFormLayout, QLineEdit, QSpinBox,
                                QCheckBox, QMessageBox, QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
-                               QTableWidget, QTableWidgetItem, QHeaderView, QSlider, QDoubleSpinBox)
+                               QTableWidget, QTableWidgetItem, QHeaderView, QSlider, QDoubleSpinBox, QRadioButton)
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from PySide6.QtGui import QFont, QIcon
 
@@ -1089,6 +1089,25 @@ class MainWindow(QMainWindow):
         line_break_layout.addStretch()
         delay_layout.addRow("长行换行:", line_break_widget)
         
+        # 复制时机设置
+        copy_timing_widget = QWidget()
+        copy_timing_layout = QHBoxLayout(copy_timing_widget)
+        copy_timing_layout.setContentsMargins(0, 0, 0, 0)
+        copy_timing_layout.setSpacing(10)
+        
+        self.copy_after_organize_radio = QRadioButton("整理后复制")
+        self.copy_after_organize_radio.setToolTip("代码整理完成后立即复制到剪切板")
+        self.copy_after_organize_radio.toggled.connect(lambda checked: self.on_copy_timing_changed('after_organize', checked))
+        self.copy_after_complete_radio = QRadioButton("写入后复制")
+        self.copy_after_complete_radio.setToolTip("自动写入完成后才复制到剪切板（默认）")
+        self.copy_after_complete_radio.setChecked(True)  # 默认选中
+        self.copy_after_complete_radio.toggled.connect(lambda checked: self.on_copy_timing_changed('after_complete', checked))
+        
+        copy_timing_layout.addWidget(self.copy_after_organize_radio)
+        copy_timing_layout.addWidget(self.copy_after_complete_radio)
+        copy_timing_layout.addStretch()
+        delay_layout.addRow("复制时机:", copy_timing_widget)
+        
         delay_group.setLayout(delay_layout)
         top_layout.addWidget(delay_group, stretch=1)
         
@@ -1119,15 +1138,24 @@ class MainWindow(QMainWindow):
         self.case3_prompt_input.setMaximumHeight(500)
         prompt_layout.addWidget(self.case3_prompt_input)
         
-        # 保存按钮
-        save_prompt_btn = QPushButton("💾 保存提示词")
-        save_prompt_btn.clicked.connect(self.save_case3_config)
-        prompt_layout.addWidget(save_prompt_btn)
-        
         prompt_group.setLayout(prompt_layout)
         top_layout.addWidget(prompt_group, stretch=1)
         
         layout.addLayout(top_layout)
+        
+        # 保存配置按钮（外部靠左侧）
+        save_btn_widget = QWidget()
+        save_btn_layout = QHBoxLayout(save_btn_widget)
+        save_btn_layout.setContentsMargins(0, 10, 0, 0)
+        save_btn_layout.setSpacing(10)
+        
+        self.save_case3_btn = QPushButton("💾 保存配置")
+        self.save_case3_btn.clicked.connect(self.save_case3_config)
+        self.save_case3_btn.setMaximumWidth(150)
+        save_btn_layout.addWidget(self.save_case3_btn)
+        save_btn_layout.addStretch()
+        
+        layout.addWidget(save_btn_widget)
         
         layout.addStretch()
         
@@ -1149,11 +1177,20 @@ class MainWindow(QMainWindow):
         self.think_time_max_spinbox.setValue(max_val)
         print(f"✅ 已切换到{mode_name}模式，思考时间: {min_val}~{max_val}s")
     
+    def on_copy_timing_changed(self, timing_type, checked):
+        """复制时机改变时的回调"""
+        if checked:
+            if timing_type == 'after_organize':
+                print("📋 已选择：整理后立即复制（需点击保存按钮生效）")
+            else:
+                print("📋 已选择：写入完成后复制（需点击保存按钮生效）")
+    
     def save_case3_config(self):
         """保存 Case3 配置"""
         try:
             import json
-            config_file = os.path.join(os.path.dirname(__file__), 'case3_config.json')
+            # 使用当前工作目录而不是__file__，兼容打包环境
+            config_file = os.path.join(os.getcwd(), 'case3_config.json')
             
             config = {
                 'delay': self.delay_slider.value() / 100.0,
@@ -1161,13 +1198,15 @@ class MainWindow(QMainWindow):
                 'think_time_max': self.think_time_max_spinbox.value(),
                 'error_rate': self.error_rate_spinbox.value(),
                 'line_break_rate': self.line_break_rate_spinbox.value(),
+                'copy_timing': 'after_organize' if self.copy_after_organize_radio.isChecked() else 'after_complete',
                 'prompt': self.case3_prompt_input.toPlainText()
             }
             
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
             
-            print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, error_rate={config['error_rate']}, line_break_rate={config['line_break_rate']}, prompt_length={len(config['prompt'])}")
+            copy_timing_text = '整理后立即复制' if config['copy_timing'] == 'after_organize' else '写入完成后复制'
+            print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, error_rate={config['error_rate']}, line_break_rate={config['line_break_rate']}, copy_timing={copy_timing_text}, prompt_length={len(config['prompt'])}")
             QMessageBox.information(self, "成功", "Case3 配置已保存！")
             
         except Exception as e:
@@ -1178,7 +1217,8 @@ class MainWindow(QMainWindow):
         """加载 Case3 配置"""
         try:
             import json
-            config_file = os.path.join(os.path.dirname(__file__), 'case3_config.json')
+            # 使用当前工作目录而不是__file__，兼容打包环境
+            config_file = os.path.join(os.getcwd(), 'case3_config.json')
             
             if os.path.exists(config_file):
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -1205,11 +1245,19 @@ class MainWindow(QMainWindow):
                 if 'line_break_rate' in config:
                     self.line_break_rate_spinbox.setValue(config['line_break_rate'])
                 
+                # 加载复制时机设置
+                if 'copy_timing' in config:
+                    if config['copy_timing'] == 'after_organize':
+                        self.copy_after_organize_radio.setChecked(True)
+                    else:
+                        self.copy_after_complete_radio.setChecked(True)
+                
                 # 加载提示词
                 if 'prompt' in config and config['prompt']:
                     self.case3_prompt_input.setText(config['prompt'])
                 
-                print(f"✅ Case3 配置已加载: delay={config.get('delay', 0.05)}, think_time={config.get('think_time_min', 1.0)}-{config.get('think_time_max', 2.0)}s, error_rate={config.get('error_rate', 0.08)}, line_break_rate={config.get('line_break_rate', 0.7)}")
+                copy_timing_text = '整理后立即复制' if config.get('copy_timing') == 'after_organize' else '写入完成后复制'
+                print(f"✅ Case3 配置已加载: delay={config.get('delay', 0.05)}, think_time={config.get('think_time_min', 1.0)}-{config.get('think_time_max', 2.0)}s, error_rate={config.get('error_rate', 0.08)}, line_break_rate={config.get('line_break_rate', 0.7)}, copy_timing={copy_timing_text}")
             else:
                 print("ℹ️ 未找到 Case3 配置文件，使用默认配置")
                 
@@ -2055,6 +2103,24 @@ class MainWindow(QMainWindow):
         else:
             self.filtered_code_for_clipboard = None
         
+        # 检查是否设置为"整理后立即复制"
+        copy_timing = 'after_complete'  # 默认
+        try:
+            import json
+            # 使用当前工作目录而不是__file__，兼容打包环境
+            config_file = os.path.join(os.getcwd(), 'case3_config.json')
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    copy_timing = config.get('copy_timing', 'after_complete')
+        except Exception as e:
+            print(f"⚠️ 读取配置失败: {e}，使用默认设置")
+        
+        # 如果设置为"整理后复制"，立即复制到剪切板
+        if copy_timing == 'after_organize' and self.filtered_code_for_clipboard:
+            print("📋 检测到设置为'整理后复制'，立即复制到剪切板...")
+            self.on_code_to_clipboard(self.filtered_code_for_clipboard)
+        
         # 发送整理后的代码到手机端显示
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
             code_message = f"""📝 整理后的代码\n
@@ -2082,6 +2148,19 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("代码文件不存在")
                 return
             
+            # 检查复制时机设置
+            copy_timing = 'after_complete'  # 默认
+            try:
+                import json
+                # 使用当前工作目录而不是__file__，兼容打包环境
+                config_file = os.path.join(os.getcwd(), 'case3_config.json')
+                if os.path.exists(config_file):
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                        copy_timing = config.get('copy_timing', 'after_complete')
+            except Exception as e:
+                print(f"⚠️ 读取配置失败: {e}，使用默认设置")
+            
             # 创建自动写入Worker，并传递过滤后的代码
             # 从 UI 中获取 delay 和 think_time 参数
             delay = self.delay_slider.value() / 100.0
@@ -2108,7 +2187,14 @@ class MainWindow(QMainWindow):
             self.auto_type_worker.typing_paused.connect(self.on_typing_paused)
             self.auto_type_worker.typing_resumed.connect(self.on_typing_resumed)
             self.auto_type_worker.typing_completed.connect(self.on_typing_completed)
-            self.auto_type_worker.clipboard_ready.connect(self.on_code_to_clipboard)  # 新增：自动输入完成后复制到剪切板
+            
+            # 根据配置决定是否在写入完成后复制
+            if copy_timing == 'after_complete':
+                self.auto_type_worker.clipboard_ready.connect(self.on_code_to_clipboard)  # 写入完成后复制到剪切板
+                print("📋 已设置：写入完成后复制")
+            else:
+                print("📋 已设置：整理后立即复制（跳过写入后复制）")
+            
             self.auto_type_worker.error_occurred.connect(self.on_error)
             self.auto_type_worker.status_update.connect(self.on_auto_type_status_update)
             self.auto_type_worker.progress_update.connect(self.on_typing_progress_update)
@@ -2608,6 +2694,10 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             print(f"⚠️ 加载配置失败: {e}，使用默认配置")
+        
+        # 加载 Case3 配置
+        if hasattr(self, 'load_case3_config'):
+            self.load_case3_config()
     
     def get_local_ip(self):
         """获取本机局域网 IP"""
