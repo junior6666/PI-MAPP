@@ -2018,9 +2018,42 @@ class MainWindow(QMainWindow):
                 # 如果还在运行，继续等待
                 QTimer.singleShot(500, self.check_auto_type_stopped)
     
+    def _interrupt_running_threads(self):
+        """中断正在运行的代码整理和自动写入线程"""
+        interrupted = False
+        
+        # 检查并中断代码整理Worker
+        if hasattr(self, 'code_organize_worker') and self.code_organize_worker and self.code_organize_worker.isRunning():
+            print("⚠️ 检测到正在运行的代码整理任务，正在中断...")
+            if hasattr(self.code_organize_worker, 'interrupt'):
+                self.code_organize_worker.interrupt()
+            # 等待线程结束（非阻塞）
+            self.code_organize_worker.wait(1000)  # 最多等待1秒
+            interrupted = True
+            print("✅ 代码整理任务已中断")
+        
+        # 检查并中断自动写入Worker
+        if hasattr(self, 'auto_type_worker') and self.auto_type_worker and self.auto_type_worker.isRunning():
+            print("⚠️ 检测到正在运行的自动写入任务，正在中断...")
+            if hasattr(self.auto_type_worker, 'stop_typing'):
+                self.auto_type_worker.stop_typing()
+            # 等待线程结束（非阻塞）
+            self.auto_type_worker.wait(1000)  # 最多等待1秒
+            interrupted = True
+            print("✅ 自动写入任务已中断")
+        
+        if interrupted:
+            self.statusBar().showMessage("⚠️ 已中断上次任务，全力处理本次请求", 2000)
+            # 发送状态到手机 - 任务中断
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:任务中断]", silent=True)
+    
     def on_auto_type_triggered(self):
         """自动写入快捷键触发（Alt+S）- 完整流程：代码整理 -> 保存 -> 自动写入"""
         print("🚀 自动写入流程启动...")
+        
+        # 【关键优化】检查是否有正在运行的线程，如果有则先中断
+        self._interrupt_running_threads()
         
         # 检查是否有可用的API结果
         if not self.kimi_result and not self.llm_result:
