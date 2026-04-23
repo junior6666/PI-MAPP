@@ -922,12 +922,12 @@ class MainWindow(QMainWindow):
         # 工作流说明
         workflow_info = QTextEdit()
         workflow_info.setReadOnly(True)
-        workflow_info.setMaximumHeight(120)
-        workflow_info.setMinimumHeight(100)
+        workflow_info.setMaximumHeight(160)
+        workflow_info.setMinimumHeight(140)
         workflow_content = """
 <h3 style='color: #4ecca3;'>⌨️ Case3: 自动写入模式</h3>
 <p><b>快捷键：</b>Alt + S &nbsp;&nbsp; <b>特点：</b>自动将整理后的代码输入到目标窗口</p>
-<p><b>工作流程：</b>按下 Alt+S → 读取代码文件 → 模拟键盘输入 → 完成写入</p>
+<p><b>工作流程：</b>按下 Alt+S → 整理代码文件 → 模拟键盘输入 → 完成写入</p>
 <p><b>适用场景：</b>面试时需要快速输入代码、自动化代码提交</p>
 <p><b>控制方式：</b>Alt+L 暂停/恢复 | Ctrl+K 停止</p>
         """
@@ -1055,6 +1055,40 @@ class MainWindow(QMainWindow):
         think_quick_btn_layout.addStretch()
         delay_layout.addRow("思考模式:", think_quick_btn_widget)
         
+        # 错误率设置
+        error_rate_widget = QWidget()
+        error_rate_layout = QHBoxLayout(error_rate_widget)
+        error_rate_layout.setContentsMargins(0, 0, 0, 0)
+        error_rate_layout.setSpacing(8)
+        
+        self.error_rate_spinbox = QDoubleSpinBox()
+        self.error_rate_spinbox.setRange(0.0, 1.0)
+        self.error_rate_spinbox.setValue(0.08)
+        self.error_rate_spinbox.setSingleStep(0.01)
+        self.error_rate_spinbox.setDecimals(2)
+        self.error_rate_spinbox.setMaximumWidth(120)
+        error_rate_layout.addWidget(QLabel("错误率:"))
+        error_rate_layout.addWidget(self.error_rate_spinbox)
+        error_rate_layout.addStretch()
+        delay_layout.addRow("打字错误:", error_rate_widget)
+        
+        # 长行随机换行率设置
+        line_break_widget = QWidget()
+        line_break_layout = QHBoxLayout(line_break_widget)
+        line_break_layout.setContentsMargins(0, 0, 0, 0)
+        line_break_layout.setSpacing(8)
+        
+        self.line_break_rate_spinbox = QDoubleSpinBox()
+        self.line_break_rate_spinbox.setRange(0.0, 1.0)
+        self.line_break_rate_spinbox.setValue(0.7)
+        self.line_break_rate_spinbox.setSingleStep(0.05)
+        self.line_break_rate_spinbox.setDecimals(2)
+        self.line_break_rate_spinbox.setMaximumWidth(120)
+        line_break_layout.addWidget(QLabel("换行率:"))
+        line_break_layout.addWidget(self.line_break_rate_spinbox)
+        line_break_layout.addStretch()
+        delay_layout.addRow("长行换行:", line_break_widget)
+        
         delay_group.setLayout(delay_layout)
         top_layout.addWidget(delay_group, stretch=1)
         
@@ -1082,7 +1116,7 @@ class MainWindow(QMainWindow):
 - 直接输出 Markdown 代码块，不要包含任何前置的解释、标题或后置的说明
 - 只输出一个代码块，格式为：```python\n...代码...\n```
 - 如果原内容包含多个题目，用 --- 分隔每个题目的代码块""")
-        self.case3_prompt_input.setMaximumHeight(300)
+        self.case3_prompt_input.setMaximumHeight(500)
         prompt_layout.addWidget(self.case3_prompt_input)
         
         # 保存按钮
@@ -1094,41 +1128,6 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(prompt_group, stretch=1)
         
         layout.addLayout(top_layout)
-        
-        # 使用说明
-        info_text = QTextEdit()
-        info_text.setReadOnly(True)
-        info_text.setMaximumHeight(280)
-        info_text.setMinimumHeight(260)
-        info_content = """
-<h3 style='color: #4ecca3;'>💡 使用说明</h3>
-<ul>
-<li><b>调整延迟：</b>通过滑块调整字符输入间隔，值越小输入速度越快</li>
-<li><b>思考时间：</b>设置关键行（if/for/return等）前后的随机暂停时间范围</li>
-<li><b>自定义提示词：</b>可以修改代码整理的提示词，定制AI整理风格</li>
-<li><b>自动保存：</b>点击"💾 保存提示词"按钮后，配置会自动保存到本地</li>
-<li><b>触发方式：</b>程序启动后自动启用 Alt+S 快捷键监听</li>
-</ul>
-
-<h3 style='color: #4ecca3;'>⌨️ 相关快捷键</h3>
-<ul>
-<li><b>Alt + S：</b>启动自动写入流程</li>
-<li><b>Alt + L：</b>暂停/恢复自动写入</li>
-<li><b>Ctrl + K：</b>停止自动写入（新增）</li>
-</ul>
-
-<h3 style='color: #4ecca3;'>🎯 最佳实践</h3>
-<ul>
-<li><b>快速输入：</b>延迟设置为 0.01~0.03s，适合熟练场景</li>
-<li><b>正常速度：</b>延迟设置为 0.05~0.10s，平衡速度和稳定性</li>
-<li><b>慢速输入：</b>延迟设置为 0.15~0.30s，适合需要观察的场景</li>
-<li><b>思考时间：</b>建议设置为 1.0~2.0s，模拟真实思考过程</li>
-<li><b>提示词优化：</b>根据实际需求调整代码整理规则，提高输出质量</li>
-<li><b>控制技巧：</b>输入过程中按 Alt+L 暂停/恢复，按 Ctrl+K 完全停止</li>
-</ul>
-        """
-        info_text.setHtml(info_content)
-        layout.addWidget(info_text)
         
         layout.addStretch()
         
@@ -1160,13 +1159,15 @@ class MainWindow(QMainWindow):
                 'delay': self.delay_slider.value() / 100.0,
                 'think_time_min': self.think_time_min_spinbox.value(),
                 'think_time_max': self.think_time_max_spinbox.value(),
+                'error_rate': self.error_rate_spinbox.value(),
+                'line_break_rate': self.line_break_rate_spinbox.value(),
                 'prompt': self.case3_prompt_input.toPlainText()
             }
             
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
             
-            print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, prompt_length={len(config['prompt'])}")
+            print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, error_rate={config['error_rate']}, line_break_rate={config['line_break_rate']}, prompt_length={len(config['prompt'])}")
             QMessageBox.information(self, "成功", "Case3 配置已保存！")
             
         except Exception as e:
@@ -1196,11 +1197,19 @@ class MainWindow(QMainWindow):
                 if 'think_time_max' in config:
                     self.think_time_max_spinbox.setValue(config['think_time_max'])
                 
+                # 加载错误率
+                if 'error_rate' in config:
+                    self.error_rate_spinbox.setValue(config['error_rate'])
+                
+                # 加载长行随机换行率
+                if 'line_break_rate' in config:
+                    self.line_break_rate_spinbox.setValue(config['line_break_rate'])
+                
                 # 加载提示词
                 if 'prompt' in config and config['prompt']:
                     self.case3_prompt_input.setText(config['prompt'])
                 
-                print(f"✅ Case3 配置已加载: delay={config.get('delay', 0.05)}, think_time={config.get('think_time_min', 1.0)}-{config.get('think_time_max', 2.0)}s")
+                print(f"✅ Case3 配置已加载: delay={config.get('delay', 0.05)}, think_time={config.get('think_time_min', 1.0)}-{config.get('think_time_max', 2.0)}s, error_rate={config.get('error_rate', 0.08)}, line_break_rate={config.get('line_break_rate', 0.7)}")
             else:
                 print("ℹ️ 未找到 Case3 配置文件，使用默认配置")
                 
@@ -2078,12 +2087,16 @@ class MainWindow(QMainWindow):
             delay = self.delay_slider.value() / 100.0
             think_time_min = self.think_time_min_spinbox.value()
             think_time_max = self.think_time_max_spinbox.value()
+            error_rate = self.error_rate_spinbox.value()
+            line_break_rate = self.line_break_rate_spinbox.value()
             
             self.auto_type_worker = AutoTypeWorker(
                 code_file_path=self.code_file_path,
                 delay=delay,
                 think_time_min=think_time_min,
-                think_time_max=think_time_max
+                think_time_max=think_time_max,
+                error_rate=error_rate,
+                line_break_rate=line_break_rate
             )
             
             # 设置过滤后的代码，用于输入完成后复制到剪切板

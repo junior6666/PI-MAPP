@@ -1651,12 +1651,14 @@ class AutoTypeWorker(QThread):
     status_update = Signal(str)  # 状态更新信号
     progress_update = Signal(int, int)  # 进度更新信号，参数为(当前行, 总行数)
 
-    def __init__(self, code_file_path, delay=0.05, think_time_min=1.0, think_time_max=2.0):
+    def __init__(self, code_file_path, delay=0.05, think_time_min=1.0, think_time_max=2.0, error_rate=0.08, line_break_rate=0.7):
         super().__init__()
         self.code_file_path = code_file_path
         self.delay = delay
         self.think_time_min = think_time_min  # 思考时间最小值
         self.think_time_max = think_time_max  # 思考时间最大值
+        self.error_rate = error_rate  # 错误率（默认8%）
+        self.line_break_rate = line_break_rate  # 长行随机换行率（默认70%概率触发）
         self._stop_flag = False
         self._paused = False
         self.filtered_code = None  # 存储过滤后的代码，用于输入完成后复制到剪切板
@@ -1783,7 +1785,7 @@ class AutoTypeWorker(QThread):
                         if char == '\n':
                             pass
                         else:
-                            self._type_with_realistic_errors(char, delay=self.delay, error_rate=0.08)
+                            self._type_with_realistic_errors(char, delay=self.delay, error_rate=self.error_rate)
                             pyautogui.typewrite(char, interval=self.delay)
                     # 输入换行
                     pyautogui.typewrite('\n')
@@ -1795,7 +1797,7 @@ class AutoTypeWorker(QThread):
                     line_content = line.strip()
                     for char in line_content:
                         # 使用错误模拟打字
-                        self._type_with_realistic_errors(char, delay=self.delay, error_rate=0.08)
+                        self._type_with_realistic_errors(char, delay=self.delay, error_rate=self.error_rate)
                         pyautogui.typewrite(char, interval=self.delay)
 
                     # 输入空格和换行
@@ -1808,7 +1810,7 @@ class AutoTypeWorker(QThread):
 
                 # 长行随机换行（更自然的打字行为）
                 line_content = line.strip()
-                if len(line_content) > 18 and random.random() > 0.7:
+                if len(line_content) > 18 and random.random() > self.line_break_rate:
                     pyautogui.press('enter')
                     pause_time = random.uniform(1, 3)
                     time.sleep(pause_time)
