@@ -1210,11 +1210,11 @@ class MainWindow(QMainWindow):
             
             copy_timing_text = '整理后立即复制' if config['copy_timing'] == 'after_organize' else '写入完成后复制'
             print(f"✅ Case3 配置已保存: delay={config['delay']}, think_time={config['think_time_min']}-{config['think_time_max']}s, error_rate={config['error_rate']}, line_break_rate={config['line_break_rate']}, copy_timing={copy_timing_text}, prompt_length={len(config['prompt'])}")
-            QMessageBox.information(self, "成功", "Case3 配置已保存！")
+            self.statusBar().showMessage("✅ Case3 配置已保存！", 3000)
             
         except Exception as e:
             print(f"❌ 保存 Case3 配置失败: {e}")
-            QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
+            self.statusBar().showMessage(f"❌ 保存配置失败: {str(e)}")
     
     def load_case3_config(self):
         """加载 Case3 配置"""
@@ -1442,7 +1442,7 @@ class MainWindow(QMainWindow):
         
         # ========== 第一部分：图片来源设置 ==========
         image_source_group = QGroupBox("📸 图片来源设置")
-        image_source_layout = QVBoxLayout()
+        image_source_layout = QHBoxLayout()
         image_source_layout.setSpacing(12)
         
         # 说明文字
@@ -1806,12 +1806,13 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def toggle_screenshot(self, checked):
-        """切换截图监听状态"""
+        """切换截图监听状态 - 静默处理错误"""
         if checked:
             # 优先使用 Case1 的热键配置
             hotkey = self.case1_hotkey_input.text().strip() if hasattr(self, 'case1_hotkey_input') else self.hotkey_input.text().strip()
             if not hotkey:
-                QMessageBox.warning(self, "警告", "请输入热键组合！")
+                print("⚠️ 请输入热键组合！")
+                self.statusBar().showMessage("⚠️ 请输入热键组合！")
                 self.btn_toggle_screenshot.setChecked(False)
                 return
             
@@ -2600,16 +2601,12 @@ class MainWindow(QMainWindow):
             phone_photo_dir = os.path.join(base_dir, 'phone_photo')
             
             if not os.path.exists(phone_photo_dir):
-                QMessageBox.warning(self, "警告", 
-                    "手机拍照目录不存在！\n\n"
-                    "请先通过手机 WebSocket 连接发送图片。\n"
-                    "或切换到 PC 屏幕截图模式。"
-                )
+                print("⚠️ 手机拍照目录不存在！请先通过手机 WebSocket 连接发送图片。")
+                self.statusBar().showMessage("⚠️ 手机拍照目录不存在，已自动切换为 PC 截图模式", 3000)
                 # 自动切换回 PC 截图模式
                 self.pc_screenshot_radio.setChecked(True)
                 self.phone_photo_radio.setChecked(False)
                 self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
-                print("⚠️ 手机拍照目录不存在，已自动切换为 PC 截图模式")
                 return None
             
             # 查找最新的图片文件夹
@@ -2617,16 +2614,12 @@ class MainWindow(QMainWindow):
                       if os.path.isdir(os.path.join(phone_photo_dir, f))]
             
             if not folders:
-                QMessageBox.warning(self, "警告",
-                    "手机拍照目录为空！\n\n"
-                    "请先通过手机发送图片到 PC。\n"
-                    "或切换到 PC 屏幕截图模式。"
-                )
+                print("⚠️ 手机拍照目录为空！请先通过手机发送图片到 PC。")
+                self.statusBar().showMessage("⚠️ 手机拍照目录为空，已自动切换为 PC 截图模式", 3000)
                 # 自动切换回 PC 截图模式
                 self.pc_screenshot_radio.setChecked(True)
                 self.phone_photo_radio.setChecked(False)
                 self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
-                print("⚠️ 手机拍照目录为空，已自动切换为 PC 截图模式")
                 return None
             
             # 按时间排序，获取最新的文件夹
@@ -2639,10 +2632,8 @@ class MainWindow(QMainWindow):
                           if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
             
             if not image_files:
-                QMessageBox.warning(self, "警告",
-                    f"文件夹 '{latest_folder}' 中没有图片文件！\n\n"
-                    "请检查手机是否正确发送了图片。"
-                )
+                print(f"⚠️ 文件夹 '{latest_folder}' 中没有图片文件！")
+                self.statusBar().showMessage(f"⚠️ 文件夹 '{latest_folder}' 中没有图片文件", 3000)
                 return None
             
             # 按文件名排序，获取第一张图片（通常是 1.png）
@@ -2661,13 +2652,15 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def start_ocr(self):
-        """开始 OCR 识别"""
+        """开始 OCR 识别 - 静默处理错误"""
         if not self.current_image_path:
-            QMessageBox.warning(self, "警告", "请先进行截图！")
+            print("⚠️ 请先进行截图！")
+            self.statusBar().showMessage("⚠️ 请先进行截图！")
             return
         
         if not os.path.exists(self.current_image_path):
-            QMessageBox.warning(self, "错误", "截图文件不存在！")
+            print(f"⚠️ 截图文件不存在: {self.current_image_path}")
+            self.statusBar().showMessage("⚠️ 截图文件不存在！")
             return
         
         # 禁用按钮
@@ -2712,9 +2705,10 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def start_llm(self):
-        """开始 LLM 分析"""
+        """开始 LLM 分析 - 静默处理错误"""
         if not self.ocr_result:
-            QMessageBox.warning(self, "警告", "请先进行 OCR 识别！")
+            print("⚠️ 请先进行 OCR 识别！")
+            self.statusBar().showMessage("⚠️ 请先进行 OCR 识别！")
             return
         
         api_key = self.api_key_input.text().strip()
@@ -2722,7 +2716,8 @@ class MainWindow(QMainWindow):
         prompt = self.prompt_input.toPlainText().strip()
         
         if not api_key or not model or not prompt:
-            QMessageBox.warning(self, "警告", "请填写完整的 LLM 配置！")
+            print("⚠️ 请填写完整的 LLM 配置！")
+            self.statusBar().showMessage("⚠️ 请填写完整的 LLM 配置！")
             return
         # 【关键】如果已有 LLM 任务在运行，先中断
         if self.llm_worker and self.llm_worker.isRunning():
@@ -2969,13 +2964,15 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def send_to_phone(self):
-        """发送结果到手机"""
+        """发送结果到手机 - 静默处理错误"""
         if not self.websocket_worker or not self.websocket_worker.is_running:
-            QMessageBox.warning(self, "警告", "WebSocket 服务未启动！")
+            print("⚠️ WebSocket 服务未启动！")
+            self.statusBar().showMessage("⚠️ WebSocket 服务未启动！")
             return
         
         if not self.llm_result:
-            QMessageBox.warning(self, "警告", "没有可发送的结果！")
+            print("⚠️ 没有可发送的结果！")
+            self.statusBar().showMessage("⚠️ 没有可发送的结果！")
             return
         
         # 构建发送消息（只发送 LLM 分析结果）
@@ -2990,9 +2987,13 @@ class MainWindow(QMainWindow):
     
     @Slot(str)
     def on_error(self, error_msg):
-        """错误处理回调"""
-        QMessageBox.critical(self, "错误", error_msg)
+        """错误处理回调 - 静默处理，仅显示在状态栏"""
+        print(f"❌ 错误: {error_msg}")
         self.statusBar().showMessage(f"错误: {error_msg}")
+        
+        # 同步到 WebSocket（如果已连接）
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message(f"[ERROR:{error_msg}]", silent=True)
     
     def get_current_time(self):
         """获取当前时间字符串"""
@@ -3020,13 +3021,12 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'prompt_input'):
                 self.prompt_input.setText(prompt_text)
             
-            QMessageBox.information(self, "成功", "✅ 提示词已保存！")
-            self.statusBar().showMessage("提示词配置已保存")
             print(f"💾 提示词已保存到 {config_file}")
+            self.statusBar().showMessage("✅ 提示词配置已保存", 3000)
             
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
             print(f"❌ 保存提示词失败: {e}")
+            self.statusBar().showMessage(f"❌ 保存失败: {str(e)}")
     
     def load_saved_config(self):
         """加载保存的配置"""
@@ -3108,12 +3108,11 @@ class MainWindow(QMainWindow):
             print(f"💾 全局配置已保存: {config_file}")
             print(f"   - 图片来源: {image_source}")
             
-            QMessageBox.information(self, "成功", "✅ 全局配置已保存！")
-            self.statusBar().showMessage("全局配置已保存", 3000)
+            self.statusBar().showMessage("✅ 全局配置已保存！", 3000)
             
         except Exception as e:
             print(f"❌ 保存全局配置失败: {e}")
-            QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
+            self.statusBar().showMessage(f"❌ 保存配置失败: {str(e)}")
     
     def load_global_config(self):
         """加载全局配置（图片来源等）"""
@@ -3194,7 +3193,8 @@ class MainWindow(QMainWindow):
             
             self.statusBar().showMessage(f"IP 地址已复制: {ip}")
         else:
-            QMessageBox.warning(self, "警告", "IP 地址尚未加载完成！")
+            print("⚠️ IP 地址尚未加载完成！")
+            self.statusBar().showMessage("⚠️ IP 地址尚未加载完成！")
     
     def _reset_copy_button(self, original_text):
         """恢复复制按钮样式"""
@@ -3256,35 +3256,38 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def toggle_autostart(self):
-        """切换开机自启状态"""
+        """切换开机自启状态 - 静默处理"""
         success, message = self.autostart_manager.toggle_startup()
         
         if success:
             self.update_autostart_status()
-            QMessageBox.information(self, "成功", message)
+            print(f"✅ {message}")
             self.statusBar().showMessage(message, 3000)
         else:
-            QMessageBox.critical(self, "错误", f"操作失败: {message}")
+            print(f"❌ 操作失败: {message}")
+            self.statusBar().showMessage(f"❌ 操作失败: {message}")
     
     @Slot()
     def open_guardian_script(self):
-        """打开守护启动脚本"""
+        """打开守护启动脚本 - 静默处理"""
         script_path = os.path.abspath("start_with_guardian.bat")
         if os.path.exists(script_path):
             os.startfile(script_path)
             self.statusBar().showMessage(f"已启动守护脚本: {script_path}")
         else:
-            QMessageBox.warning(self, "警告", f"找不到启动脚本:\n{script_path}")
+            print(f"⚠️ 找不到启动脚本: {script_path}")
+            self.statusBar().showMessage(f"⚠️ 找不到启动脚本")
     
     @Slot()
     def open_guardian_log(self):
-        """打开守护日志文件"""
+        """打开守护日志文件 - 静默处理"""
         log_path = os.path.abspath("guardian.log")
         if os.path.exists(log_path):
             os.startfile(log_path)
             self.statusBar().showMessage(f"已打开日志文件: {log_path}")
         else:
-            QMessageBox.information(self, "提示", f"日志文件尚不存在:\n{log_path}\n\n请先运行守护进程后再生成日志。")
+            print(f"ℹ️ 日志文件尚不存在: {log_path}")
+            self.statusBar().showMessage(f"ℹ️ 日志文件尚不存在")
     
     def init_system_tray(self):
         """初始化系统托盘"""
@@ -3348,59 +3351,49 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def install_windows_service(self):
-        """安装 Windows 系统服务"""
-        # 确认对话框
-        reply = QMessageBox.question(
-            self,
-            "确认安装",
-            "⚠️ 重要提示：此操作需要管理员权限！\n\n"
-            "将安装 AceInterview 为 Windows 计划任务。\n\n"
-            "✅ 登录时自动启动\n"
-            "✅ 崩溃后自动重启（最多10次）\n"
-            "✅ 系统级保护，更加稳定可靠\n\n"
-            "如果当前不是以管理员身份运行，安装将会失败。\n\n"
-            "是否继续？",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        """安装 Windows 系统服务 - 静默处理"""
+        print("⚠️ 重要提示：此操作需要管理员权限！")
+        print("将安装 AceInterview 为 Windows 计划任务。")
+        print("✅ 登录时自动启动 | ✅ 崩溃后自动重启（最多10次） | ✅ 系统级保护")
         
-        if reply == QMessageBox.Yes:
-            try:
-                success, message = self.service_manager.install_as_service(
-                    max_restarts=10,
-                    restart_delay=3
-                )
-                
-                if success:
-                    QMessageBox.information(self, "成功", message)
-                    self.check_service_status()
-                else:
-                    QMessageBox.critical(self, "失败", message)
-            except Exception as e:
-                QMessageBox.critical(self, "异常", f"安装失败: {str(e)}")
+        try:
+            success, message = self.service_manager.install_as_service(
+                max_restarts=10,
+                restart_delay=3
+            )
+            
+            if success:
+                print(f"✅ {message}")
+                self.statusBar().showMessage(message, 3000)
+                self.check_service_status()
+            else:
+                print(f"❌ {message}")
+                self.statusBar().showMessage(f"❌ {message}", 5000)
+        except Exception as e:
+            error_msg = f"安装失败: {str(e)}"
+            print(f"❌ {error_msg}")
+            self.statusBar().showMessage(f"❌ {error_msg}", 5000)
     
     @Slot()
     def uninstall_windows_service(self):
-        """卸载 Windows 系统服务"""
-        reply = QMessageBox.question(
-            self,
-            "确认卸载",
-            "将卸载 AceInterview 的 Windows 计划任务。\n\n"
-            "程序将不再自动启动和重启。\n\n"
-            "是否继续？",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        """卸载 Windows 系统服务 - 静默处理"""
+        print("⚠️ 将卸载 AceInterview 的 Windows 计划任务")
+        print("程序将不再自动启动和重启。")
         
-        if reply == QMessageBox.Yes:
-            try:
-                success, message = self.service_manager.uninstall_service()
-                
-                if success:
-                    QMessageBox.information(self, "成功", message)
-                    self.check_service_status()
-                else:
-                    QMessageBox.critical(self, "失败", message)
-            except Exception as e:
-                QMessageBox.critical(self, "异常", f"卸载失败: {str(e)}")
+        try:
+            success, message = self.service_manager.uninstall_service()
+            
+            if success:
+                print(f"✅ {message}")
+                self.statusBar().showMessage(message, 3000)
+                self.check_service_status()
+            else:
+                print(f"❌ {message}")
+                self.statusBar().showMessage(f"❌ {message}", 5000)
+        except Exception as e:
+            error_msg = f"卸载失败: {str(e)}"
+            print(f"❌ {error_msg}")
+            self.statusBar().showMessage(f"❌ {error_msg}", 5000)
     
     @Slot()
     def check_service_status(self):
@@ -3432,12 +3425,14 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def open_guardian_log(self):
-        """打开守护日志文件"""
+        """打开守护日志文件 - 静默处理"""
         log_path = os.path.abspath("guardian.log")
         if os.path.exists(log_path):
             os.startfile(log_path)
+            self.statusBar().showMessage(f"已打开日志文件: {log_path}")
         else:
-            QMessageBox.information(self, "提示", "日志文件不存在\n请先运行守护进程")
+            print(f"ℹ️ 日志文件不存在: {log_path}")
+            self.statusBar().showMessage(f"ℹ️ 日志文件不存在")
     
     def quit_application(self):
         """退出应用程序 - 真正关闭整个系统"""
