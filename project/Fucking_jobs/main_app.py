@@ -2097,13 +2097,43 @@ class MainWindow(QMainWindow):
             print(f"📱 已切换到第 {current_index}/{total} 张: {filename}")
             print(f"💡 提示：按 Alt+Z 或 Alt+X 开始分析当前图片")
             
-            # 更新当前图片路径（供后续 Alt+Z/X 使用）
+            # 更新当前图片路径(供后续 Alt+Z/X 使用)
             self.current_image_path = next_photo_path
-            
-            # 发送状态到手机（仅通知切换，不触发分析流程）
+                        
+            # 发送状态和图片到手机(包含图片Base64数据)
             if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-                status_msg = f"[STATUS:已切换到第{current_index}/{total}张] [FILE:{filename}]"
-                self.websocket_worker.send_message(status_msg, silent=True)
+                try:
+                    import base64
+                    import json
+                                
+                    # 读取图片并转换为Base64
+                    with open(next_photo_path, 'rb') as f:
+                        image_data = f.read()
+                                
+                    # 获取图片扩展名
+                    ext = os.path.splitext(next_photo_path)[1].lstrip('.')
+                    mime_type = f"image/{ext}" if ext in ['png', 'jpg', 'jpeg', 'gif', 'webp'] else 'image/png'
+                    base64_data = base64.b64encode(image_data).decode('utf-8')
+                                
+                    # 构建JSON消息
+                    message = {
+                        'type': 'image_switch',
+                        'status': f'已切换到第{current_index}/{total}张',
+                        'filename': filename,
+                        'index': current_index,
+                        'total': total,
+                        'data': f'data:{mime_type};base64,{base64_data}'
+                    }
+                                
+                    # 发送JSON消息
+                    self.websocket_worker.send_message(json.dumps(message), silent=True)
+                    print(f"📱 已发送图片到手机: {filename} ({len(base64_data)} bytes)")
+                                
+                except Exception as e:
+                    print(f"⚠️ 发送图片失败: {e}")
+                    # 降级为纯文本消息
+                    status_msg = f"[STATUS:已切换到第{current_index}/{total}张] [FILE:{filename}]"
+                    self.websocket_worker.send_message(status_msg, silent=True)
             
             # 更新UI状态栏
             self.statusBar().showMessage(f"📱 已切换到第 {current_index}/{total} 张: {filename} (按 Alt+Z/X 分析)", 5000)

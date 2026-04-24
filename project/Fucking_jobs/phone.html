@@ -654,6 +654,11 @@
                 padding: 7px 12px;
                 font-size: 12px;
             }
+            
+            /* 移动端隐藏顶部教程按钮 */
+            .header-controls button:not(.desktop-only-btn) {
+                display: none !important;
+            }
         }
 
         /* 适配平板 */
@@ -675,6 +680,11 @@
             .drawer-trigger,
             .drawer {
                 display: none;
+            }
+            
+            /* 平板端也隐藏顶部教程按钮 */
+            .header-controls button:not(.desktop-only-btn) {
+                display: none !important;
             }
 
             /* 在顶部显示控制按钮 */
@@ -1150,6 +1160,28 @@
             ws.onmessage = (event) => {
                 console.log('收到消息:', event.data);
 
+                // 尝试解析JSON消息（图片上传、图片切换等）
+                let isJsonMessage = false;
+                try {
+                    const jsonData = JSON.parse(event.data);
+                    
+                    // 处理图片上传响应
+                    if (jsonData.type === 'image_upload') {
+                        isJsonMessage = true;
+                        console.log('📤 图片上传响应:', jsonData);
+                        return; // 不需要显示
+                    }
+                    
+                    // 处理图片切换消息
+                    if (jsonData.type === 'image_switch') {
+                        isJsonMessage = true;
+                        handleImageSwitch(jsonData);
+                        return;
+                    }
+                } catch (e) {
+                    // 不是JSON格式，继续按文本处理
+                }
+
                 // 解析消息，提取状态信息
                 const messageData = parseWorkflowMessage(event.data);
 
@@ -1345,6 +1377,47 @@
         }
 
         return result;
+    }
+
+    // 处理图片切换消息
+    function handleImageSwitch(data) {
+        const messagesEl = document.getElementById('messages');
+        const { status, filename, index, total, data: imageData } = data;
+        
+        console.log(`🖼️ 收到图片切换: ${filename} (${index}/${total})`);
+        
+        // 更新PC状态
+        updatePCStatus(status || '待命');
+        
+        // 显示图片和信息 - 优化垂直居中、水平对齐和文件路径显示
+        const html = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 85vh; padding: 10px; gap: 10px;">
+                <div style="color: #4ecca3; font-size: 16px; font-weight: 600; text-align: center;">
+                    ${status || '已切换'}
+                </div>
+                <div style="position: relative; width: 95%; max-width: 600px; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.25); background: #1a1a2e;">
+                    <img src="${imageData}" 
+                         alt="${escapeHtml(filename)}" 
+                         style="width: 100%; height: auto; display: block;"
+                         onload="this.style.opacity=1"
+                         onerror="this.parentElement.innerHTML='<div style=\'padding: 20px; color: #f44336; text-align: center; font-size: 14px;\'>❌ 图片加载失败</div>'"
+                    />
+                </div>
+                <div style="width: 95%; max-width: 600px; padding: 8px 14px; background: rgba(78, 204, 163, 0.08); border: 1px solid rgba(78, 204, 163, 0.2); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div style="color: #8892b0; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(filename)}">
+                        📄 ${escapeHtml(filename)}
+                    </div>
+                    <div style="color: #4ecca3; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0;">
+                        💡 Alt+Z/X 分析
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        messagesEl.innerHTML = html;
+        messagesEl.scrollTop = 0;
+        
+        // 不保存到历史记录（避免大量图片数据）
     }
 
     function updateStatus(connected) {
