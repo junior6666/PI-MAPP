@@ -2244,7 +2244,7 @@ class MainWindow(QMainWindow):
         
         # 步骤1: 发送状态到手机 - 整体代码中
         if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-            self.websocket_worker.send_message("[STATUS:整体代码中]", silent=True)
+            self.websocket_worker.send_message("[STATUS:整理代码中]", silent=True)
         
         self.statusBar().showMessage("正在整理代码...")
         print("📝 开始整理代码...")
@@ -2340,10 +2340,6 @@ class MainWindow(QMainWindow):
             self.websocket_worker.send_message(code_message)
             print("📤 已将整理后的代码发送到手机端")
         
-        # 发送状态到手机 - 自动写入中
-        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
-            self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
-        
         # 步骤3: 启动自动写入
         if self.code_file_path:
             self.start_auto_type()
@@ -2421,7 +2417,11 @@ class MainWindow(QMainWindow):
     def on_typing_started(self):
         """自动写入开始"""
         print("⌨️ 自动写入已开始")
-        self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
+        
+        # 发送状态到手机 - 自动写入中
+        if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+            self.websocket_worker.send_message("[STATUS:自动写入中]", silent=True)
+        
         self.statusBar().showMessage("⌨️ 自动写入中...（Alt+L暂停/恢复 | Ctrl+K停止）")
     
     @Slot()
