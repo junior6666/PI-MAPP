@@ -1,11 +1,7 @@
 # visualize_onnx_yolo.py
 
 import cv2
-import matplotlib.pyplot as plt
 
-# 假设 YOLOONNX 类已定义（可放在同一文件或导入）
-# 这里为方便，直接内联你之前的 YOLOONNX 类（实际项目中建议拆分到单独模块）
-# >>>>>>>>>>>> [开始：YOLOONNX 类定义] <<<<<<<<<<<<
 import numpy as np
 import onnxruntime as ort
 import urllib.request
@@ -20,7 +16,9 @@ class YOLOONNX:
         self.input_size = input_size
 
         # 默认类别名（根据你的 Brain Tumor 数据集调整！）
-        self.names = class_names or ['tumor']  # ⚠️ 重要：替换成你的真实类别！
+        self.names = class_names or [
+            'glioma', 'meningioma', 'pituitary'
+        ] # ⚠️ 重要：替换成你的真实类别！
 
         providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ort.get_device() == 'GPU' else [
             'CPUExecutionProvider']
@@ -158,10 +156,7 @@ if __name__ == '__main__':
     image_path = r"H:\YOLO_Datasets\BrainTumor\BrainTumorYolov8_copy\test\images\10_jpg.rf.efaf1af26de11dabdda3214f4457c931.jpg"
 
     # 初始化模型（注意：替换为你真实的类别名！）
-    yolo = YOLOONNX(model_path, class_names=[
-        'glioma', 'meningioma', 'pituitary'
-    ], conf_thres=0.5)
-
+    yolo = YOLOONNX(model_path, conf_thres=0.5)
     # 推理
     results = yolo(image_path, conf=0.5)
     result = results[0]

@@ -25,7 +25,7 @@ pip install pyinstaller
 在项目目录下运行：
 
 ```bash
-pyinstaller --name="windows_ace_process1.0.8" ^
+pyinstaller --name="windows_ace_process1.0.9" ^
   --windowed ^
   --onefile ^
   --icon=icon.ico ^

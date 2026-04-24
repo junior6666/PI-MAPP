@@ -3,8 +3,8 @@
 """
 极简 PNG → ICO 转换器
 用法：
-    python png2ico.py input.png       # 生成 input.ico
-    python png2ico.py input.png -o out.ico
+    python ImgToIco.py input.png       # 生成 input.ico
+    python ImgToIco.py input.png -o out.ico
 拖拽：直接把 png 拖到脚本图标上
 """
 import argparse

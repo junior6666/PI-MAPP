@@ -77,6 +77,10 @@ class MainWindow(QMainWindow):
         self.organized_code = ""  # 整理后的代码
         self.code_file_path = None  # 代码文件路径
         
+        # 结果时间戳（用于Alt+S工作流选择最新结果）
+        self.llm_result_timestamp = None  # LLM结果的时间戳
+        self.kimi_result_timestamp = None  # Kimi结果的时间戳
+        
         # 时间记录
         self.screenshot_timestamp = None  # 快捷键触发时间
         self.ocr_elapsed = 0.0
@@ -2254,14 +2258,31 @@ class MainWindow(QMainWindow):
         self.start_code_organize()
     
     def start_code_organize(self):
-        """启动代码整理流程"""
+        """启动代码整理流程 - 使用最新的结果（无论是Kimi还是LLM）"""
         try:
-            # 创建代码整理Worker
-            self.code_organize_worker = CodeOrganizeWorker(
-                kimi_result=self.kimi_result,
-                llm_result=self.llm_result,
-                save_dir="./code_output"
-            )
+            # 【关键改进】选择最新的结果，而不是默认优先Kimi
+            latest_result, result_source = self._get_latest_api_result()
+            
+            if not latest_result:
+                print("⚠️ 没有可用的API结果")
+                self.statusBar().showMessage("⚠️ 请先执行截图分析工作流")
+                return
+            
+            print(f"📝 使用 {result_source} 的最新结果进行代码整理...")
+            
+            # 创建代码整理Worker - 根据来源传递对应的结果
+            if result_source == "Kimi":
+                self.code_organize_worker = CodeOrganizeWorker(
+                    kimi_result=latest_result,
+                    llm_result=None,  # 不传递旧结果
+                    save_dir="./code_output"
+                )
+            else:  # LLM
+                self.code_organize_worker = CodeOrganizeWorker(
+                    kimi_result=None,  # 不传递旧结果
+                    llm_result=latest_result,
+                    save_dir="./code_output"
+                )
             
             # 连接信号
             self.code_organize_worker.organize_completed.connect(self.on_code_organize_completed)
@@ -2275,6 +2296,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ 代码整理启动失败: {e}")
             self.statusBar().showMessage(f"代码整理失败: {str(e)}")
+    
+    def _get_latest_api_result(self):
+        """获取最新的API结果（比较时间戳）
+        
+        Returns:
+            tuple: (result_text, source_name) 或 (None, None)
+        """
+        # 如果只有一个结果有值，直接返回
+        has_kimi = bool(self.kimi_result and self.kimi_result.strip())
+        has_llm = bool(self.llm_result and self.llm_result.strip())
+        
+        if has_kimi and not has_llm:
+            return self.kimi_result, "Kimi"
+        elif has_llm and not has_kimi:
+            return self.llm_result, "LLM"
+        elif not has_kimi and not has_llm:
+            return None, None
+        
+        # 两个都有值，比较时间戳
+        if self.kimi_result_timestamp and self.llm_result_timestamp:
+            if self.kimi_result_timestamp >= self.llm_result_timestamp:
+                return self.kimi_result, "Kimi"
+            else:
+                return self.llm_result, "LLM"
+        elif self.kimi_result_timestamp:
+            return self.kimi_result, "Kimi"
+        elif self.llm_result_timestamp:
+            return self.llm_result, "LLM"
+        else:
+            # 都没有时间戳，默认优先Kimi（保持向后兼容）
+            return self.kimi_result, "Kimi"
     
     @Slot(str)
     def on_code_status_update(self, status):
