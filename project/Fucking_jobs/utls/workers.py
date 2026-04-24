@@ -1221,12 +1221,17 @@ class WebSocketServerWorker(QThread):
             # 使用线程锁确保文件夹创建的原子性
             if not hasattr(self, '_folder_lock'):
                 self._folder_lock = threading.Lock()
-            
+
             # 创建保存目录 phone_photo
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(script_dir)
-            phone_photo_dir = os.path.join(project_root, 'phone_photo')
-            
+            if getattr(sys, 'frozen', False):
+                # 打包后：使用 exe 所在目录
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境：使用当前工作目录
+                base_dir = os.getcwd()
+
+            phone_photo_dir = os.path.join(base_dir, 'phone_photo')
+
             with self._folder_lock:
                 if not os.path.exists(phone_photo_dir):
                     os.makedirs(phone_photo_dir, exist_ok=True)
@@ -2264,7 +2269,8 @@ class AutoTypeWorker(QThread):
                         pyautogui.typewrite(char, interval=self.delay)
 
                     # 输入空格和换行
-                    pyautogui.typewrite(' ')
+                    if line_content:
+                        pyautogui.typewrite(' ')
                     pyautogui.typewrite('\n')
 
                     # 随机延迟模拟思考时间
