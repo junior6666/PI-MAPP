@@ -2,6 +2,8 @@
 工作线程模块 - 包含所有后台任务的线程类
 """
 import random
+import json
+import base64
 
 import mss
 from PIL import Image
@@ -31,10 +33,11 @@ class ScreenshotWorker(QThread):
     screenshot_taken = Signal(str)  # 截图完成信号，参数为图片路径
     error_occurred = Signal(str)     # 错误信号
     
-    # 类级别的手机照片索引管理（跨实例共享）
-    _phone_photo_index = 0  # 当前图片索引
+    # 类级别的手机照片管理（跨实例共享）
+    _phone_photo_index = 0  # 当前图片索引（从0开始）
     _phone_photo_list = []  # 当前批次的图片列表
     _current_folder = None  # 当前文件夹路径
+    _last_check_time = 0  # 上次检查文件夹的时间戳
     
     def __init__(self, hotkey="<alt>+x", save_dir="./screenshots"):
         super().__init__()
@@ -115,8 +118,10 @@ class ScreenshotWorker(QThread):
             return 'pc'
     
     def _get_latest_phone_photo(self):
-        """获取最新的手机拍照图片路径（首次调用时加载列表）"""
+        """获取最新的手机拍照图片路径（每次调用都重新检测最新文件夹）"""
         try:
+            import time
+            
             # 使用 sys.executable 的目录作为基准，兼容打包环境
             if getattr(sys, 'frozen', False):
                 # 打包后：使用 exe 所在目录
@@ -130,36 +135,63 @@ class ScreenshotWorker(QThread):
             if not os.path.exists(phone_photo_dir):
                 return None
             
-            # 查找最新的图片文件夹
+            # 查找所有图片文件夹
             folders = [f for f in os.listdir(phone_photo_dir) 
                       if os.path.isdir(os.path.join(phone_photo_dir, f))]
             
             if not folders:
                 return None
             
-            # 按时间排序，获取最新的文件夹
+            # 按文件夹名称排序（时间戳格式确保正确排序），获取最新的文件夹
             folders.sort(reverse=True)
             latest_folder = folders[0]
             folder_path = os.path.join(phone_photo_dir, latest_folder)
             
-            # 如果是新文件夹，重置索引和列表
-            if self.__class__._current_folder != folder_path:
+            # 每次都重新加载最新文件夹的图片列表（确保获取最新上传的图片）
+            # 查找文件夹中的图片文件
+            image_files = [f for f in os.listdir(folder_path) 
+                          if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'))]
+            
+            if not image_files:
+                print(f"⚠️ 文件夹 {latest_folder} 中没有图片")
+                return None
+            
+            # 按文件名自然排序（确保 1.png, 2.png, 10.png 顺序正确）
+            def natural_sort_key(filename):
+                """自然排序键函数，处理数字部分"""
+                import re
+                parts = re.split(r'(\d+)', filename)
+                return [int(p) if p.isdigit() else p.lower() for p in parts]
+            
+            image_files.sort(key=natural_sort_key)
+            
+            # 构建完整的图片路径列表
+            new_photo_list = [
+                os.path.join(folder_path, img) for img in image_files
+            ]
+            
+            # 检查是否切换了文件夹
+            folder_changed = (self.__class__._current_folder != folder_path)
+            
+            if folder_changed:
+                # 新文件夹，重置索引为0（显示第1张图片）
                 self.__class__._current_folder = folder_path
                 self.__class__._phone_photo_index = 0
-                
-                # 查找文件夹中的图片文件
-                image_files = [f for f in os.listdir(folder_path) 
-                              if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
-                
-                if not image_files:
-                    return None
-                
-                # 按文件名排序
-                image_files.sort()
-                self.__class__._phone_photo_list = [
-                    os.path.join(folder_path, img) for img in image_files
-                ]
-                print(f"📱 加载手机照片批次: {latest_folder} (共{len(self.__class__._phone_photo_list)}张)")
+                self.__class__._phone_photo_list = new_photo_list
+                print(f"📱 检测到新文件夹: {latest_folder} (共{len(new_photo_list)}张)，从第1张开始")
+            else:
+                # 同一文件夹，检查是否有新图片上传
+                if len(new_photo_list) != len(self.__class__._phone_photo_list):
+                    # 图片数量变化，更新列表但保持当前索引位置
+                    old_len = len(self.__class__._phone_photo_list)
+                    new_len = len(new_photo_list)
+                    
+                    # 保持当前索引，但如果索引超出范围则调整
+                    if self.__class__._phone_photo_index >= new_len:
+                        self.__class__._phone_photo_index = max(0, new_len - 1)
+                    
+                    self.__class__._phone_photo_list = new_photo_list
+                    print(f"📱 文件夹 {latest_folder} 图片数量变化: {old_len} -> {new_len} 张")
             
             # 检查列表是否为空
             if not self.__class__._phone_photo_list:
@@ -172,13 +204,103 @@ class ScreenshotWorker(QThread):
             return image_path
             
         except Exception as e:
+            import traceback
             print(f"❌ 获取手机拍照失败: {e}")
+            print(traceback.format_exc())
             return None
     
     @classmethod
     def get_next_phone_photo(cls):
-        """切换到下一张手机照片（循环）"""
+        """切换到下一张手机照片（循环）- 每次都重新检测最新文件夹"""
         try:
+            import re
+            
+            # 获取基准目录
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.getcwd()
+            
+            phone_photo_dir = os.path.join(base_dir, 'phone_photo')
+            
+            if not os.path.exists(phone_photo_dir):
+                print("⚠️ 手机拍照目录不存在")
+                return None
+            
+            # 查找所有图片文件夹
+            folders = [f for f in os.listdir(phone_photo_dir) 
+                      if os.path.isdir(os.path.join(phone_photo_dir, f))]
+            
+            if not folders:
+                print("⚠️ 没有可用的图片文件夹")
+                return None
+            
+            # 按文件夹名称排序，获取最新的文件夹
+            folders.sort(reverse=True)
+            latest_folder = folders[0]
+            folder_path = os.path.join(phone_photo_dir, latest_folder)
+            
+            # 检查是否切换了文件夹
+            folder_changed = (cls._current_folder != folder_path)
+            
+            if folder_changed:
+                # 新文件夹，重置索引为0（从第1张开始）
+                cls._current_folder = folder_path
+                cls._phone_photo_index = 0
+                
+                # 查找文件夹中的图片文件
+                image_files = [f for f in os.listdir(folder_path) 
+                              if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'))]
+                
+                if not image_files:
+                    print(f"⚠️ 文件夹 {latest_folder} 中没有图片")
+                    return None
+                
+                # 按文件名自然排序（确保 1.png, 2.png, 10.png 顺序正确）
+                def natural_sort_key(filename):
+                    """自然排序键函数，处理数字部分"""
+                    parts = re.split(r'(\d+)', filename)
+                    return [int(p) if p.isdigit() else p.lower() for p in parts]
+                
+                image_files.sort(key=natural_sort_key)
+                
+                # 构建完整的图片路径列表
+                cls._phone_photo_list = [
+                    os.path.join(folder_path, img) for img in image_files
+                ]
+                print(f"📱 检测到新文件夹: {latest_folder} (共{len(cls._phone_photo_list)}张)，从第1张开始")
+            else:
+                # 同一文件夹，检查是否有新图片上传
+                image_files = [f for f in os.listdir(folder_path) 
+                              if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp'))]
+                
+                if not image_files:
+                    print(f"⚠️ 文件夹 {latest_folder} 中没有图片")
+                    return None
+                
+                # 自然排序
+                def natural_sort_key(filename):
+                    parts = re.split(r'(\d+)', filename)
+                    return [int(p) if p.isdigit() else p.lower() for p in parts]
+                
+                image_files.sort(key=natural_sort_key)
+                new_photo_list = [
+                    os.path.join(folder_path, img) for img in image_files
+                ]
+                
+                # 如果图片数量变化，更新列表
+                if len(new_photo_list) != len(cls._phone_photo_list):
+                    old_len = len(cls._phone_photo_list)
+                    new_len = len(new_photo_list)
+                    
+                    # 保持当前索引，但如果索引超出范围则调整
+                    if cls._phone_photo_index >= new_len:
+                        cls._phone_photo_index = max(0, new_len - 1)
+                    
+                    cls._phone_photo_list = new_photo_list
+                    print(f"📱 文件夹 {latest_folder} 图片数量变化: {old_len} -> {new_len} 张")
+            
+            # 检查列表是否为空
             if not cls._phone_photo_list:
                 print("⚠️ 没有可用的手机照片列表")
                 return None
@@ -196,7 +318,9 @@ class ScreenshotWorker(QThread):
             return image_path
             
         except Exception as e:
+            import traceback
             print(f"❌ 切换手机照片失败: {e}")
+            print(traceback.format_exc())
             return None
     
     @classmethod
@@ -1051,60 +1175,172 @@ class WebSocketServerWorker(QThread):
             client_ip: 客户端IP
         """
         try:
-            import base64
             from datetime import datetime
+            import threading
             
-            # 提取数据
+            # 提取数据并验证必填字段
             filename = data.get('filename', 'unknown.png')
             index = data.get('index', 1)
             total = data.get('total', 1)
             counter = data.get('counter', 1)
             base64_data = data.get('data', '')
+            batch_id = data.get('batch_id', None)  # 批次ID，用于关联同一批图片
             
             if not base64_data:
                 print(f"[!] 收到空图片数据")
+                await self._send_upload_response(client_ip, False, "图片数据为空")
+                return
+            
+            # 验证base64数据格式
+            if len(base64_data) > 10 * 1024 * 1024:  # 限制10MB
+                print(f"[!] 图片数据过大: {len(base64_data)} bytes")
+                await self._send_upload_response(client_ip, False, "图片大小超过限制(10MB)")
                 return
             
             # 解析base64数据（移除data:image/xxx;base64,前缀）
             if ',' in base64_data:
+                prefix = base64_data.split(',', 1)[0]
                 base64_data = base64_data.split(',', 1)[1]
+                # 验证前缀格式
+                if not prefix.startswith('data:image/'):
+                    print(f"[!] 无效的base64前缀: {prefix}")
             
-            # 解码图片
-            image_bytes = base64.b64decode(base64_data)
+            # 解码图片并验证
+            try:
+                image_bytes = base64.b64decode(base64_data, validate=True)
+            except Exception as decode_error:
+                print(f"[!] Base64解码失败: {decode_error}")
+                await self._send_upload_response(client_ip, False, f"图片数据格式错误: {str(decode_error)}")
+                return
+            
+            if len(image_bytes) == 0:
+                print(f"[!] 解码后图片数据为空")
+                await self._send_upload_response(client_ip, False, "图片数据无效")
+                return
+            
+            # 使用线程锁确保文件夹创建的原子性
+            if not hasattr(self, '_folder_lock'):
+                self._folder_lock = threading.Lock()
             
             # 创建保存目录 phone_photo
             script_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(script_dir)
             phone_photo_dir = os.path.join(project_root, 'phone_photo')
             
-            if not os.path.exists(phone_photo_dir):
-                os.makedirs(phone_photo_dir)
-                print(f"📁 创建图片保存目录: {phone_photo_dir}")
+            with self._folder_lock:
+                if not os.path.exists(phone_photo_dir):
+                    os.makedirs(phone_photo_dir, exist_ok=True)
+                    print(f"📁 创建图片保存目录: {phone_photo_dir}")
+                
+                # 使用批次ID或时间戳创建文件夹名
+                if batch_id:
+                    # 如果有批次ID，使用它来确保同一批图片在同一文件夹
+                    folder_name = f"{batch_id}_{total}张"
+                else:
+                    # 否则使用时间戳（注意：这会导致同一秒内的图片在同一文件夹）
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    folder_name = f"{timestamp}_{total}张"
+                
+                folder_path = os.path.join(phone_photo_dir, folder_name)
+                
+                if not os.path.exists(folder_path):
+                    os.makedirs(folder_path, exist_ok=True)
+                    print(f"📁 创建批次文件夹: {folder_name}")
             
-            # 使用时间戳 + 图片数创建文件夹
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            folder_name = f"{timestamp}_{total}张"
-            folder_path = os.path.join(phone_photo_dir, folder_name)
+            # 验证文件扩展名安全性（防止路径遍历攻击）
+            ext = os.path.splitext(filename)[1].lower() or '.png'
+            # 只允许常见的图片格式
+            allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+            if ext not in allowed_extensions:
+                print(f"[!] 不支持的文件格式: {ext}，使用.png代替")
+                ext = '.png'
             
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
-                print(f"📁 创建批次文件夹: {folder_name}")
+            # 生成安全的文件名：每个新文件夹从1开始递增
+            with self._folder_lock:
+                # 扫描当前文件夹中已有的图片文件，找到最大编号
+                existing_files = []
+                if os.path.exists(folder_path):
+                    for f in os.listdir(folder_path):
+                        # 提取文件名中的数字部分
+                        name_without_ext = os.path.splitext(f)[0]
+                        # 处理带后缀的文件名（如 1_1.png）
+                        base_name = name_without_ext.split('_')[0]
+                        try:
+                            file_num = int(base_name)
+                            existing_files.append(file_num)
+                        except ValueError:
+                            continue
+                
+                # 确定新的文件编号：从1开始，或者是已有最大编号+1
+                if existing_files:
+                    next_number = max(existing_files) + 1
+                else:
+                    next_number = 1
+                
+                save_filename = f"{next_number}{ext}"
+                save_path = os.path.join(folder_path, save_filename)
+                
+                # 检查文件是否已存在（理论上不应该发生，但作为保险）
+                if os.path.exists(save_path):
+                    suffix = 1
+                    while os.path.exists(save_path):
+                        save_filename = f"{next_number}_{suffix}{ext}"
+                        save_path = os.path.join(folder_path, save_filename)
+                        suffix += 1
+                    print(f"⚠️ 文件已存在，重命名为: {save_filename}")
             
-            # 保存图片（使用计数器作为文件名）
-            ext = os.path.splitext(filename)[1] or '.png'
-            save_filename = f"{counter}{ext}"
-            save_path = os.path.join(folder_path, save_filename)
-            
+            # 保存图片
             with open(save_path, 'wb') as f:
                 f.write(image_bytes)
             
-            print(f"✅ 保存图片 [{index}/{total}]: {save_filename} -> {folder_name}")
+            print(f"✅ 保存图片 [{index}/{total}]: {save_filename} -> {folder_name} (大小: {len(image_bytes)} bytes)")
+            
+            # 发送成功响应给客户端
+            await self._send_upload_response(client_ip, True, "上传成功", {
+                'filename': save_filename,  # 返回实际保存的文件名
+                'original_filename': filename,  # 返回原始文件名
+                'folder': folder_name,
+                'size': len(image_bytes),
+                'index': index,
+                'total': total,
+                'counter': next_number  # 返回实际分配的编号
+            })
             
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
             print(f"❌ 保存图片失败: {e}")
             print(f"错误详情:\n{error_detail}")
+            await self._send_upload_response(client_ip, False, f"服务器错误: {str(e)}")
+    
+    async def _send_upload_response(self, client_ip, success, message, extra_data=None):
+        """发送上传响应给客户端
+        
+        Args:
+            client_ip: 客户端IP
+            success: 是否成功
+            message: 响应消息
+            extra_data: 额外数据
+        """
+        try:
+            response = {
+                'type': 'upload_response',
+                'success': success,
+                'message': message
+            }
+            if extra_data:
+                response.update(extra_data)
+            
+            # 查找对应的客户端连接并发送响应
+            for client in self.clients:
+                try:
+                    # 这里假设可以通过某种方式识别客户端，实际可能需要维护client_ip到websocket的映射
+                    await client.send(json.dumps(response))
+                    break  # 发送给第一个可用的客户端
+                except:
+                    continue
+        except Exception as e:
+            print(f"[!] 发送上传响应失败: {e}")
     
     async def send_message_async(self, message: str, silent: bool = False):
         """异步发送消息到所有客户端
