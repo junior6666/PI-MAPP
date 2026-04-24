@@ -871,6 +871,18 @@ class WebSocketServerWorker(QThread):
             
             # 保持连接
             async for message in websocket:
+                # 检查是否为JSON格式（图片上传）
+                try:
+                    import json
+                    data = json.loads(message)
+                    if isinstance(data, dict) and data.get('type') == 'image_upload':
+                        # 处理图片上传
+                        await self.handle_image_upload(data, client_ip)
+                        continue
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+                
+                # 普通文本消息
                 print(f"[←] 收到手机消息: {message}")
                 await websocket.send("已收到!")
                 
@@ -878,6 +890,69 @@ class WebSocketServerWorker(QThread):
             print(f"[-] 手机断开: {client_ip}")
         finally:
             self.clients.discard(websocket)
+    
+    async def handle_image_upload(self, data, client_ip):
+        """处理图片上传
+        
+        Args:
+            data: 包含图片信息的字典
+            client_ip: 客户端IP
+        """
+        try:
+            import base64
+            from datetime import datetime
+            
+            # 提取数据
+            filename = data.get('filename', 'unknown.png')
+            index = data.get('index', 1)
+            total = data.get('total', 1)
+            counter = data.get('counter', 1)
+            base64_data = data.get('data', '')
+            
+            if not base64_data:
+                print(f"[!] 收到空图片数据")
+                return
+            
+            # 解析base64数据（移除data:image/xxx;base64,前缀）
+            if ',' in base64_data:
+                base64_data = base64_data.split(',', 1)[1]
+            
+            # 解码图片
+            image_bytes = base64.b64decode(base64_data)
+            
+            # 创建保存目录 phone_photo
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)
+            phone_photo_dir = os.path.join(project_root, 'phone_photo')
+            
+            if not os.path.exists(phone_photo_dir):
+                os.makedirs(phone_photo_dir)
+                print(f"📁 创建图片保存目录: {phone_photo_dir}")
+            
+            # 使用时间戳 + 图片数创建文件夹
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            folder_name = f"{timestamp}_{total}张"
+            folder_path = os.path.join(phone_photo_dir, folder_name)
+            
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+                print(f"📁 创建批次文件夹: {folder_name}")
+            
+            # 保存图片（使用计数器作为文件名）
+            ext = os.path.splitext(filename)[1] or '.png'
+            save_filename = f"{counter}{ext}"
+            save_path = os.path.join(folder_path, save_filename)
+            
+            with open(save_path, 'wb') as f:
+                f.write(image_bytes)
+            
+            print(f"✅ 保存图片 [{index}/{total}]: {save_filename} -> {folder_name}")
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"❌ 保存图片失败: {e}")
+            print(f"错误详情:\n{error_detail}")
     
     async def send_message_async(self, message: str, silent: bool = False):
         """异步发送消息到所有客户端
