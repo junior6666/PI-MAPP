@@ -31,6 +31,11 @@ class ScreenshotWorker(QThread):
     screenshot_taken = Signal(str)  # 截图完成信号，参数为图片路径
     error_occurred = Signal(str)     # 错误信号
     
+    # 类级别的手机照片索引管理（跨实例共享）
+    _phone_photo_index = 0  # 当前图片索引
+    _phone_photo_list = []  # 当前批次的图片列表
+    _current_folder = None  # 当前文件夹路径
+    
     def __init__(self, hotkey="<alt>+x", save_dir="./screenshots"):
         super().__init__()
         self.hotkey = hotkey
@@ -66,34 +71,181 @@ class ScreenshotWorker(QThread):
             return
         
         with self.capture_lock:
-            sct_instance = None
             try:
-                # 创建新的 mss 实例（线程安全）
-                sct_instance = mss.mss()
+                # 检查图片来源配置
+                image_source = self._get_image_source_config()
                 
-                # 截取主显示器
-                monitor = sct_instance.monitors[1]
-                screenshot = sct_instance.grab(monitor)
-                
-                # 转换为 PIL Image
-                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
-                
-                # 生成文件名
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                filename = f"screenshot_{timestamp}.png"
-                filepath = os.path.join(self.save_dir, filename)
-                
-                # 保存截图
-                img.save(filepath)
-                
-                # 发送信号
-                self.screenshot_taken.emit(filepath)
-                
+                if image_source == 'phone':
+                    # 使用手机拍照来源
+                    filepath = self._get_latest_phone_photo()
+                    if filepath:
+                        print(f"📱 Case1 使用手机拍照: {os.path.basename(filepath)}")
+                        self.screenshot_taken.emit(filepath)
+                    else:
+                        self.error_occurred.emit("手机拍照目录为空或不存在！\n请通过手机发送图片或切换到 PC 截图模式。")
+                else:
+                    # 使用 PC 屏幕截图（默认）
+                    self._capture_pc_screenshot()
+                    
             except Exception as e:
                 self.error_occurred.emit(f"截图失败: {str(e)}")
-            finally:
-                if sct_instance:
-                    sct_instance.close()
+    
+    def _get_image_source_config(self):
+        """获取图片来源配置"""
+        try:
+            import json
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                # 打包后：使用 exe 所在目录
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境：使用当前工作目录
+                base_dir = os.getcwd()
+            
+            config_file = os.path.join(base_dir, 'global_config.json')
+            
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                return config_data.get('image_source', 'pc')
+            else:
+                return 'pc'  # 默认使用 PC 截图
+        except Exception as e:
+            print(f"⚠️ 读取图片来源配置失败: {e}，使用默认值")
+            return 'pc'
+    
+    def _get_latest_phone_photo(self):
+        """获取最新的手机拍照图片路径（首次调用时加载列表）"""
+        try:
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                # 打包后：使用 exe 所在目录
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境：使用当前工作目录
+                base_dir = os.getcwd()
+            
+            phone_photo_dir = os.path.join(base_dir, 'phone_photo')
+            
+            if not os.path.exists(phone_photo_dir):
+                return None
+            
+            # 查找最新的图片文件夹
+            folders = [f for f in os.listdir(phone_photo_dir) 
+                      if os.path.isdir(os.path.join(phone_photo_dir, f))]
+            
+            if not folders:
+                return None
+            
+            # 按时间排序，获取最新的文件夹
+            folders.sort(reverse=True)
+            latest_folder = folders[0]
+            folder_path = os.path.join(phone_photo_dir, latest_folder)
+            
+            # 如果是新文件夹，重置索引和列表
+            if self.__class__._current_folder != folder_path:
+                self.__class__._current_folder = folder_path
+                self.__class__._phone_photo_index = 0
+                
+                # 查找文件夹中的图片文件
+                image_files = [f for f in os.listdir(folder_path) 
+                              if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+                
+                if not image_files:
+                    return None
+                
+                # 按文件名排序
+                image_files.sort()
+                self.__class__._phone_photo_list = [
+                    os.path.join(folder_path, img) for img in image_files
+                ]
+                print(f"📱 加载手机照片批次: {latest_folder} (共{len(self.__class__._phone_photo_list)}张)")
+            
+            # 检查列表是否为空
+            if not self.__class__._phone_photo_list:
+                return None
+            
+            # 返回当前索引的图片
+            current_index = self.__class__._phone_photo_index % len(self.__class__._phone_photo_list)
+            image_path = self.__class__._phone_photo_list[current_index]
+            
+            return image_path
+            
+        except Exception as e:
+            print(f"❌ 获取手机拍照失败: {e}")
+            return None
+    
+    @classmethod
+    def get_next_phone_photo(cls):
+        """切换到下一张手机照片（循环）"""
+        try:
+            if not cls._phone_photo_list:
+                print("⚠️ 没有可用的手机照片列表")
+                return None
+            
+            # 切换到下一张（循环）
+            cls._phone_photo_index = (cls._phone_photo_index + 1) % len(cls._phone_photo_list)
+            current_index = cls._phone_photo_index
+            
+            image_path = cls._phone_photo_list[current_index]
+            image_name = os.path.basename(image_path)
+            folder_name = os.path.basename(cls._current_folder) if cls._current_folder else "未知"
+            
+            print(f"🔄 切换到第 {current_index + 1}/{len(cls._phone_photo_list)} 张: {image_name}")
+            
+            return image_path
+            
+        except Exception as e:
+            print(f"❌ 切换手机照片失败: {e}")
+            return None
+    
+    @classmethod
+    def get_current_photo_info(cls):
+        """获取当前照片信息"""
+        if not cls._phone_photo_list or cls._phone_photo_index >= len(cls._phone_photo_list):
+            return None
+        
+        current_index = cls._phone_photo_index % len(cls._phone_photo_list)
+        image_path = cls._phone_photo_list[current_index]
+        total = len(cls._phone_photo_list)
+        
+        return {
+            'path': image_path,
+            'index': current_index + 1,
+            'total': total,
+            'filename': os.path.basename(image_path)
+        }
+    
+    def _capture_pc_screenshot(self):
+        """执行 PC 屏幕截图"""
+        sct_instance = None
+        try:
+            # 创建新的 mss 实例（线程安全）
+            sct_instance = mss.mss()
+            
+            # 截取主显示器
+            monitor = sct_instance.monitors[1]
+            screenshot = sct_instance.grab(monitor)
+            
+            # 转换为 PIL Image
+            img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+            
+            # 生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            filename = f"screenshot_{timestamp}.png"
+            filepath = os.path.join(self.save_dir, filename)
+            
+            # 保存截图
+            img.save(filepath)
+            
+            # 发送信号
+            self.screenshot_taken.emit(filepath)
+            
+        except Exception as e:
+            self.error_occurred.emit(f"PC 截图失败: {str(e)}")
+        finally:
+            if sct_instance:
+                sct_instance.close()
     
     def stop(self):
         """停止监听"""

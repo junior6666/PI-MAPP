@@ -116,6 +116,9 @@ class MainWindow(QMainWindow):
         # 延迟启动自动写入快捷键（Alt+S）
         QTimer.singleShot(1800, self.start_auto_type_hotkey)
         
+        # 延迟启动切换下一张手机照片快捷键（Alt+C）
+        QTimer.singleShot(2000, self.start_next_photo_hotkey)
+        
         # 延迟启动 WebSocket 服务
         QTimer.singleShot(1500, self.auto_start_websocket)
         
@@ -1344,6 +1347,7 @@ class MainWindow(QMainWindow):
 <ul>
 <li><b>Alt + X：</b>Case1 工作流 - 截图 → OCR → LLM</li>
 <li><b>Alt + Z：</b>Case2 工作流 - 截图 → Kimi 直接分析</li>
+<li><b>Alt + C：</b>切换下一张手机照片（仅手机模式下有效，循环切换）</li>
 <li><b>Alt + 1：</b>切换 OCR 模型（DeepSeek-OCR ↔ EasyOCR）</li>
 <li><b>Alt + 2：</b>切换 Kimi 主模型（Kimi-K2.5 ↔ QwenA3B）</li>
 <li><b>Alt + 3：</b>设置 Qwen-VL-8B 为主模型</li>
@@ -1430,13 +1434,68 @@ class MainWindow(QMainWindow):
         return widget
     
     def create_settings_tab(self):
-        """创建设置标签页（开机自启和守护配置）"""
+        """创建设置标签页（开机自启、守护配置、全局设置）"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
         
-        # 开机自启设置组
+        # ========== 第一部分：图片来源设置 ==========
+        image_source_group = QGroupBox("📸 图片来源设置")
+        image_source_layout = QVBoxLayout()
+        image_source_layout.setSpacing(12)
+        
+        # 说明文字
+        source_info = QLabel(
+            "选择 Alt+X 和 Alt+Z 快捷键触发时使用的图片来源：\n"
+            "• PC屏幕截图：快速稳定，适合日常练习\n"
+            "• 手机物理拍照：更准确，适合正式面试场景"
+        )
+        source_info.setStyleSheet("color: #666; font-size: 12px;")
+        image_source_layout.addWidget(source_info)
+        
+        # RadioButton 组
+        self.image_source_radio_group = QWidget()
+        radio_layout = QVBoxLayout(self.image_source_radio_group)
+        radio_layout.setContentsMargins(10, 10, 10, 10)
+        radio_layout.setSpacing(10)
+        
+        # PC屏幕截图选项
+        self.pc_screenshot_radio = QRadioButton("💻 PC屏幕截图（默认，通过 mss 库截取屏幕）")
+        self.pc_screenshot_radio.setChecked(True)
+        self.pc_screenshot_radio.toggled.connect(lambda: self.on_image_source_changed('pc'))
+        radio_layout.addWidget(self.pc_screenshot_radio)
+        
+        # 手机物理拍照选项
+        self.phone_photo_radio = QRadioButton("📱 手机物理拍照（通过 WebSocket 接收，保存在 phone_photo 目录）")
+        self.phone_photo_radio.toggled.connect(lambda: self.on_image_source_changed('phone'))
+        radio_layout.addWidget(self.phone_photo_radio)
+        
+        image_source_layout.addWidget(self.image_source_radio_group)
+        
+        # 状态显示和提示
+        source_status_widget = QWidget()
+        source_status_layout = QHBoxLayout(source_status_widget)
+        source_status_layout.setContentsMargins(0, 5, 0, 0)
+        
+        self.image_source_status_label = QLabel("✅ 当前使用：PC屏幕截图")
+        self.image_source_status_label.setStyleSheet("color: #4ecca3; font-weight: bold; font-size: 12px;")
+        source_status_layout.addWidget(self.image_source_status_label)
+        
+        source_status_layout.addStretch()
+        
+        # 保存按钮
+        self.btn_save_image_source = QPushButton("💾 保存图片来源配置")
+        self.btn_save_image_source.setMaximumWidth(180)
+        self.btn_save_image_source.clicked.connect(self.save_global_config)
+        source_status_layout.addWidget(self.btn_save_image_source)
+        
+        image_source_layout.addWidget(source_status_widget)
+        
+        image_source_group.setLayout(image_source_layout)
+        layout.addWidget(image_source_group)
+        
+        # ========== 第二部分：开机自启设置 ==========
         autostart_group = QGroupBox("🔄 开机自启设置")
         autostart_layout = QVBoxLayout()
         autostart_layout.setSpacing(10)
@@ -1967,6 +2026,95 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ 自动写入快捷键启动失败: {e}")
     
+    def start_next_photo_hotkey(self):
+        """启动切换下一张手机照片快捷键（Alt+C）"""
+        try:
+            from pynput import keyboard
+            
+            # 创建全局热键监听器
+            self.next_photo_listener = keyboard.GlobalHotKeys({
+                '<alt>+c': self.on_next_photo_triggered
+            })
+            self.next_photo_listener.start()
+            
+            self.statusBar().showMessage("切换下一张照片快捷键已启用 (Alt+C)")
+            print("✅ 切换下一张照片快捷键 Alt+C 已启用")
+            
+        except Exception as e:
+            print(f"❌ 切换下一张照片快捷键启动失败: {e}")
+    
+    def on_next_photo_triggered(self):
+        """切换下一张手机照片快捷键触发（Alt+C）- 仅切换图片，不触发分析"""
+        print("🔄 切换下一张手机照片...")
+        
+        # 检查当前图片来源是否为手机模式
+        image_source = self.get_current_image_source()
+        if image_source != 'phone':
+            print("⚠️ 当前不是手机拍照模式，请先在设置中切换为手机拍照模式")
+            self.statusBar().showMessage("⚠️ 当前不是手机拍照模式", 3000)
+            
+            # 发送提示到手机
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:请先切换到手机拍照模式]", silent=True)
+            return
+        
+        # 【关键】确保照片列表已加载
+        # 如果列表为空，先触发一次加载
+        if not ScreenshotWorker._phone_photo_list:
+            print("📱 首次加载手机照片列表...")
+            # 创建一个临时 ScreenshotWorker 实例来加载列表
+            temp_worker = ScreenshotWorker()
+            test_path = temp_worker._get_latest_phone_photo()
+            
+            if not test_path:
+                print("⚠️ 没有可用的手机照片")
+                self.statusBar().showMessage("⚠️ 没有可用的手机照片", 3000)
+                
+                if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                    self.websocket_worker.send_message("[STATUS:没有可用的手机照片]", silent=True)
+                return
+            
+            print(f"✅ 照片列表加载成功，共 {len(ScreenshotWorker._phone_photo_list)} 张")
+        
+        # 切换到下一张照片
+        next_photo_path = ScreenshotWorker.get_next_phone_photo()
+        
+        if not next_photo_path:
+            print("⚠️ 切换失败")
+            self.statusBar().showMessage("⚠️ 切换失败", 3000)
+            
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:切换失败]", silent=True)
+            return
+        
+        # 获取当前照片信息
+        photo_info = ScreenshotWorker.get_current_photo_info()
+        if photo_info:
+            current_index = photo_info['index']
+            total = photo_info['total']
+            filename = photo_info['filename']
+            
+            print(f"📱 已切换到第 {current_index}/{total} 张: {filename}")
+            print(f"💡 提示：按 Alt+Z 或 Alt+X 开始分析当前图片")
+            
+            # 更新当前图片路径（供后续 Alt+Z/X 使用）
+            self.current_image_path = next_photo_path
+            
+            # 发送状态到手机（仅通知切换，不触发分析流程）
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                status_msg = f"[STATUS:已切换到第{current_index}/{total}张] [FILE:{filename}]"
+                self.websocket_worker.send_message(status_msg, silent=True)
+            
+            # 更新UI状态栏
+            self.statusBar().showMessage(f"📱 已切换到第 {current_index}/{total} 张: {filename} (按 Alt+Z/X 分析)", 5000)
+            
+            # 启用 OCR 和 LLM 按钮（如果之前有截图）
+            if hasattr(self, 'btn_ocr'):
+                self.btn_ocr.setEnabled(True)
+        else:
+            print("❌ 获取照片信息失败")
+            self.statusBar().showMessage("❌ 获取照片信息失败", 3000)
+    
     def on_auto_type_toggle_pause(self):
         """自动写入暂停/恢复快捷键触发（Alt+L）"""
         if hasattr(self, 'auto_type_worker') and self.auto_type_worker and self.auto_type_worker.isRunning():
@@ -2290,7 +2438,48 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(status)
     
     def perform_quick_screenshot(self):
-        """执行快速截图"""
+        """执行快速截图（根据配置选择图片来源）"""
+        try:
+            # 检查图片来源配置
+            image_source = self.get_current_image_source()
+            
+            if image_source == 'phone':
+                # 使用手机拍照来源
+                self.perform_phone_photo_analysis()
+            else:
+                # 使用 PC 屏幕截图（默认）
+                self.perform_pc_screenshot_analysis()
+                
+        except Exception as e:
+            print(f"❌ 快速分析失败: {e}")
+            self.statusBar().showMessage(f"快速分析失败: {str(e)}")
+    
+    def get_current_image_source(self):
+        """获取当前图片来源配置"""
+        try:
+            import json
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                # 打包后：使用 exe 所在目录
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境：使用当前工作目录
+                base_dir = os.getcwd()
+            
+            config_file = os.path.join(base_dir, 'global_config.json')
+            
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                return config_data.get('image_source', 'pc')
+            else:
+                return 'pc'  # 默认使用 PC 截图
+        except Exception as e:
+            print(f"⚠️ 读取图片来源配置失败: {e}，使用默认值")
+            return 'pc'
+    
+    def perform_pc_screenshot_analysis(self):
+        """执行 PC 屏幕截图分析"""
         try:
             import mss
             from PIL import Image
@@ -2314,18 +2503,131 @@ class MainWindow(QMainWindow):
                 # 保存图片
                 img.save(filepath)
                 
-                print(f"📸 快速截图完成: {filename}")
+                print(f"📸 PC 截图完成: {filename}")
                 
                 # 发送LLM开始状态（快速分析跳过OCR，直接进入LLM）
                 if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
                     self.websocket_worker.send_message("[STATUS:LLM分析中]", silent=True)
                 
-                # 2. 调用 Kimi 分析
+                # 调用 Kimi 分析
                 self.start_kimi_analysis(filepath)
                 
         except Exception as e:
-            print(f"❌ 快速截图失败: {e}")
-            self.statusBar().showMessage(f"快速截图失败: {str(e)}")
+            print(f"❌ PC 截图失败: {e}")
+            self.statusBar().showMessage(f"PC 截图失败: {str(e)}")
+    
+    def perform_phone_photo_analysis(self):
+        """执行手机拍照分析（优先使用当前选中的图片，否则使用最新）"""
+        try:
+            from datetime import datetime
+            
+            # 检查是否有当前选中的图片（通过 Alt+C 切换的）
+            if hasattr(self, 'current_image_path') and self.current_image_path:
+                # 验证文件是否存在
+                if os.path.exists(self.current_image_path):
+                    image_path = self.current_image_path
+                    print(f"📱 使用当前选中的图片: {os.path.basename(image_path)}")
+                else:
+                    print(f"⚠️ 当前选中的图片不存在，重新获取最新图片")
+                    self.current_image_path = None
+                    image_path = self._get_latest_phone_photo_path()
+                    if not image_path:
+                        return
+            else:
+                # 获取最新的图片
+                image_path = self._get_latest_phone_photo_path()
+                if not image_path:
+                    return
+            
+            print(f"📱 开始分析: {os.path.basename(image_path)}")
+            
+            # 发送LLM开始状态
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                self.websocket_worker.send_message("[STATUS:LLM分析中]", silent=True)
+            
+            # 调用 Kimi 分析
+            self.start_kimi_analysis(image_path)
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"❌ 手机拍照分析失败: {e}")
+            print(f"错误详情:\n{error_detail}")
+            self.statusBar().showMessage(f"手机拍照分析失败: {str(e)}")
+    
+    def _get_latest_phone_photo_path(self):
+        """获取最新的手机拍照图片路径（用于 Alt+Z/X 首次触发）"""
+        try:
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                # 打包后：使用 exe 所在目录
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 开发环境：使用当前工作目录
+                base_dir = os.getcwd()
+            
+            # 获取 phone_photo 目录
+            phone_photo_dir = os.path.join(base_dir, 'phone_photo')
+            
+            if not os.path.exists(phone_photo_dir):
+                QMessageBox.warning(self, "警告", 
+                    "手机拍照目录不存在！\n\n"
+                    "请先通过手机 WebSocket 连接发送图片。\n"
+                    "或切换到 PC 屏幕截图模式。"
+                )
+                # 自动切换回 PC 截图模式
+                self.pc_screenshot_radio.setChecked(True)
+                self.phone_photo_radio.setChecked(False)
+                self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
+                print("⚠️ 手机拍照目录不存在，已自动切换为 PC 截图模式")
+                return None
+            
+            # 查找最新的图片文件夹
+            folders = [f for f in os.listdir(phone_photo_dir) 
+                      if os.path.isdir(os.path.join(phone_photo_dir, f))]
+            
+            if not folders:
+                QMessageBox.warning(self, "警告",
+                    "手机拍照目录为空！\n\n"
+                    "请先通过手机发送图片到 PC。\n"
+                    "或切换到 PC 屏幕截图模式。"
+                )
+                # 自动切换回 PC 截图模式
+                self.pc_screenshot_radio.setChecked(True)
+                self.phone_photo_radio.setChecked(False)
+                self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
+                print("⚠️ 手机拍照目录为空，已自动切换为 PC 截图模式")
+                return None
+            
+            # 按时间排序，获取最新的文件夹
+            folders.sort(reverse=True)
+            latest_folder = folders[0]
+            folder_path = os.path.join(phone_photo_dir, latest_folder)
+            
+            # 查找文件夹中的图片文件
+            image_files = [f for f in os.listdir(folder_path) 
+                          if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+            
+            if not image_files:
+                QMessageBox.warning(self, "警告",
+                    f"文件夹 '{latest_folder}' 中没有图片文件！\n\n"
+                    "请检查手机是否正确发送了图片。"
+                )
+                return None
+            
+            # 按文件名排序，获取第一张图片（通常是 1.png）
+            image_files.sort()
+            latest_image = image_files[0]
+            image_path = os.path.join(folder_path, latest_image)
+            
+            return image_path
+            
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"❌ 获取手机拍照路径失败: {e}")
+            print(f"错误详情:\n{error_detail}")
+            return None
     
     @Slot()
     def start_ocr(self):
@@ -2731,6 +3033,95 @@ class MainWindow(QMainWindow):
         # 加载 Case3 配置
         if hasattr(self, 'load_case3_config'):
             self.load_case3_config()
+        
+        # 加载全局配置（图片来源）
+        self.load_global_config()
+    
+    def on_image_source_changed(self, source_type):
+        """图片来源切换回调"""
+        if source_type == 'pc':
+            self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
+            self.image_source_status_label.setStyleSheet("color: #4ecca3; font-weight: bold; font-size: 12px;")
+            print("📸 图片来源已切换为：PC屏幕截图")
+        elif source_type == 'phone':
+            self.image_source_status_label.setText("✅ 当前使用：手机物理拍照")
+            self.image_source_status_label.setStyleSheet("color: #4ecca3; font-weight: bold; font-size: 12px;")
+            print("📱 图片来源已切换为：手机物理拍照")
+    
+    def save_global_config(self):
+        """保存全局配置（图片来源等）"""
+        try:
+            import json
+            
+            # 确定图片来源
+            if self.pc_screenshot_radio.isChecked():
+                image_source = 'pc'
+            else:
+                image_source = 'phone'
+            
+            config_data = {
+                'image_source': image_source,
+                'last_modified': self.get_current_time()
+            }
+            
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.getcwd()
+            
+            # 保存到文件
+            config_file = os.path.join(base_dir, 'global_config.json')
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"💾 全局配置已保存: {config_file}")
+            print(f"   - 图片来源: {image_source}")
+            
+            QMessageBox.information(self, "成功", "✅ 全局配置已保存！")
+            self.statusBar().showMessage("全局配置已保存", 3000)
+            
+        except Exception as e:
+            print(f"❌ 保存全局配置失败: {e}")
+            QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
+    
+    def load_global_config(self):
+        """加载全局配置（图片来源等）"""
+        try:
+            import json
+            
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.getcwd()
+            
+            config_file = os.path.join(base_dir, 'global_config.json')
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                # 加载图片来源设置
+                if 'image_source' in config_data:
+                    image_source = config_data['image_source']
+                    
+                    if image_source == 'pc':
+                        self.pc_screenshot_radio.setChecked(True)
+                        self.phone_photo_radio.setChecked(False)
+                        self.image_source_status_label.setText("✅ 当前使用：PC屏幕截图")
+                    elif image_source == 'phone':
+                        self.pc_screenshot_radio.setChecked(False)
+                        self.phone_photo_radio.setChecked(True)
+                        self.image_source_status_label.setText("✅ 当前使用：手机物理拍照")
+                    
+                    print(f"✅ 已加载全局配置 - 图片来源: {image_source} (修改时间: {config_data.get('last_modified', '未知')})")
+                else:
+                    print("⚠️ 全局配置文件无图片来源数据，使用默认值")
+            else:
+                print("ℹ️ 未找到全局配置文件，使用默认配置（PC屏幕截图）")
+                
+        except Exception as e:
+            print(f"⚠️ 加载全局配置失败: {e}，使用默认配置")
     
     def get_local_ip(self):
         """获取本机局域网 IP"""
