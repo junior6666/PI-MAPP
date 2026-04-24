@@ -2308,24 +2308,38 @@ class MainWindow(QMainWindow):
         has_llm = bool(self.llm_result and self.llm_result.strip())
         
         if has_kimi and not has_llm:
+            print(f"🔍 只有Kimi结果可用")
             return self.kimi_result, "Kimi"
         elif has_llm and not has_kimi:
+            print(f"🔍 只有LLM结果可用")
             return self.llm_result, "LLM"
         elif not has_kimi and not has_llm:
+            print(f"🔍 没有可用的API结果")
             return None, None
         
         # 两个都有值，比较时间戳
         if self.kimi_result_timestamp and self.llm_result_timestamp:
-            if self.kimi_result_timestamp >= self.llm_result_timestamp:
+            kimi_time = self.kimi_result_timestamp
+            llm_time = self.llm_result_timestamp
+            time_diff = abs(kimi_time - llm_time)
+            
+            print(f"🔍 Kimi时间戳: {kimi_time:.2f}, LLM时间戳: {llm_time:.2f}, 时间差: {time_diff:.2f}s")
+            
+            if kimi_time >= llm_time:
+                print(f"🔍 选择Kimi结果（更新 {time_diff:.2f}s）")
                 return self.kimi_result, "Kimi"
             else:
+                print(f"🔍 选择LLM结果（更新 {time_diff:.2f}s）")
                 return self.llm_result, "LLM"
         elif self.kimi_result_timestamp:
+            print(f"🔍 只有Kimi有时间戳，选择Kimi")
             return self.kimi_result, "Kimi"
         elif self.llm_result_timestamp:
+            print(f"🔍 只有LLM有时间戳，选择LLM")
             return self.llm_result, "LLM"
         else:
             # 都没有时间戳，默认优先Kimi（保持向后兼容）
+            print(f"⚠️ 都没有时间戳，默认选择Kimi")
             return self.kimi_result, "Kimi"
     
     @Slot(str)
@@ -2803,6 +2817,7 @@ class MainWindow(QMainWindow):
     def on_llm_completed(self, llm_text, elapsed_time):
         """LLM 完成回调"""
         self.llm_result = llm_text
+        self.llm_result_timestamp = time.time()  # 【关键】记录时间戳
         self.llm_result_text.setText(llm_text)
         self.llm_elapsed = elapsed_time
         
@@ -2922,6 +2937,7 @@ class MainWindow(QMainWindow):
     def on_kimi_completed(self, kimi_text, elapsed_time):
         """Kimi 完成回调"""
         self.kimi_result = kimi_text
+        self.kimi_result_timestamp = time.time()  # 【关键】记录时间戳
         
         # 在LLM结果区显示（因为是分析结果）
         self.llm_result_text.setText(kimi_text)
