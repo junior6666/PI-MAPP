@@ -859,9 +859,9 @@
             <!-- 教程展开按钮（仅电脑端，教程收起时显示） -->
             <button id="expandTutorialBtn" onclick="toggleTutorial()" title="显示教程" style="display:none; margin-left: 8px;">📖 教程</button>
             <!-- 桌面端控制按钮（默认隐藏，通过媒体查询显示） -->
-            <button class="desktop-only-btn" onclick="connectLocal()" style="display:none">🖥️本地</button>
-            <button class="desktop-only-btn" onclick="connect()" style="display:none">连接</button>
-            <button class="desktop-only-btn" onclick="disconnect()" style="display:none">断开</button>
+            <button id="connectLocalBtn" class="desktop-only-btn" onclick="connectLocal()" style="display:none" title="连接到本地服务器">🖥️本地</button>
+            <button id="connectBtn" class="desktop-only-btn" onclick="connect()" style="display:none" title="连接到服务器">连接</button>
+            <button id="disconnectBtn" class="desktop-only-btn" onclick="disconnect()" style="display:none" title="断开连接">断开</button>
             <button onclick="openConfig()" style="display:none" class="desktop-only-btn">⚙️</button>
         </div>
     </div>
@@ -939,9 +939,9 @@
                     <button onclick="openConfig()">⚙️</button>
                     <button onclick="uploadImages()">📤</button>
                     <button onclick="toggleTutorial()">📖</button>
-                    <button onclick="connectLocal()">🖥️</button>
-                    <button onclick="connect()">连接</button>
-                    <button class="danger" onclick="disconnect()">断开</button>
+                    <button id="mobileConnectLocalBtn" onclick="connectLocal()" title="连接到本地服务器">🖥️</button>
+                    <button id="mobileConnectBtn" onclick="connect()" title="连接到服务器">连接</button>
+                    <button id="mobileDisconnectBtn" class="danger" onclick="disconnect()" title="断开连接">断开</button>
                 </div>
 
                 <!-- 历史记录区域（仅移动端） -->
@@ -1013,12 +1013,59 @@
     let maxHistoryItems = 100;  // 最大历史记录条数
     let imageCounter = 1;  // 图片计数器，默认从1开始
     let pendingImages = [];  // 待上传图片队列
+    let isManualClose = false;  // 标记是否为手动关闭连接
 
     // 页面加载时自动读配置和加载历史记录
     window.onload = function () {
         loadConfig();
         loadHistory();
+        
+        // 注册网络状态监听器
+        setupNetworkListener();
     };
+    
+    // 页面卸载时清理资源
+    window.onbeforeunload = function () {
+        // 停止所有定时器
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        stopStatusTimer();
+        
+        // 关闭 WebSocket 连接
+        if (ws) {
+            ws.close();
+        }
+    };
+
+    // 检查 WebSocket 连接状态
+    function isConnected() {
+        return ws && ws.readyState === WebSocket.OPEN;
+    }
+
+    // 设置网络状态监听器
+    function setupNetworkListener() {
+        // 监听网络恢复
+        window.addEventListener('online', () => {
+            console.log('🌐 网络已恢复');
+            // 如果当前未连接且自动重连启用，尝试重新连接
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    console.log('网络恢复，尝试重新连接...');
+                    connect();
+                }
+            }
+        });
+        
+        // 监听网络断开
+        window.addEventListener('offline', () => {
+            console.log('🚫 网络已断开');
+            // 更新状态显示
+            updateStatus(false);
+            showMessage('⚠️ 网络已断开，等待恢复...', 'error');
+        });
+    }
 
     // 切换抽屉展开/收纳
     function toggleDrawer() {
@@ -1122,6 +1169,13 @@
     }
 
     function connectLocal() {
+        // 检查是否已连接
+        if (isConnected()) {
+            console.log('⚠️ 已经处于连接状态，无需重复连接');
+            showMessage('⚠️ 已连接到服务器，如需重新连接请先断开', 'info');
+            return;
+        }
+        
         // 自动填充本地地址
         document.getElementById('ipInput').value = '127.0.0.1';
         document.getElementById('portInput').value = '8765';
@@ -1131,6 +1185,13 @@
     }
 
     function connect() {
+        // 检查是否已连接
+        if (isConnected()) {
+            console.log('⚠️ 已经处于连接状态，无需重复连接');
+            showMessage('⚠️ 已连接到服务器，如需重新连接请先断开', 'info');
+            return;
+        }
+        
         const ip = document.getElementById('ipInput').value.trim();
         const port = document.getElementById('portInput').value.trim();
         if (!ip || !port) {
@@ -1139,10 +1200,22 @@
         }
         closeDrawerAfterAction();
 
-        // 关闭已有连接
+        // 关闭已有连接（设置手动关闭标志，避免触发重连）
         if (ws) {
+            isManualClose = true;  // 标记为手动关闭
             ws.close();
+            isManualClose = false;  // 重置标志
         }
+        
+        // 清除之前的重连定时器
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        
+        // 重置重连状态（手动连接时启用自动重连）
+        autoReconnectEnabled = true;
+        reconnectAttempts = 0;
 
         const url = `ws://${ip}:${port}`;
         console.log('尝试连接到:', url);
@@ -1153,6 +1226,9 @@
 
             ws.onopen = () => {
                 console.log('WebSocket 连接成功');
+                // 连接成功，重置重连计数和开关
+                reconnectAttempts = 0;
+                autoReconnectEnabled = true;
                 updateStatus(true);
                 document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><div>已连接！等待接收消息...</div></div>';
             };
@@ -1166,10 +1242,11 @@
                     const jsonData = JSON.parse(event.data);
                     
                     // 处理图片上传响应
-                    if (jsonData.type === 'image_upload') {
+                    if (jsonData.type === 'upload_response') {
                         isJsonMessage = true;
                         console.log('📤 图片上传响应:', jsonData);
-                        return; // 不需要显示
+                        handleUploadResponse(jsonData);
+                        return;
                     }
                     
                     // 处理图片切换消息
@@ -1201,13 +1278,24 @@
             ws.onclose = (event) => {
                 console.log('连接关闭:', event.code, event.reason);
                 updateStatus(false);
-                showMessage('❌ 连接已断开', 'error');
                 
-                // 尝试自动重连（如果不是手动断开）
+                // 如果是手动关闭，不进行重连
+                if (isManualClose) {
+                    console.log('手动关闭连接，不触发重连');
+                    isManualClose = false;  // 重置标志
+                    return;
+                }
+                
+                // 尝试自动重连（如果不是手动断开且未达到最大次数）
                 if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    showMessage('❌ 连接已断开，正在准备重连...', 'error');
                     attemptReconnect();
                 } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                     showMessage('⚠️ 已达到最大重连次数，请手动重新连接', 'error');
+                    // 达到最大次数后禁用自动重连，需要手动触发
+                    autoReconnectEnabled = false;
+                } else {
+                    // 手动断开，不显示消息
                 }
             };
 
@@ -1379,6 +1467,95 @@
         return result;
     }
 
+    // 处理图片上传响应消息
+    function handleUploadResponse(data) {
+        const messagesEl = document.getElementById('messages');
+        const { success, message, filename, original_filename, folder, size, index, total, counter } = data;
+        
+        console.log(`📤 处理上传响应: ${filename} (${index}/${total})`);
+        
+        // 格式化文件大小
+        const formatSize = (bytes) => {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        };
+        
+        // 更新PC状态
+        updatePCStatus(success ? '待命' : '错误');
+        
+        // 构建显示内容
+        const statusIcon = success ? '✅' : '❌';
+        const statusColor = success ? '#4ecca3' : '#f44336';
+        const statusBg = success ? 'rgba(78, 204, 163, 0.1)' : 'rgba(244, 67, 54, 0.1)';
+        
+        const html = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 15px; gap: 12px;">
+                <!-- 状态标题 -->
+                <div style="color: ${statusColor}; font-size: 18px; font-weight: 600; text-align: center; animation: bounce 0.5s ease-out;">
+                    ${statusIcon} ${message || (success ? '上传成功' : '上传失败')}
+                </div>
+                
+                <!-- 进度指示器 -->
+                ${total > 1 ? `
+                <div style="width: 90%; max-width: 400px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #8892b0; font-size: 12px;">上传进度</span>
+                        <span style="color: ${statusColor}; font-size: 13px; font-weight: 600;">${index} / ${total}</span>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                        <div style="width: ${(index / total * 100)}%; height: 100%; background: linear-gradient(90deg, ${statusColor}, #5fffc8); border-radius: 3px; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- 文件信息卡片 -->
+                <div style="width: 90%; max-width: 400px; background: ${statusBg}; border: 1px solid ${statusColor}33; border-radius: 8px; padding: 12px 16px;">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: #8892b0; font-size: 11px; min-width: 60px;">文件名：</span>
+                            <span style="color: #e0e0e0; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(filename)}">
+                                📄 ${escapeHtml(filename)}
+                            </span>
+                        </div>
+                        ${original_filename && original_filename !== filename ? `
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: #8892b0; font-size: 11px; min-width: 60px;">原始名：</span>
+                            <span style="color: #b0b0d0; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(original_filename)}">
+                                ${escapeHtml(original_filename)}
+                            </span>
+                        </div>
+                        ` : ''}
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: #8892b0; font-size: 11px; min-width: 60px;">文件夹：</span>
+                            <span style="color: #b0b0d0; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(folder)}">
+                                📁 ${escapeHtml(folder)}
+                            </span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: #8892b0; font-size: 11px; min-width: 60px;">大小：</span>
+                            <span style="color: #4ecca3; font-size: 12px; font-weight: 500;">
+                                📦 ${formatSize(size)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 提示信息 -->
+                ${success ? `
+                <div style="color: #8892b0; font-size: 11px; text-align: center; padding: 8px; background: rgba(78, 204, 163, 0.05); border-radius: 6px; border: 1px solid rgba(78, 204, 163, 0.1);">
+                    💡 提示：使用 Alt+Z/X 快捷键进行AI分析
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        messagesEl.innerHTML = html;
+        messagesEl.scrollTop = 0;
+        
+        // 不保存到历史记录（避免大量上传记录）
+    }
+
     // 处理图片切换消息
     function handleImageSwitch(data) {
         const messagesEl = document.getElementById('messages');
@@ -1424,18 +1601,82 @@
         const statusEl = document.getElementById('status');
         const pcStatusEl = document.getElementById('pc-status');
         
+        // 获取所有连接相关按钮
+        const connectLocalBtns = [
+            document.getElementById('connectLocalBtn'),
+            document.getElementById('mobileConnectLocalBtn')
+        ];
+        const connectBtns = [
+            document.getElementById('connectBtn'),
+            document.getElementById('mobileConnectBtn')
+        ];
+        const disconnectBtns = [
+            document.getElementById('disconnectBtn'),
+            document.getElementById('mobileDisconnectBtn')
+        ];
+        
         if (connected) {
             // 连接成功：显示绿点
             statusEl.classList.add('connected');
             statusEl.title = '已连接';
             // 连接成功时显示待命状态
             updatePCStatus('待命');
+            
+            // 禁用连接按钮，启用断开按钮
+            connectLocalBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                    btn.title = '已连接，无需重复连接';
+                }
+            });
+            connectBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                    btn.title = '已连接，无需重复连接';
+                }
+            });
+            disconnectBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                }
+            });
         } else {
             // 连接断开：显示红点
             statusEl.classList.remove('connected');
             statusEl.title = '未连接';
             // 连接断开时隐藏PC状态
             pcStatusEl.style.display = 'none';
+            
+            // 启用连接按钮，禁用断开按钮
+            connectLocalBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                    btn.title = '连接到本地服务器';
+                }
+            });
+            connectBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                    btn.title = '连接到服务器';
+                }
+            });
+            disconnectBtns.forEach(btn => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                }
+            });
         }
     }
 
@@ -1557,6 +1798,9 @@
     }
 
     function disconnect() {
+        // 设置手动关闭标志
+        isManualClose = true;
+        
         // 禁用自动重连
         autoReconnectEnabled = false;
         
@@ -1569,28 +1813,52 @@
         // 重置重连计数
         reconnectAttempts = 0;
         
+        // 停止状态计时器
+        stopStatusTimer();
+        currentStatusStartTime = null;
+        
         if (ws) {
             ws.close();
         }
+        
+        // 重置手动关闭标志
+        isManualClose = false;
+        
         closeDrawerAfterAction();
     }
 
-    // 尝试自动重连
+    // 尝试自动重连（带指数退避策略）
     function attemptReconnect() {
         reconnectAttempts++;
         const messagesEl = document.getElementById('messages');
-        messagesEl.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔄</div><div>正在尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})</div></div>`;
+        
+        // 计算下次重连时间
+        const baseInterval = RECONNECT_INTERVAL;
+        const exponentialDelay = Math.min(baseInterval * Math.pow(2, reconnectAttempts - 1), 30000);
+        const jitter = exponentialDelay * 0.2 * (Math.random() * 2 - 1);
+        const delay = Math.max(exponentialDelay + jitter, baseInterval);
+        const nextRetrySeconds = Math.ceil(delay / 1000);
         
         console.log(`尝试第 ${reconnectAttempts} 次重连...`);
+        console.log(`下次重连延迟: ${delay.toFixed(0)}ms (${nextRetrySeconds}s)`);
+        
+        // 显示重连状态
+        messagesEl.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🔄</div>
+                <div>正在尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})</div>
+                <div style="font-size: 11px; color: #888; margin-top: 8px;">预计 ${nextRetrySeconds} 秒后重试</div>
+            </div>
+        `;
         
         reconnectTimer = setTimeout(() => {
             const ip = document.getElementById('ipInput').value.trim();
             const port = document.getElementById('portInput').value.trim();
             
-            if (ip && port) {
+            if (ip && port && autoReconnectEnabled) {
                 connect();
             }
-        }, RECONNECT_INTERVAL);
+        }, delay);
     }
 
     // ========== 历史记录功能 ==========
@@ -1904,21 +2172,22 @@
 
     // 打开图片上传预览弹窗
     function uploadImages() {
-        // 检查WebSocket连接状态
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            alert('❌ 请先连接到PC端');
-            return;
-        }
-        
-        // 创建隐藏的文件输入框
+        // 创建隐藏的文件输入框（不检查连接状态）
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
         input.multiple = true;
         
+        // 添加 capture 属性以更好地支持移动端
+        // 注意：某些移动浏览器可能需要这个提示
+        input.setAttribute('capture', '');
+        input.removeAttribute('capture'); // 立即移除以避免强制相机模式
+        
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
+            
+            console.log(`📸 选择了 ${files.length} 张图片`);
             
             // 添加到待上传队列
             files.forEach(file => {
@@ -1931,6 +2200,11 @@
             
             // 生成预览并显示弹窗
             generatePreviewsAndShow();
+        };
+        
+        // 处理取消选择的情况
+        input.oncancel = function() {
+            console.log('用户取消了选择');
         };
         
         input.click();
@@ -2018,6 +2292,18 @@
                 ${generatePreviewHTML()}
             </div>
             
+            <!-- 提示文字 -->
+            <div style="
+                background: rgba(78, 204, 163, 0.1);
+                padding: 8px 12px;
+                text-align: center;
+                font-size: 11px;
+                color: #4ecca3;
+                border-top: 1px solid #2a2a4a;
+            ">
+                💡 点击/双击放大 | 拖拽调整顺序 | ESC关闭
+            </div>
+            
             <!-- 底部操作栏 -->
             <div style="
                 background: #16213e;
@@ -2065,6 +2351,11 @@
         `;
         
         document.body.appendChild(modal);
+        
+        // 初始化拖拽功能
+        setTimeout(() => {
+            initDragAndDrop();
+        }, 100);
     }
 
     // 生成预览HTML
@@ -2074,20 +2365,21 @@
         }
         
         return pendingImages.map((img, index) => `
-            <div style="
+            <div class="preview-item" data-index="${index}" style="
                 background: #1a1a2e;
                 border: 2px solid #2a2a4a;
                 border-radius: 8px;
                 overflow: hidden;
                 position: relative;
-                cursor: pointer;
+                cursor: move;
                 transition: all 0.2s;
-            " onclick="showImagePreview(${index})">
+                touch-action: none;
+            " draggable="true">
                 <!-- 图片容器 -->
                 <div style="
                     position: relative;
                     width: 100%;
-                ">
+                " ondblclick="showImagePreview(${index})">
                     <!-- 缩略图 -->
                     <img src="${img.preview}" style="
                         width: 100%;
@@ -2096,6 +2388,7 @@
                         object-fit: contain;
                         display: block;
                         background: #0f0f23;
+                        pointer-events: none;
                     ">
                     
                     <!-- 编号标签（左上角浮动） -->
@@ -2111,6 +2404,7 @@
                         font-weight: bold;
                         z-index: 10;
                         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                        pointer-events: none;
                     ">${index + 1}</div>
                     
                     <!-- 删除按钮（右上角浮动） -->
@@ -2144,6 +2438,7 @@
                     text-overflow: ellipsis;
                     white-space: nowrap;
                     background: #16213e;
+                    pointer-events: none;
                 ">${img.file.name}</div>
             </div>
         `).join('');
@@ -2179,9 +2474,18 @@
         input.accept = 'image/*';
         input.multiple = true;
         
+        // 添加提示信息
+        const currentCount = pendingImages.length;
+        console.log(`当前已有 ${currentCount} 张图片，继续添加...`);
+        
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
-            if (files.length === 0) return;
+            if (files.length === 0) {
+                console.log('未选择新图片');
+                return;
+            }
+            
+            console.log(`➕ 新增 ${files.length} 张图片`);
             
             // 添加到队列
             files.forEach(file => {
@@ -2196,6 +2500,10 @@
             generatePreviewsAndShow();
         };
         
+        input.oncancel = function() {
+            console.log('用户取消了添加');
+        };
+        
         input.click();
     }
 
@@ -2204,6 +2512,8 @@
         const previewList = document.getElementById('previewList');
         if (previewList) {
             previewList.innerHTML = generatePreviewHTML();
+            // 重新绑定拖拽事件
+            initDragAndDrop();
         }
         
         // 更新标题和按钮文字
@@ -2218,6 +2528,123 @@
                 confirmBtn.textContent = `✅ 上传 (${pendingImages.length}张)`;
             }
         }
+    }
+
+    // 初始化拖拽排序功能
+    function initDragAndDrop() {
+        const items = document.querySelectorAll('.preview-item');
+        let draggedItem = null;
+        let draggedIndex = null;
+
+        items.forEach((item, index) => {
+            // 桌面端拖拽事件
+            item.addEventListener('dragstart', function(e) {
+                draggedItem = this;
+                draggedIndex = parseInt(this.dataset.index);
+                this.style.opacity = '0.5';
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            item.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+
+            item.addEventListener('drop', function(e) {
+                e.preventDefault();
+                const dropIndex = parseInt(this.dataset.index);
+                if (draggedIndex !== null && draggedIndex !== dropIndex) {
+                    swapImages(draggedIndex, dropIndex);
+                }
+            });
+
+            item.addEventListener('dragend', function() {
+                this.style.opacity = '1';
+                draggedItem = null;
+                draggedIndex = null;
+            });
+
+            // 移动端触摸事件
+            let touchStartY = 0;
+            let touchCurrentY = 0;
+            let touchStartX = 0;
+            let isDragging = false;
+            let hasMoved = false;
+
+            item.addEventListener('touchstart', function(e) {
+                touchStartY = e.touches[0].clientY;
+                touchStartX = e.touches[0].clientX;
+                isDragging = false;
+                hasMoved = false;
+            }, { passive: true });
+
+            item.addEventListener('touchmove', function(e) {
+                touchCurrentY = e.touches[0].clientY;
+                const currentX = e.touches[0].clientX;
+                const diffY = Math.abs(touchCurrentY - touchStartY);
+                const diffX = Math.abs(currentX - touchStartX);
+                
+                // 垂直移动超过15px且垂直移动大于水平移动才认为是拖拽
+                if (diffY > 15 && diffY > diffX) {
+                    isDragging = true;
+                    hasMoved = true;
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            item.addEventListener('touchend', function(e) {
+                // 如果没有移动或移动很小，则视为点击 - 打开预览
+                if (!hasMoved || !isDragging) {
+                    const index = parseInt(this.dataset.index);
+                    showImagePreview(index);
+                    return;
+                }
+
+                // 计算目标位置
+                const rect = this.getBoundingClientRect();
+                const centerY = rect.top + rect.height / 2;
+                const moveDistance = touchCurrentY - touchStartY;
+                
+                // 找到最近的元素进行交换
+                const allItems = Array.from(document.querySelectorAll('.preview-item'));
+                let targetIndex = parseInt(this.dataset.index);
+                
+                allItems.forEach((otherItem, idx) => {
+                    if (idx === targetIndex) return;
+                    const otherRect = otherItem.getBoundingClientRect();
+                    const otherCenterY = otherRect.top + otherRect.height / 2;
+                    
+                    // 判断是否移动到该元素的位置
+                    if ((moveDistance > 0 && otherCenterY > centerY && otherCenterY <= centerY + moveDistance) ||
+                        (moveDistance < 0 && otherCenterY < centerY && otherCenterY >= centerY + moveDistance)) {
+                        targetIndex = idx;
+                    }
+                });
+                
+                if (targetIndex !== parseInt(this.dataset.index)) {
+                    swapImages(parseInt(this.dataset.index), targetIndex);
+                }
+                
+                isDragging = false;
+                hasMoved = false;
+            });
+        });
+    }
+
+    // 交换两张图片的位置
+    function swapImages(index1, index2) {
+        if (index1 < 0 || index1 >= pendingImages.length || 
+            index2 < 0 || index2 >= pendingImages.length) {
+            return;
+        }
+        
+        // 交换数组中的位置
+        const temp = pendingImages[index1];
+        pendingImages[index1] = pendingImages[index2];
+        pendingImages[index2] = temp;
+        
+        // 刷新预览列表
+        refreshPreviewList();
     }
 
     // 显示图片放大预览
@@ -2246,6 +2673,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            touch-action: none;
         `;
         
         previewModal.innerHTML = `
@@ -2279,19 +2707,45 @@
                 background: rgba(22, 33, 62, 0.8);
                 padding: 8px 12px;
                 border-radius: 6px;
+                max-width: 60%;
+                pointer-events: none;
             ">
                 <div>编号: ${index + 1} / ${pendingImages.length}</div>
-                <div style="font-size: 11px; color: #b0b0d0; margin-top: 4px;">${img.file.name}</div>
+                <div style="font-size: 11px; color: #b0b0d0; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${img.file.name}</div>
             </div>
             
-            <!-- 大图 -->
-            <img src="${img.preview}" style="
-                max-width: 90%;
-                max-height: 80%;
-                object-fit: contain;
-                border-radius: 8px;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            <!-- 大图容器（支持缩放和滑动） -->
+            <div id="previewImageContainer" style="
+                position: relative;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
             ">
+                <!-- 加载提示 -->
+                <div id="previewLoading" style="
+                    position: absolute;
+                    color: #4ecca3;
+                    font-size: 14px;
+                    z-index: 5;
+                ">加载中...</div>
+                
+                <!-- 大图 -->
+                <img id="previewImage" src="${img.preview}" style="
+                    max-width: 90%;
+                    max-height: 80%;
+                    object-fit: contain;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    transform-origin: center center;
+                    cursor: grab;
+                " onload="this.style.opacity=1; document.getElementById('previewLoading').style.display='none';"
+                   onerror="this.parentElement.innerHTML='<div style=\'color: #f44336; font-size: 16px;\'>❌ 图片加载失败</div>'">
+            </div>
             
             <!-- 导航按钮 -->
             <div style="
@@ -2299,6 +2753,7 @@
                 bottom: 30px;
                 display: flex;
                 gap: 15px;
+                z-index: 10;
             ">
                 ${index > 0 ? `
                     <button onclick="navigateImage(${index - 1})" style="
@@ -2309,10 +2764,11 @@
                         border-radius: 6px;
                         font-size: 14px;
                         cursor: pointer;
+                        transition: all 0.2s;
                     ">← 上一张</button>
                 ` : ''}
                 <button onclick="deleteAndClose(${index})" style="
-                    background: #0f3460;
+                    background: #e94560;
                     color: white;
                     border: none;
                     padding: 10px 20px;
@@ -2330,8 +2786,23 @@
                         border-radius: 6px;
                         font-size: 14px;
                         cursor: pointer;
+                        transition: all 0.2s;
                     ">下一张 →</button>
                 ` : ''}
+            </div>
+            
+            <!-- 操作提示（底部小字） -->
+            <div style="
+                position: absolute;
+                bottom: 8px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: #888;
+                font-size: 10px;
+                text-align: center;
+                pointer-events: none;
+            ">
+                双指缩放 | 左右滑动切换 | ESC关闭
             </div>
         `;
         
@@ -2343,6 +2814,11 @@
         };
         
         document.body.appendChild(previewModal);
+        
+        // 初始化手势支持（缩放和滑动）
+        setTimeout(() => {
+            initImageGestures(index);
+        }, 100);
     }
 
     // 关闭图片放大预览
@@ -2353,6 +2829,148 @@
         }
     }
 
+    // 初始化图片手势支持（缩放和滑动）
+    function initImageGestures(currentIndex) {
+        const container = document.getElementById('previewImageContainer');
+        const img = document.getElementById('previewImage');
+        
+        if (!container || !img) return;
+        
+        let scale = 1;
+        let lastScale = 1;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        let isDragging = false;
+        let isPinching = false;
+        let initialDistance = 0;
+        let touchStartTime = 0;
+        
+        // 双指缩放
+        container.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                isPinching = true;
+                initialDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                lastScale = scale;
+            } else if (e.touches.length === 1) {
+                touchStartTime = Date.now();
+                startX = e.touches[0].clientX - currentX;
+                startY = e.touches[0].clientY - currentY;
+            }
+        }, { passive: false });
+        
+        container.addEventListener('touchmove', function(e) {
+            if (isPinching && e.touches.length === 2) {
+                e.preventDefault();
+                const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                scale = Math.min(Math.max(lastScale * (currentDistance / initialDistance), 0.5), 4);
+                applyTransform(img, scale, currentX, currentY);
+            } else if (!isPinching && e.touches.length === 1 && scale > 1) {
+                e.preventDefault();
+                isDragging = true;
+                currentX = e.touches[0].clientX - startX;
+                currentY = e.touches[0].clientY - startY;
+                applyTransform(img, scale, currentX, currentY);
+            }
+        }, { passive: false });
+        
+        container.addEventListener('touchend', function(e) {
+            if (isPinching) {
+                isPinching = false;
+                if (scale < 1) scale = 1;
+                lastScale = scale;
+            }
+            
+            if (isDragging) {
+                isDragging = false;
+            }
+            
+            // 检测单击（非拖动）- 关闭预览
+            const touchDuration = Date.now() - touchStartTime;
+            if (touchDuration < 200 && !isDragging && !isPinching && scale <= 1) {
+                closeImagePreview();
+            }
+        });
+        
+        // 鼠标滚轮缩放（桌面端）
+        container.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale = Math.min(Math.max(scale * delta, 0.5), 4);
+            applyTransform(img, scale, currentX, currentY);
+        }, { passive: false });
+        
+        // 鼠标拖动（桌面端）
+        let mouseDown = false;
+        container.addEventListener('mousedown', function(e) {
+            if (scale > 1) {
+                mouseDown = true;
+                startX = e.clientX - currentX;
+                startY = e.clientY - currentY;
+                img.style.cursor = 'grabbing';
+            }
+        });
+        
+        container.addEventListener('mousemove', function(e) {
+            if (mouseDown && scale > 1) {
+                currentX = e.clientX - startX;
+                currentY = e.clientY - startY;
+                applyTransform(img, scale, currentX, currentY);
+            }
+        });
+        
+        container.addEventListener('mouseup', function() {
+            mouseDown = false;
+            img.style.cursor = 'grab';
+        });
+        
+        container.addEventListener('mouseleave', function() {
+            mouseDown = false;
+            img.style.cursor = 'grab';
+        });
+        
+        // 左右滑动切换图片（仅在未缩放时）
+        let swipeStartX = 0;
+        let swipeThreshold = 50;
+        
+        container.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1 && scale <= 1) {
+                swipeStartX = e.touches[0].clientX;
+            }
+        }, { passive: true });
+        
+        container.addEventListener('touchend', function(e) {
+            if (scale <= 1) {
+                const swipeEndX = e.changedTouches[0].clientX;
+                const swipeDistance = swipeEndX - swipeStartX;
+                
+                if (Math.abs(swipeDistance) > swipeThreshold) {
+                    if (swipeDistance > 0 && currentIndex > 0) {
+                        // 向右滑动 - 上一张
+                        navigateImage(currentIndex - 1);
+                    } else if (swipeDistance < 0 && currentIndex < pendingImages.length - 1) {
+                        // 向左滑动 - 下一张
+                        navigateImage(currentIndex + 1);
+                    }
+                }
+            }
+        });
+    }
+    
+    // 计算两指之间的距离
+    function getTouchDistance(touch1, touch2) {
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    // 应用变换（缩放和平移）
+    function applyTransform(img, scale, x, y) {
+        img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    }
+    
     // 导航到指定图片
     function navigateImage(index) {
         closeImagePreview();
@@ -2381,6 +2999,12 @@
     function confirmUpload() {
         if (pendingImages.length === 0) {
             alert('⚠️ 请先添加图片');
+            return;
+        }
+        
+        // 检查WebSocket连接状态（在真正上传时才检查）
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert('❌ 请先连接到PC端');
             return;
         }
         
@@ -2443,7 +3067,7 @@
         reader.readAsDataURL(file);
     }
 
-    // 页面加载时恢复教程面板状态
+    // 页面加载时恢复教程面板状态并绑定键盘事件
     window.addEventListener('load', function() {
         // 检查是否为电脑端
         if (window.innerWidth >= 1024) {
@@ -2460,7 +3084,70 @@
                 }
             }
         }
+        
+        // 绑定键盘快捷键
+        document.addEventListener('keydown', handleKeyboardShortcuts);
     });
+    
+    // 处理键盘快捷键
+    function handleKeyboardShortcuts(e) {
+        // ESC 关闭所有弹窗
+        if (e.key === 'Escape') {
+            const imagePreview = document.getElementById('imagePreviewModal');
+            const uploadPreview = document.getElementById('uploadPreviewModal');
+            const mobileTutorial = document.getElementById('mobileTutorialModal');
+            const configModal = document.getElementById('configModal');
+            
+            if (imagePreview) {
+                closeImagePreview();
+            } else if (uploadPreview) {
+                closeUploadPreview();
+            } else if (mobileTutorial) {
+                closeMobileTutorial();
+            } else if (configModal && configModal.classList.contains('show')) {
+                closeConfig();
+            }
+        }
+        
+        // 方向键切换图片（仅在图片预览时）
+        const imagePreview = document.getElementById('imagePreviewModal');
+        if (imagePreview) {
+            if (e.key === 'ArrowLeft') {
+                // 查找当前索引（从URL或数据属性中获取）
+                const infoDiv = imagePreview.querySelector('[style*="编号"]');
+                if (infoDiv) {
+                    const match = infoDiv.textContent.match(/编号:\s*(\d+)\s*\/\s*(\d+)/);
+                    if (match) {
+                        const currentIndex = parseInt(match[1]) - 1;
+                        if (currentIndex > 0) {
+                            navigateImage(currentIndex - 1);
+                        }
+                    }
+                }
+            } else if (e.key === 'ArrowRight') {
+                const infoDiv = imagePreview.querySelector('[style*="编号"]');
+                if (infoDiv) {
+                    const match = infoDiv.textContent.match(/编号:\s*(\d+)\s*\/\s*(\d+)/);
+                    if (match) {
+                        const currentIndex = parseInt(match[1]) - 1;
+                        if (currentIndex < pendingImages.length - 1) {
+                            navigateImage(currentIndex + 1);
+                        }
+                    }
+                }
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Delete键删除当前图片
+                const infoDiv = imagePreview.querySelector('[style*="编号"]');
+                if (infoDiv) {
+                    const match = infoDiv.textContent.match(/编号:\s*(\d+)\s*\/\s*(\d+)/);
+                    if (match) {
+                        const currentIndex = parseInt(match[1]) - 1;
+                        deleteAndClose(currentIndex);
+                    }
+                }
+            }
+        }
+    }
 </script>
 
 </body>
