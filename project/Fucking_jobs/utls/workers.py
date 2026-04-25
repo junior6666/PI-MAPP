@@ -2250,15 +2250,16 @@ class AutoTypeWorker(QThread):
                     need_home = False
                     # 逐字符输入（带错误模拟）
                     for char in line:
-                        if char == '\n':
-                            pass
+                        if char == '\n' and line.strip():
+                            pyautogui.typewrite(' ')
                         else:
                             self._type_with_realistic_errors(char, delay=self.delay, error_rate=self.error_rate)
                             pyautogui.typewrite(char, interval=self.delay)
                     # 输入换行
-                    pyautogui.typewrite('\n')
-                    think_time = random.uniform(self.think_time_min, self.think_time_max)
-                    time.sleep(think_time)
+                    if line.strip():
+                        pyautogui.typewrite('\n')
+                        think_time = random.uniform(self.think_time_min, self.think_time_max)
+                        time.sleep(think_time)
                     print(f"[Home] 已输入行 {line_idx + 1}")
                 else:
                     # 普通行输入
