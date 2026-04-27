@@ -1260,45 +1260,21 @@ class WebSocketServerWorker(QThread):
                 print(f"[!] 不支持的文件格式: {ext}，使用.png代替")
                 ext = '.png'
             
-            # 生成安全的文件名：每个新文件夹从1开始递增
+            # 【关键修复】直接使用前端传来的 index 作为文件名，确保顺序一致
+            # 不再扫描文件夹动态分配编号，避免异步到达导致的顺序混乱
             with self._folder_lock:
-                # 扫描当前文件夹中已有的图片文件，找到最大编号
-                existing_files = []
-                if os.path.exists(folder_path):
-                    for f in os.listdir(folder_path):
-                        # 提取文件名中的数字部分
-                        name_without_ext = os.path.splitext(f)[0]
-                        # 处理带后缀的文件名（如 1_1.png）
-                        base_name = name_without_ext.split('_')[0]
-                        try:
-                            file_num = int(base_name)
-                            existing_files.append(file_num)
-                        except ValueError:
-                            continue
-                
-                # 确定新的文件编号：从1开始，或者是已有最大编号+1
-                if existing_files:
-                    next_number = max(existing_files) + 1
-                else:
-                    next_number = 1
-                
-                save_filename = f"{next_number}{ext}"
+                save_filename = f"{index}{ext}"
                 save_path = os.path.join(folder_path, save_filename)
                 
                 # 检查文件是否已存在（理论上不应该发生，但作为保险）
                 if os.path.exists(save_path):
-                    suffix = 1
-                    while os.path.exists(save_path):
-                        save_filename = f"{next_number}_{suffix}{ext}"
-                        save_path = os.path.join(folder_path, save_filename)
-                        suffix += 1
-                    print(f"⚠️ 文件已存在，重命名为: {save_filename}")
+                    print(f"⚠️ 文件已存在，将被覆盖: {save_filename}")
             
             # 保存图片
             with open(save_path, 'wb') as f:
                 f.write(image_bytes)
             
-            print(f"✅ 保存图片 [{index}/{total}]: {save_filename} -> {folder_name} (大小: {len(image_bytes)} bytes)")
+            print(f"✅ 保存图片 [{index}/{total}]: {filename} -> {save_filename} (文件夹: {folder_name}, 大小: {len(image_bytes)} bytes)")
             
             # 发送成功响应给客户端
             await self._send_upload_response(client_ip, True, "上传成功", {
@@ -1308,7 +1284,7 @@ class WebSocketServerWorker(QThread):
                 'size': len(image_bytes),
                 'index': index,
                 'total': total,
-                'counter': next_number  # 返回实际分配的编号
+                'counter': index  # 返回使用的索引号
             })
             
         except Exception as e:

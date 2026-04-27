@@ -2410,6 +2410,8 @@
             return '<div style="text-align: center; color: #888; padding: 40px;">暂无图片</div>';
         }
         
+        console.log('🎨 generatePreviewHTML 被调用，当前数组顺序:', pendingImages.map((img, idx) => `${idx}: ${img.file.name}`).join(', '));
+        
         return pendingImages.map((img, index) => `
             <div class="preview-item" data-index="${index}" style="
                 background: #1a1a2e;
@@ -2558,7 +2560,7 @@
         const previewList = document.getElementById('previewList');
         if (previewList) {
             previewList.innerHTML = generatePreviewHTML();
-            // 重新绑定拖拽事件
+            // 重新绑定拖拽事件（会自动更新 data-index）
             initDragAndDrop();
         }
         
@@ -2574,6 +2576,8 @@
                 confirmBtn.textContent = `✅ 上传 (${pendingImages.length}张)`;
             }
         }
+        
+        console.log('🔄 预览列表已刷新，当前顺序:', pendingImages.map(img => img.file.name));
     }
 
     // 初始化拖拽排序功能
@@ -2583,6 +2587,9 @@
         let draggedIndex = null;
 
         items.forEach((item, index) => {
+            // 确保 data-index 与当前数组索引一致
+            item.setAttribute('data-index', index);
+            
             // 桌面端拖拽事件
             item.addEventListener('dragstart', function(e) {
                 draggedItem = this;
@@ -2684,10 +2691,15 @@
             return;
         }
         
+        console.log(`🔄 交换图片位置: ${index1} <-> ${index2}`);
+        console.log('   交换前顺序:', pendingImages.map(img => img.file.name));
+        
         // 交换数组中的位置
         const temp = pendingImages[index1];
         pendingImages[index1] = pendingImages[index2];
         pendingImages[index2] = temp;
+        
+        console.log('   交换后顺序:', pendingImages.map(img => img.file.name));
         
         // 刷新预览列表
         refreshPreviewList();
@@ -3043,6 +3055,10 @@
 
     // 确认上传
     function confirmUpload() {
+        console.log('========== 开始上传流程 ==========');
+        console.log('📋 pendingImages 数组长度:', pendingImages.length);
+        console.log('📋 pendingImages 当前顺序:', pendingImages.map((img, idx) => `${idx}: ${img.file.name}`).join('\n   '));
+        
         if (pendingImages.length === 0) {
             alert('⚠️ 请先添加图片');
             return;
@@ -3060,12 +3076,19 @@
             modal.remove();
         }
         
-        // 批量上传图片
+        // 批量上传图片（按照当前 pendingImages 数组的顺序）
         showMessage(`📤 正在上传 ${pendingImages.length} 张图片...`, 'info');
         
-        pendingImages.forEach((img, index) => {
-            sendImageToPC(img.file, index + 1, pendingImages.length);
-        });
+        console.log('🚀 开始遍历发送图片...');
+        
+        // 使用 for 循环确保按顺序处理
+        for (let i = 0; i < pendingImages.length; i++) {
+            const img = pendingImages[i];
+            console.log(`📤 准备发送第 ${i + 1} 张: ${img.file.name} (数组索引: ${i})`);
+            sendImageToPC(img.file, i + 1, pendingImages.length);
+        }
+        
+        console.log('========== 上传流程结束 ==========');
         
         // 清空队列
         pendingImages = [];
@@ -3091,7 +3114,7 @@
             // 通过WebSocket发送
             try {
                 ws.send(JSON.stringify(message));
-                console.log(`📤 正在发送图片 ${index}/${total}: ${file.name}`);
+                console.log(`📤 正在发送图片 ${index}/${total}: ${file.name} (序号: ${index})`);
                 
                 // 显示发送进度提示
                 if (index === total) {
