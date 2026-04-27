@@ -805,11 +805,10 @@ class KimiWorker(QThread):
     # 后备模型列表（当主模型失败时依次尝试）
     BACKUP_MODELS = [
         'Qwen/Qwen3-Omni-30B-A3B-Instruct',
-        'Qwen/Qwen3-VL-8B-Instruct',
         'Qwen/Qwen3-VL-32B-Instruct',
         'Qwen/Qwen3-VL-235B-A22B-Instruct',
         'zai-org/GLM-4.5V',
-        'Pro/moonshotai/Kimi-K2.5'
+        'Pro/moonshotai/Kimi-K2.6'
     ]
     
     # SiliconFlow API 配置
