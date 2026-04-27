@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QTextEdit,
                                QGroupBox, QFormLayout, QLineEdit, QSpinBox,
                                QCheckBox, QMessageBox, QSystemTrayIcon, QMenu, QTabWidget, QProgressBar,
-                               QTableWidget, QTableWidgetItem, QHeaderView, QSlider, QDoubleSpinBox, QRadioButton)
+                               QTableWidget, QTableWidgetItem, QHeaderView, QSlider, QDoubleSpinBox, QRadioButton,
+                               QComboBox)
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from PySide6.QtGui import QFont, QIcon
 
@@ -619,6 +620,10 @@ class MainWindow(QMainWindow):
         self.case3_tab = self.create_case3_tab()
         self.help_inner_tabs.addTab(self.case3_tab, "⌨️ Case3 (Alt+S)")
         
+        # 提示词管理标签页
+        self.prompt_tab = self.create_prompt_tab()
+        self.help_inner_tabs.addTab(self.prompt_tab, "📝 提示词")
+        
         # R 标签：结果展示
         self.r_tab = self.create_r_tab()
         self.help_inner_tabs.addTab(self.r_tab, "📊 R - 结果")
@@ -659,7 +664,7 @@ class MainWindow(QMainWindow):
 <ul>
 <li>面试时推荐使用 <b>Case2 (Alt+Z)</b>，虽然稍慢但识别更准确</li>
 <li>日常练习可使用 <b>Case1 (Alt+X)</b>，速度更快且可查看OCR文本</li>
-<li>可在下方编辑提示词来定制AI回答风格</li>
+<li>可在 <b>📝 提示词</b> 标签页中编辑提示词来定制AI回答风格（Case1和Case2共用）</li>
 <li>所有配置修改后会自动保存，下次启动自动加载</li>
 </ul>
         """
@@ -670,65 +675,51 @@ class MainWindow(QMainWindow):
         config_layout = QHBoxLayout()
         config_layout.setSpacing(15)
         
-        # 左侧：提示词编辑组
+        # 左侧：提示词快捷入口（引导到提示词标签页）
         prompt_group = QGroupBox("📝 提示词配置")
         prompt_layout = QVBoxLayout()
         
+        prompt_hint = QLabel(
+            "💡 提示词统一管理已移至 <b>📝 提示词</b> 标签页\n"
+            "在那里您可以：\n"
+            "• 选择不同的提示词模板（通用、华为机考、测评题等）\n"
+            "• 自定义编辑提示词\n"
+            "• Case1和Case2共用同一套提示词配置"
+        )
+        prompt_hint.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 12px;
+                padding: 10px;
+                background-color: #f8f9fa;
+                border-radius: 5px;
+                border: 1px solid #e0e0e0;
+            }
+        """)
+        prompt_hint.setWordWrap(True)
+        prompt_layout.addWidget(prompt_hint)
+        
+        # 保留 main_prompt_input 作为只读预览（与共享提示词同步）
         self.main_prompt_input = QTextEdit()
-        self.main_prompt_input.setPlaceholderText("请输入提示词...")
-        self.main_prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
-
-【任务要求】
-1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
-2. 根据题型给出对应的回答：
-
-【回答格式】
-
-📌 如果是编程题：
-- 提供完整的 Python 代码实现
-- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
-- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
-- 代码需包含必要的注释和边界处理
-- 简要说明算法思路和时间复杂度
-- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
-
-📌 如果是选择题：
-- 直接给出正确答案的序号（如：答案：B）
-- 简要解释选择理由（1-2句话）
-- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
-
-📌 如果是简答题/概念题：
-- 给出清晰、结构化的回答
-- 分点阐述关键要点
-- 适当举例说明
-- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
-
-📌 如果是系统设计题：
-- 给出系统架构设计思路
-- 列出关键技术选型
-- 说明核心流程和注意事项
-
-📌 如果是性格测试题：
-- 选择积极乐观、团队协作导向的选项
-- 体现责任心、学习能力、抗压能力等正面特质
-- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
-- 简要说明选择理由（1句话）
-
-
-
-【注意事项】
-- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
-- 回答要简洁专业，适合面试场景口头表达
-- 代码题必须提供可运行的完整代码
-- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
-- 每个题目之间用 --- 分割线隔开
-- 返回markdown格式""")
+        self.main_prompt_input.setReadOnly(True)  # 设置为只读
+        self.main_prompt_input.setMaximumHeight(150)
+        self.main_prompt_input.setStyleSheet("""
+            QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 8px;
+                font-size: 11px;
+            }
+        """)
+        self.main_prompt_input.setText("加载中...")
+        prompt_layout.addWidget(QLabel("当前提示词预览（只读）:"))
         prompt_layout.addWidget(self.main_prompt_input)
         
-        # 保存按钮
-        save_prompt_btn = QPushButton("💾 保存提示词")
-        save_prompt_btn.clicked.connect(self.save_prompt_config)
-        prompt_layout.addWidget(save_prompt_btn)
+        # 跳转到提示词标签页按钮
+        goto_prompt_btn = QPushButton("📝 前往提示词配置页面")
+        goto_prompt_btn.clicked.connect(lambda: self.help_inner_tabs.setCurrentIndex(4))  # 提示词标签页索引为4
+        prompt_layout.addWidget(goto_prompt_btn)
         
         prompt_group.setLayout(prompt_layout)
         config_layout.addWidget(prompt_group, stretch=1)
@@ -780,6 +771,267 @@ class MainWindow(QMainWindow):
         
         return widget
     
+    def create_prompt_tab(self):
+        """创建提示词管理标签页（Case1和Case2共用）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 顶部说明
+        info_group = QGroupBox("📝 提示词配置说明")
+        info_layout = QVBoxLayout()
+        info_text = QLabel(
+            "此处的提示词将被 Case1 (Alt+X) 和 Case2 (Alt+Z) 共同使用。\n"
+            "您可以选择不同的提示词模板，或自定义编辑后保存。"
+        )
+        info_text.setStyleSheet("color: #666; font-size: 12px;")
+        info_layout.addWidget(info_text)
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+        
+        # 模板选择区域
+        template_group = QGroupBox("📋 提示词模板")
+        template_layout = QHBoxLayout()
+        template_layout.setSpacing(10)
+        
+        # 模板选择下拉框
+        self.template_selector = QComboBox()
+        self.template_selector.addItem("🔧 通用提示词（默认）")
+        self.template_selector.addItem("💻 华为机考专用提示词（处理输入输出，可完整运行）")
+        self.template_selector.currentIndexChanged.connect(self.on_template_changed)
+        self.template_selector.setMaximumWidth(400)
+        template_layout.addWidget(QLabel("选择模板:"))
+        template_layout.addWidget(self.template_selector)
+        template_layout.addStretch()
+        
+        template_group.setLayout(template_layout)
+        layout.addWidget(template_group)
+        
+        # 提示词编辑区域
+        prompt_edit_group = QGroupBox("✏️ 提示词编辑")
+        prompt_edit_layout = QVBoxLayout()
+        
+        self.shared_prompt_input = QTextEdit()
+        self.shared_prompt_input.setPlaceholderText("请输入或编辑提示词...")
+        self.shared_prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+
+【任务要求】
+1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
+2. 根据题型给出对应的回答：
+    
+【回答格式】
+
+📌 如果是编程题：
+- 提供完整的 Python 代码实现
+- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 代码需包含必要的注释和边界处理
+- 简要说明算法思路和时间复杂度
+- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
+
+📌 如果是选择题：
+- 直接给出正确答案的序号（如：答案：B）
+- 简要解释选择理由（1-2句话）
+- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
+
+📌 如果是简答题/概念题：
+- 给出清晰、结构化的回答
+- 分点阐述关键要点
+- 适当举例说明
+- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
+
+📌 如果是系统设计题：
+- 给出系统架构设计思路
+- 列出关键技术选型
+- 说明核心流程和注意事项
+
+📌 如果是性格测试题：
+- 选择积极乐观、团队协作导向的选项
+- 体现责任心、学习能力、抗压能力等正面特质
+- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
+- 简要说明选择理由（1句话）
+
+
+
+【注意事项】
+- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
+- 回答要简洁专业，适合面试场景口头表达
+- 代码题必须提供可运行的完整代码
+- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
+- 每个题目之间用 --- 分割线隔开
+- 返回markdown格式""")
+        prompt_edit_layout.addWidget(self.shared_prompt_input)
+        
+        prompt_edit_group.setLayout(prompt_edit_layout)
+        layout.addWidget(prompt_edit_group)
+        
+        # 操作按钮区域
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        
+        self.save_shared_prompt_btn = QPushButton("💾 保存提示词")
+        self.save_shared_prompt_btn.clicked.connect(self.save_shared_prompt_config)
+        self.save_shared_prompt_btn.setMaximumWidth(150)
+        btn_layout.addWidget(self.save_shared_prompt_btn)
+        
+        self.reset_prompt_btn = QPushButton("🔄 恢复默认")
+        self.reset_prompt_btn.clicked.connect(self.reset_to_default_prompt)
+        self.reset_prompt_btn.setMaximumWidth(150)
+        btn_layout.addWidget(self.reset_prompt_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        layout.addStretch()
+        
+        return widget
+    
+    def on_template_changed(self, index):
+        """模板选择改变时的回调"""
+        templates = [
+            # 通用提示词
+            """你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+
+【任务要求】
+1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
+2. 根据题型给出对应的回答：
+
+【回答格式】
+
+📌 如果是编程题：
+- 提供完整的 Python 代码实现
+- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
+- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
+- 非Leetcode答题模式下，需根据题意处理好输入输出
+- 代码需包含必要的注释和边界处理
+- 简要说明算法思路和时间复杂度
+- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
+
+📌 如果是选择题：
+- 直接给出正确答案的序号（如：答案：B）
+- 简要解释选择理由（1-2句话）
+- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
+
+📌 如果是简答题/概念题：
+- 给出清晰、结构化的回答
+- 分点阐述关键要点
+- 适当举例说明
+- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
+
+📌 如果是系统设计题：
+- 给出系统架构设计思路
+- 列出关键技术选型
+- 说明核心流程和注意事项
+
+📌 如果是性格测试题：
+- 选择积极乐观、团队协作导向的选项
+- 体现责任心、学习能力、抗压能力等正面特质
+- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
+- 简要说明选择理由（1句话）
+
+
+
+【注意事项】
+- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
+- 回答要简洁专业，适合面试场景口头表达
+- 代码题必须提供可运行的完整代码
+- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
+- 每个题目之间用 --- 分割线隔开
+- 返回markdown格式""",
+            # 华为机考专用提示词
+            """
+你是一位华为机考答题助手。请分析屏幕截图中的编程题目，给出符合华为机考要求的完整可运行代码。
+
+【核心要求】
+1. 只输出完整的 Python 代码，不要有任何解释、注释或额外文字
+2. 代码必须能够直接复制粘贴到华为机考平台并正确运行
+3. 严格遵循题目描述的输入输出格式（特别注意空格、换行、分隔符）
+
+【输入处理规范】
+- 单行整数：n = int(input())
+- 单行多个整数：a, b = map(int, input().split())
+- 数组/列表：arr = list(map(int, input().split()))
+- 多行数据：使用 for 循环或 while 循环读取
+- 字符串：s = input().strip()
+- 注意：根据题目描述判断是否需要 .strip() 或 .split()
+
+【输出处理规范】
+- 单个结果：print(result)
+- 多个结果用空格分隔：print(' '.join(map(str, result_list)))
+- 多个结果用换行分隔：使用循环逐个 print()
+- 浮点数：print(f"{result:.2f}") 或 print(round(result, 2))
+- 特别注意：
+  * 题目要求末尾无空格时，使用 ' '.join() 而非手动拼接
+  * 题目要求特定格式时，严格按照格式输出
+  * 避免多余的换行或空格
+
+【代码风格】
+- 变量名简洁：使用 n, m, arr, res, i, j, x, y 等
+- 避免冗余命名：不用 result, temp, data, output 等
+- 逻辑清晰：适当使用函数封装复杂逻辑
+- 边界处理：考虑空输入、单元素、最大值等边界情况
+
+【常见陷阱规避】
+- 多组测试用例：使用 while True + try-except 或先读取用例数
+- 大数运算：注意 Python 自动支持大数，无需特殊处理
+- 时间复杂度：优先使用高效算法（哈希表、双指针、二分等）
+- 内存限制：避免不必要的大数组或递归深度过大
+
+【输出格式示例】
+✅ 正确：print(' '.join(map(str, [1, 2, 3])))  # 输出: 1 2 3
+❌ 错误：print(1, 2, 3)  # 输出: 1 2 3（有空格但不可控）
+
+✅ 正确：for item in result: print(item)  # 每行一个
+❌ 错误：print(result)  # 可能带括号和逗号
+
+【最终检查清单】
+□ 代码是否完整可运行？
+□ 输入处理是否符合题目描述？
+□ 输出格式是否完全匹配要求（空格、换行、分隔符）？
+□ 是否去除了所有注释和多余文字？
+□ 边界情况是否已处理？
+
+请根据题目要求，给出完整的、可运行的解决方案。"""
+        ]
+        
+        if 0 <= index < len(templates):
+            self.shared_prompt_input.setText(templates[index])
+            print(f"✅ 已切换到模板: {self.template_selector.currentText()}")
+    
+    def save_shared_prompt_config(self):
+        """保存共享提示词配置（Case1和Case2共用）"""
+        try:
+            prompt_text = self.shared_prompt_input.toPlainText()
+            
+            # 保存到文件
+            config_file = "prompt_config.json"
+            import json
+            
+            config_data = {
+                "shared_prompt": prompt_text,
+                "last_modified": self.get_current_time()
+            }
+            
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            
+            # 同步更新到主页提示词预览框（如果存在）
+            if hasattr(self, 'main_prompt_input') and self.main_prompt_input:
+                self.main_prompt_input.setText(prompt_text)
+            
+            print(f"💾 共享提示词已保存到 {config_file}")
+            self.statusBar().showMessage("✅ 提示词配置已保存", 3000)
+            
+        except Exception as e:
+            print(f"❌ 保存提示词失败: {e}")
+            self.statusBar().showMessage(f"❌ 保存失败: {str(e)}")
+    
+    def reset_to_default_prompt(self):
+        """恢复到默认提示词"""
+        self.template_selector.setCurrentIndex(0)  # 切换到通用提示词
+        self.statusBar().showMessage("✅ 已恢复到默认提示词", 2000)
+    
     def create_case1_tab(self):
         """创建 Case1 (Alt+X) 工作流配置标签页"""
         widget = QWidget()
@@ -797,6 +1049,7 @@ class MainWindow(QMainWindow):
 <p><b>快捷键：</b>Alt + X &nbsp;&nbsp; <b>耗时：</b>约20秒 &nbsp;&nbsp; <b>特点：</b>先OCR提取文字，再调用文本LLM分析</p>
 <p><b>工作流程：</b>按下 Alt+X → 截图保存 → OCR文字识别 → LLM分析 → 结果推送到手机</p>
 <p><b>适用场景：</b>日常练习、需要查看OCR文本、速度优先的场景</p>
+<p><b>提示词配置：</b>请在 📝 提示词 标签页中统一配置（Case1和Case2共用）</p>
         """
         workflow_info.setHtml(workflow_content)
         layout.addWidget(workflow_info)
@@ -842,7 +1095,7 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(top_config_layout)
         
-        # LLM 控制组
+        # LLM 控制组（移除提示词输入框，改用共享提示词）
         llm_group = QGroupBox("🤖 LLM 智能分析")
         llm_layout = QFormLayout()
         
@@ -853,56 +1106,10 @@ class MainWindow(QMainWindow):
         self.model_input = QLineEdit("LongCat-Flash-Chat")
         llm_layout.addRow("模型名称:", self.model_input)
         
-        self.prompt_input = QTextEdit()
-        self.prompt_input.setPlaceholderText("请输入提示词...")
-        self.prompt_input.setMaximumHeight(120)
-        self.prompt_input.setText("""你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
-
-【任务要求】
-1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
-2. 根据题型给出对应的回答：
-
-【回答格式】
-
-📌 如果是编程题：
-- 提供完整的 Python 代码实现
-- 变量名尽量简洁（能用单字母就用单字母，如 x, y, k, v, i, j, t,l,r 等）
-- 避免大众化命名（不要用 result, temp, data, output 等常见变量名）
-- 代码需包含必要的注释和边界处理
-- 简要说明算法思路和时间复杂度
-- 如有可能，同时给出经典解法和 Pythonic 解法（如列表推导式、生成器、内置函数等）
-
-📌 如果是选择题：
-- 直接给出正确答案的序号（如：答案：B）
-- 简要解释选择理由（1-2句话）
-- 如果识别到多个选择题，按题目序号依次作答（如：1. 答案：A, 2. 答案：C）
-
-📌 如果是简答题/概念题：
-- 给出清晰、结构化的回答
-- 分点阐述关键要点
-- 适当举例说明
-- 如果识别到多个简答/概念题，按题目序号依次作答（如：1. xxx  2. xxx）
-
-📌 如果是系统设计题：
-- 给出系统架构设计思路
-- 列出关键技术选型
-- 说明核心流程和注意事项
-
-📌 如果是性格测试题：
-- 选择积极乐观、团队协作导向的选项
-- 体现责任心、学习能力、抗压能力等正面特质
-- 保持前后作答一致性（若识别到相同/相似题目，选择相同选项）
-- 简要说明选择理由（1句话）
-
-
-
-【注意事项】
-- 只回答识别到的面试问题，忽略屏幕上的其他干扰信息
-- 回答要简洁专业，适合面试场景口头表达
-- 代码题必须提供可运行的完整代码
-- 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
-- 每个题目之间用 --- 分割线隔开""")
-        llm_layout.addRow("提示词:", self.prompt_input)
+        # 提示词配置提示
+        prompt_hint = QLabel("💡 提示词已在 📝 提示词 标签页中统一配置")
+        prompt_hint.setStyleSheet("color: #4ecca3; font-size: 12px; padding: 8px; background-color: #f0f9ff; border-radius: 4px;")
+        llm_layout.addRow("提示词:", prompt_hint)
         
         self.btn_llm = QPushButton("调用 LLM 分析")
         self.btn_llm.setEnabled(False)
@@ -2779,7 +2986,13 @@ class MainWindow(QMainWindow):
         
         api_key = self.api_key_input.text().strip()
         model = self.model_input.text().strip()
-        prompt = self.prompt_input.toPlainText().strip()
+        
+        # 【修改】优先使用共享提示词，如果没有则使用主页提示词
+        prompt = ""
+        if hasattr(self, 'shared_prompt_input') and self.shared_prompt_input:
+            prompt = self.shared_prompt_input.toPlainText().strip()
+        elif hasattr(self, 'main_prompt_input') and self.main_prompt_input:
+            prompt = self.main_prompt_input.toPlainText().strip()
         
         if not api_key or not model or not prompt:
             print("⚠️ 请填写完整的 LLM 配置！")
@@ -2855,8 +3068,15 @@ class MainWindow(QMainWindow):
     def start_kimi_analysis(self, image_path):
         """开始 Kimi 图片分析（支持 DeepSeek-OCR + EasyOCR 降级）"""
         try:
-            # 使用 main_app 中的提示词
-            prompt = """你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
+            # 【修改】优先使用共享提示词，如果没有则使用主页提示词
+            prompt = ""
+            if hasattr(self, 'shared_prompt_input') and self.shared_prompt_input:
+                prompt = self.shared_prompt_input.toPlainText().strip()
+            elif hasattr(self, 'main_prompt_input') and self.main_prompt_input:
+                prompt = self.main_prompt_input.toPlainText().strip()
+            else:
+                # 默认提示词
+                prompt = """你是一位专业的面试助手。请分析屏幕截图中的内容，识别出面试题目并给出专业回答。
 
 【任务要求】
 1. 从屏幕内容中提取面试相关问题（忽略无关信息如时间、浏览器标签等）
@@ -3069,7 +3289,7 @@ class MainWindow(QMainWindow):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def save_prompt_config(self):
-        """保存提示词配置"""
+        """保存提示词配置（主页）- 同步到共享提示词"""
         try:
             prompt_text = self.main_prompt_input.toPlainText()
             
@@ -3078,16 +3298,16 @@ class MainWindow(QMainWindow):
             import json
             
             config_data = {
-                "main_prompt": prompt_text,
+                "shared_prompt": prompt_text,  # 【修改】使用 shared_prompt 键
                 "last_modified": self.get_current_time()
             }
             
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=2)
             
-            # 同步更新到 Case1 的提示词输入框
-            if hasattr(self, 'prompt_input'):
-                self.prompt_input.setText(prompt_text)
+            # 同步更新到共享提示词输入框
+            if hasattr(self, 'shared_prompt_input') and self.shared_prompt_input:
+                self.shared_prompt_input.setText(prompt_text)
             
             print(f"💾 提示词已保存到 {config_file}")
             self.statusBar().showMessage("✅ 提示词配置已保存", 3000)
@@ -3107,17 +3327,21 @@ class MainWindow(QMainWindow):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 
-                # 加载提示词
-                if "main_prompt" in config_data:
+                # 【修改】优先加载 shared_prompt，兼容旧的 main_prompt
+                saved_prompt = None
+                if "shared_prompt" in config_data:
+                    saved_prompt = config_data["shared_prompt"]
+                elif "main_prompt" in config_data:
                     saved_prompt = config_data["main_prompt"]
+                
+                if saved_prompt:
+                    # 更新共享提示词（优先级最高）
+                    if hasattr(self, 'shared_prompt_input') and self.shared_prompt_input:
+                        self.shared_prompt_input.setText(saved_prompt)
                     
                     # 更新主页提示词
-                    if hasattr(self, 'main_prompt_input'):
+                    if hasattr(self, 'main_prompt_input') and self.main_prompt_input:
                         self.main_prompt_input.setText(saved_prompt)
-                    
-                    # 更新 Case1 提示词
-                    if hasattr(self, 'prompt_input'):
-                        self.prompt_input.setText(saved_prompt)
                     
                     print(f"✅ 已加载保存的提示词配置 (修改时间: {config_data.get('last_modified', '未知')})")
                 else:
