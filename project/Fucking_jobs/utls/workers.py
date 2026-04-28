@@ -718,7 +718,7 @@ class LLMWorker(QThread):
                 "messages": [
                     {"role": "user", "content": self.prompt}
                 ],
-                "max_tokens": 2000,
+                "max_tokens": 8192,
                 "temperature": 0.7
             }
 
@@ -894,7 +894,7 @@ class KimiWorker(QThread):
                     client = OpenAI(
                         api_key=api_key,
                         base_url=base_url,
-                        timeout=60  # 设置超时
+                        timeout=240  # 设置超时
                     )
                     
                     # 检查是否已被中断
@@ -968,7 +968,7 @@ class KimiWorker(QThread):
                     client = OpenAI(
                         api_key=self.SILICONFLOW_API_KEY,
                         base_url=self.SILICONFLOW_BASE_URL,
-                        timeout=60
+                        timeout=240
                     )
                     
                     # 检查是否已被中断
