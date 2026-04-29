@@ -2228,8 +2228,9 @@ class AutoTypeWorker(QThread):
                         if char == '\n' and line.strip():
                             pyautogui.typewrite(' ')
                         else:
-                            self._type_with_realistic_errors(char, delay=self.delay, error_rate=self.error_rate)
-                            pyautogui.typewrite(char, interval=self.delay)
+                            random_delay = random.uniform(self.delay * 0.5, self.delay * 1.5)
+                            self._type_with_realistic_errors(char, delay=random_delay, error_rate=self.error_rate)
+                            pyautogui.typewrite(char, interval=random_delay)
                     # 输入换行
                     if line.strip():
                         pyautogui.typewrite('\n')
@@ -2240,9 +2241,10 @@ class AutoTypeWorker(QThread):
                     # 普通行输入
                     line_content = line.strip()
                     for char in line_content:
+                        random_delay = random.uniform(self.delay * 0.5, self.delay * 2.5)
                         # 使用错误模拟打字
-                        self._type_with_realistic_errors(char, delay=self.delay, error_rate=self.error_rate)
-                        pyautogui.typewrite(char, interval=self.delay)
+                        self._type_with_realistic_errors(char, delay=random_delay, error_rate=self.error_rate)
+                        pyautogui.typewrite(char, interval=random_delay)
 
                     # 输入空格和换行
                     if line_content:
