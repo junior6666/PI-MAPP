@@ -24,6 +24,16 @@ else:
     # 开发环境
     base_dir = Path(__file__).parent
 
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径（兼容打包环境）"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的环境
+        base_path = Path(sys._MEIPASS)
+    else:
+        # 开发环境
+        base_path = Path(__file__).parent
+    return base_path / relative_path
+
 class BatchDetectionThread(QThread):
     """批量检测线程"""
     result_ready = Signal(str, object, object, float, object, list)  # 文件路径, 原图, 结果图, 耗时, 检测结果, 类别名称
@@ -2232,7 +2242,14 @@ class EnhancedDetectionUI(QMainWindow):
         self.model_manager = ModelManager()
         self.log_text = QTextEdit()
         self.init_ui()
-        self.setWindowIcon(self.create_enhanced_icon())
+        
+        # 设置窗口图标
+        icon_path = get_resource_path("logo.ico")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+            print(f"✅ 图标加载成功: {icon_path}")
+        else:
+            print(f"⚠️ 图标文件不存在: {icon_path}")
 
         # 应用样式
         self.setStyleSheet(StyleManager.get_main_stylesheet())
@@ -3065,51 +3082,7 @@ class EnhancedDetectionUI(QMainWindow):
         self.log_text.clear()
         self.log_message("🗑️ 日志已清除")
 
-    def create_enhanced_icon(self, size=64):
-        """创建增强的应用图标"""
-        icon = QIcon()
 
-        for s in [16, 32, 48, 64, 128, 256]:
-            pixmap = QPixmap(s, s)
-            pixmap.fill(Qt.transparent)
-
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.Antialiasing)
-
-            # 渐变背景
-            gradient = QRadialGradient(s / 2, s / 2, s / 2)
-            gradient.setColorAt(0, QColor("#3498db"))
-            gradient.setColorAt(1, QColor("#2c3e50"))
-
-            painter.setBrush(QBrush(gradient))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(0, 0, s, s)
-
-            # 十字准星
-            painter.setPen(QPen(QColor("white"), max(1, s // 32), Qt.SolidLine))
-            center = s / 2
-            arm_len = s * 0.25
-
-            painter.drawLine(center - arm_len, center, center + arm_len, center)
-            painter.drawLine(center, center - arm_len, center, center + arm_len)
-
-            # 中心圆点
-            painter.setBrush(QBrush(QColor("white")))
-            r = max(2, s // 16)
-            painter.drawEllipse(center - r, center - r, 2 * r, 2 * r)
-
-            # AI 眼睛效果
-            painter.setPen(QPen(QColor("#e74c3c"), max(1, s // 64), Qt.SolidLine))
-            painter.setBrush(Qt.NoBrush)
-
-            # 外圈
-            outer_r = s * 0.35
-            painter.drawEllipse(center - outer_r, center - outer_r, 2 * outer_r, 2 * outer_r)
-
-            painter.end()
-            icon.addPixmap(pixmap)
-
-        return icon
 
 def main():
     app = QApplication(sys.argv)
@@ -3118,6 +3091,14 @@ def main():
     app.setApplicationName("Enhanced Object Detection System")
     app.setApplicationVersion("2.0")
     app.setOrganizationName("AI Vision Lab")
+
+    # 设置应用图标
+    icon_path = get_resource_path("logo.ico")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
+        print(f"✅ 应用程序图标加载成功: {icon_path}")
+    else:
+        print(f"⚠️ 应用程序图标文件不存在: {icon_path}")
 
     # 设置高DPI缩放
     # app.setAttribute(Qt.AA_EnableHighDpiScaling)

@@ -1,0 +1,3 @@
+conda activate yolo_pack
+cd H:\pycharm_project\github_projects\PI-MAPP\project\universal_object_detection_plus
+python -m PyInstaller --onefile --windowed --name="UniversalObjectDetection1.0.2" --icon="logo.ico" --add-data "csv_reports;csv_reports" --add-data "logo.ico;." --hidden-import=torch  enhanced_ui_main.py
