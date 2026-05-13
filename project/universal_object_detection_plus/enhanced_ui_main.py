@@ -127,6 +127,7 @@ class MultiCameraMonitorThread(QThread):
     camera_error = Signal(int, str)
     camera_status = Signal(int, str)
     finished = Signal()
+    monitor_log_path = Signal(str)  # 监控日志路径信号
 
     def __init__(self, model, camera_ids, conf=0.25, fps=10):
         super().__init__()
@@ -137,6 +138,8 @@ class MultiCameraMonitorThread(QThread):
         self.caps = {}  # {id: cv2.VideoCapture}
         self.active = {}  # {id: bool} 是否在线
         self.last_t = {}  # {id: float}
+        self.frame_counts = {}  # {id: int} 每个摄像头的帧计数
+        self.log_files = {}  # {id: file} 每个摄像头的日志文件
 
         # 线程同步
         self._run_flag = True
@@ -196,6 +199,13 @@ class MultiCameraMonitorThread(QThread):
                 self.caps[cid] = cap
                 self.active[cid] = True
                 self.last_t[cid] = 0.0
+                self.frame_counts[cid] = 0
+                
+                # 初始化摄像头日志
+                log_path = self._init_camera_monitor_log(cid)
+                if log_path:
+                    self.monitor_log_path.emit(log_path)
+                
                 self.camera_status.emit(cid, "已连接")
             else:
                 self.camera_error.emit(cid, "无法打开")
@@ -205,6 +215,12 @@ class MultiCameraMonitorThread(QThread):
         for cap in self.caps.values():
             cap.release()
         self.caps.clear()
+        
+        # 关闭所有日志文件
+        for log_file in self.log_files.values():
+            if log_file:
+                log_file.close()
+        self.log_files.clear()
 
     def _grab_and_infer(self, cid, cls_names):
         cap = self.caps.get(cid)
@@ -231,6 +247,11 @@ class MultiCameraMonitorThread(QThread):
             out_img = results[0].plot()
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             rgb_out = cv2.cvtColor(out_img, cv2.COLOR_BGR2RGB)
+            
+            # 记录监控日志
+            self._write_monitor_log(cid, self.frame_counts[cid], 30, results, cls_names)
+            self.frame_counts[cid] += 1
+            
             self.camera_result_ready.emit(cid, rgb_frame, rgb_out,
                                           infer_ms / 1000.0, results, cls_names)
             return True
@@ -257,6 +278,86 @@ class MultiCameraMonitorThread(QThread):
         else:
             cap.release()
             self._reconnect_later(cid)
+    
+    def _init_camera_monitor_log(self, camera_id):
+        """初始化摄像头监控日志文件"""
+        try:
+            # 获取软件所在目录
+            if getattr(sys, 'frozen', False):
+                # 打包后的环境
+                app_dir = Path(sys.executable).parent
+            else:
+                # 开发环境
+                app_dir = Path(__file__).parent
+            
+            # 创建monitor_history目录
+            log_dir = app_dir / "monitor_history"
+            log_dir.mkdir(exist_ok=True)
+            
+            # 生成日志文件名（包含时间戳）
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            log_filename = f"monitor_camera_{camera_id}_{timestamp}.txt"
+            log_path = log_dir / log_filename
+            
+            log_file = open(log_path, 'w', encoding='utf-8')
+            # 写入日志头
+            log_file.write("=" * 80 + "\n")
+            log_file.write("多摄像头实时监控日志\n")
+            log_file.write(f"摄像头ID: {camera_id}\n")
+            log_file.write(f"开始时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write("=" * 80 + "\n\n")
+            log_file.write(f"{'时间(秒)':<12} {'检测结果':<12} {'目标信息摘要'}\n")
+            log_file.write("-" * 80 + "\n")
+            log_file.flush()
+            
+            self.log_files[camera_id] = log_file
+            return str(log_path)
+        except Exception as e:
+            print(f"初始化摄像头监控日志失败: {e}")
+            return None
+    
+    def _write_monitor_log(self, camera_id, frame_idx, fps, results, class_names):
+        """写入监控日志"""
+        log_file = self.log_files.get(camera_id)
+        if not log_file:
+            return
+        
+        try:
+            # 计算时间（秒）
+            timestamp = frame_idx / fps if fps > 0 else frame_idx * 0.033
+            
+            # 检查是否检测到目标
+            has_detection = False
+            detection_summary = "无目标"
+            
+            if results and results[0].boxes and len(results[0].boxes) > 0:
+                has_detection = True
+                boxes = results[0].boxes
+                classes = boxes.cls.cpu().numpy().astype(int)
+                confidences = boxes.conf.cpu().numpy()
+                
+                # 统计类别
+                class_counts = {}
+                for cls in classes:
+                    class_name = class_names[cls] if cls < len(class_names) else f"类别{cls}"
+                    class_counts[class_name] = class_counts.get(class_name, 0) + 1
+                
+                # 生成摘要
+                summary_parts = [f"{name}:{count}" for name, count in class_counts.items()]
+                avg_conf = np.mean(confidences)
+                detection_summary = f"{len(classes)}个目标 ({', '.join(summary_parts)}, 置信度:{avg_conf:.2f})"
+            
+            # 写入日志行
+            result_str = "✓ 检测到" if has_detection else "✗ 未检测"
+            log_line = f"{timestamp:<12.2f} {result_str:<12} {detection_summary}\n"
+            log_file.write(log_line)
+            
+            # 每100帧刷新一次，平衡性能和数据安全性
+            if frame_idx % 100 == 0:
+                log_file.flush()
+                
+        except Exception as e:
+            print(f"写入监控日志失败 (摄像头{camera_id}): {e}")
 
 
 class ModelSelectionDialog(QDialog):
@@ -1527,6 +1628,7 @@ class MonitoringWidget(QWidget):
         self.monitoring_thread.camera_result_ready.connect(self.update_camera_display)
         self.monitoring_thread.camera_error.connect(self.handle_camera_error)
         self.monitoring_thread.finished.connect(self.on_monitoring_finished)
+        self.monitoring_thread.monitor_log_path.connect(self.on_monitor_log_created)
 
         self.monitoring_thread.start()
 
@@ -1647,6 +1749,16 @@ class MonitoringWidget(QWidget):
 
         for camera_id in self.camera_labels:
             self.camera_labels[camera_id]['status'].setText("状态: 已停止")
+    
+    def on_monitor_log_created(self, log_path):
+        """监控日志创建回调"""
+        # 通过父窗口显示日志路径（如果有父窗口）
+        parent = self.parent()
+        while parent and not hasattr(parent, 'log_message'):
+            parent = parent.parent()
+        
+        if parent and hasattr(parent, 'log_message'):
+            parent.log_message(f"📝 监控日志已保存: {log_path}")
 
     def display_image(self, img_array, label):
         """显示图像"""
@@ -2038,6 +2150,7 @@ class DetectionThread(QThread):
     error_occurred = Signal(str)
     fps_updated = Signal(float)
     finished = Signal()
+    video_log_path = Signal(str)  # 视频日志路径信号
 
     def __init__(self, model, source_type, source_path=None, camera_id=0, confidence_threshold=0.25):
         super().__init__()
@@ -2051,6 +2164,7 @@ class DetectionThread(QThread):
         self.frame_count = 0
         self.fps_counter = 0
         self.last_fps_time = time.time()
+        self.video_log_file = None  # 视频日志文件句柄
 
     def run(self):
         self.is_running = True
@@ -2104,8 +2218,14 @@ class DetectionThread(QThread):
             return
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = 0
         class_names = list(self.model.names.values())
+
+        # 初始化视频日志
+        log_path = self._init_video_log(self.source_path)
+        if log_path:
+            self.video_log_path.emit(log_path)
 
         self.status_changed.emit(f"开始处理视频 (共{total_frames}帧)...")
 
@@ -2128,6 +2248,10 @@ class DetectionThread(QThread):
 
             self.result_ready.emit(original_img, result_img, end_time - start_time, results, class_names)
 
+            # 记录视频日志
+            if self.video_log_file:
+                self._write_video_log(frame_count, fps, results, class_names)
+
             frame_count += 1
             if total_frames > 0:
                 progress = int((frame_count / total_frames) * 100)
@@ -2144,6 +2268,11 @@ class DetectionThread(QThread):
             time.sleep(0.033)  # 约30fps
 
         cap.release()
+        
+        # 关闭日志文件
+        if self.video_log_file:
+            self.video_log_file.close()
+            self.video_log_file = None
 
     def _process_camera(self):
         """处理摄像头"""
@@ -2155,9 +2284,17 @@ class DetectionThread(QThread):
         # 设置摄像头参数
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30  # 默认FPS
 
         class_names = list(self.model.names.values())
+        
+        # 初始化摄像头日志
+        log_path = self._init_camera_log(self.camera_id)
+        if log_path:
+            self.video_log_path.emit(log_path)
+        
         self.status_changed.emit(f"摄像头 {self.camera_id} 已启动...")
 
         while cap.isOpened() and self.is_running:
@@ -2179,6 +2316,10 @@ class DetectionThread(QThread):
 
             self.result_ready.emit(original_img, result_img, end_time - start_time, results, class_names)
 
+            # 记录摄像头日志
+            if self.video_log_file:
+                self._write_video_log(self.frame_count, fps, results, class_names)
+
             # 更新FPS
             self._update_fps()
 
@@ -2190,6 +2331,11 @@ class DetectionThread(QThread):
             time.sleep(0.033)  # 约30fps
 
         cap.release()
+        
+        # 关闭日志文件
+        if self.video_log_file:
+            self.video_log_file.close()
+            self.video_log_file = None
 
     def _update_fps(self):
         """更新FPS计算"""
@@ -2222,6 +2368,108 @@ class DetectionThread(QThread):
     def stop(self):
         self.is_running = False
         self.status_changed.emit(f"检测结束!")
+    
+    def _init_video_log(self, video_path):
+        """初始化视频日志文件"""
+        try:
+            video_file = Path(video_path)
+            log_dir = video_file.parent
+            log_filename = f"{video_file.stem}_detection_log.txt"
+            log_path = log_dir / log_filename
+            
+            self.video_log_file = open(log_path, 'w', encoding='utf-8')
+            # 写入日志头
+            self.video_log_file.write("=" * 80 + "\n")
+            self.video_log_file.write("视频目标检测日志\n")
+            self.video_log_file.write(f"视频文件: {video_file.name}\n")
+            self.video_log_file.write(f"检测时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            self.video_log_file.write("=" * 80 + "\n\n")
+            self.video_log_file.write(f"{'时间(秒)':<12} {'检测结果':<12} {'目标信息摘要'}\n")
+            self.video_log_file.write("-" * 80 + "\n")
+            self.video_log_file.flush()
+            
+            return str(log_path)
+        except Exception as e:
+            print(f"初始化视频日志失败: {e}")
+            return None
+    
+    def _init_camera_log(self, camera_id):
+        """初始化摄像头日志文件"""
+        try:
+            # 获取软件所在目录
+            if getattr(sys, 'frozen', False):
+                # 打包后的环境
+                app_dir = Path(sys.executable).parent
+            else:
+                # 开发环境
+                app_dir = Path(__file__).parent
+            
+            # 创建monitor_history目录
+            log_dir = app_dir / "monitor_history"
+            log_dir.mkdir(exist_ok=True)
+            
+            # 生成日志文件名（包含时间戳）
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            log_filename = f"camera_{camera_id}_{timestamp}.txt"
+            log_path = log_dir / log_filename
+            
+            self.video_log_file = open(log_path, 'w', encoding='utf-8')
+            # 写入日志头
+            self.video_log_file.write("=" * 80 + "\n")
+            self.video_log_file.write("摄像头实时监控日志\n")
+            self.video_log_file.write(f"摄像头ID: {camera_id}\n")
+            self.video_log_file.write(f"开始时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            self.video_log_file.write("=" * 80 + "\n\n")
+            self.video_log_file.write(f"{'时间(秒)':<12} {'检测结果':<12} {'目标信息摘要'}\n")
+            self.video_log_file.write("-" * 80 + "\n")
+            self.video_log_file.flush()
+            
+            return str(log_path)
+        except Exception as e:
+            print(f"初始化摄像头日志失败: {e}")
+            return None
+    
+    def _write_video_log(self, frame_idx, fps, results, class_names):
+        """写入视频日志"""
+        if not self.video_log_file:
+            return
+        
+        try:
+            # 计算时间（秒）
+            timestamp = frame_idx / fps if fps > 0 else frame_idx * 0.033
+            
+            # 检查是否检测到目标
+            has_detection = False
+            detection_summary = "无目标"
+            
+            if results and results[0].boxes and len(results[0].boxes) > 0:
+                has_detection = True
+                boxes = results[0].boxes
+                classes = boxes.cls.cpu().numpy().astype(int)
+                confidences = boxes.conf.cpu().numpy()
+                
+                # 统计类别
+                class_counts = {}
+                for cls in classes:
+                    class_name = class_names[cls] if cls < len(class_names) else f"类别{cls}"
+                    class_counts[class_name] = class_counts.get(class_name, 0) + 1
+                
+                # 生成摘要
+                summary_parts = [f"{name}:{count}" for name, count in class_counts.items()]
+                avg_conf = np.mean(confidences)
+                detection_summary = f"{len(classes)}个目标 ({', '.join(summary_parts)}, 置信度:{avg_conf:.2f})"
+            
+            # 写入日志行
+            result_str = "✓ 检测到" if has_detection else "✗ 未检测"
+            log_line = f"{timestamp:<12.2f} {result_str:<12} {detection_summary}\n"
+            self.video_log_file.write(log_line)
+            
+            # 每100帧刷新一次，平衡性能和数据安全性
+            if frame_idx % 100 == 0:
+                self.video_log_file.flush()
+                
+        except Exception as e:
+            print(f"写入视频日志失败: {e}")
 
 class EnhancedDetectionUI(QMainWindow):
     """增强的检测UI主窗口"""
@@ -2772,6 +3020,7 @@ class EnhancedDetectionUI(QMainWindow):
         self.detection_thread.status_changed.connect(self.statusBar().showMessage)
         self.detection_thread.error_occurred.connect(self.log_message)
         self.detection_thread.finished.connect(self.on_detection_finished)
+        self.detection_thread.video_log_path.connect(self.on_video_log_created)
 
         self.update_detection_ui_state(True)
         self.tab_widget.setCurrentIndex(0)  # 切换到实时检测
@@ -2905,6 +3154,10 @@ class EnhancedDetectionUI(QMainWindow):
         self.update_detection_ui_state(False)
         self.pause_btn.setText("⏸️ 暂停")
         self.progress_bar.setValue(0)
+    
+    def on_video_log_created(self, log_path):
+        """视频日志创建回调"""
+        self.log_message(f"📝 视频检测日志已保存: {log_path}")
 
     def show_batch_result(self, index):
         """显示批量结果"""

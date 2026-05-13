@@ -1,8 +1,12 @@
-# Enhanced Object Detection System v2.0 🚀
+# Enhanced Object Detection System v2.1 🚀
 
 一个全面优化的通用目标检测系统，基于YOLO，具有现代化渐变UI和强大功能。
 * [视频介绍](https://www.bilibili.com/video/BV1FVtwz8EZB/?vd_source=ea444bcb59e16e58cfdca990f3514384)
 * [预测效果](README_UI_demo.md)
+* 2026 05 13更新
+* 新增特性 软件大小从2GB 下降到299Mb
+* 新增 视频检测日志 监控日志功能 可快速筛查长时视频 根据日志定位
+
 ---
 ![Enhanced Detection System](https://img.shields.io/badge/Version-2.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
