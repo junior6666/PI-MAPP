@@ -2191,7 +2191,7 @@ class AutoTypeWorker(QThread):
             time.sleep(5)
             print("开始输入...")
             self.status_update.emit("正在输入代码...")
-
+            lines = [line for line in lines if line.strip()]
             last_leading_spaces = None
             need_home = False
 

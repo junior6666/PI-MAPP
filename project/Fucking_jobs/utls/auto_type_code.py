@@ -106,7 +106,7 @@ def type_code_from_file(file_path, delay=0.01):
 
     last_leading_spaces = None
     need_home = False
-
+    lines = [line for line in lines if line.strip()]
     for line_idx, line in enumerate(lines):
 
         if getattr(type_code_from_file, '_stop_flag', False):
