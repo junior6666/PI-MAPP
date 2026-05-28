@@ -1099,9 +1099,21 @@ class MainWindow(QMainWindow):
         llm_group = QGroupBox("🤖 LLM 智能分析")
         llm_layout = QFormLayout()
         
-        self.api_key_input = QLineEdit("ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y")
+        self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.Password)
-        llm_layout.addRow("API Key:", self.api_key_input)
+        self.api_key_input.setPlaceholderText("请填入 LongCat API Key")
+        self.api_key_input.textChanged.connect(lambda _: self._on_api_key_changed())
+        api_key_widget = QWidget()
+        api_key_hlayout = QHBoxLayout(api_key_widget)
+        api_key_hlayout.setContentsMargins(0, 0, 0, 0)
+        api_key_hlayout.setSpacing(6)
+        api_key_hlayout.addWidget(self.api_key_input, stretch=1)
+        btn_copy_longcat = QPushButton("📋 获取")
+        btn_copy_longcat.setToolTip("复制获取地址到剪贴板")
+        btn_copy_longcat.setMaximumWidth(70)
+        btn_copy_longcat.clicked.connect(lambda: self._copy_api_url("https://longcat.chat/platform/api_keys", "LongCat"))
+        api_key_hlayout.addWidget(btn_copy_longcat)
+        llm_layout.addRow("LongCat API Key:", api_key_widget)
         
         self.model_input = QLineEdit("LongCat-Flash-Chat")
         llm_layout.addRow("模型名称:", self.model_input)
@@ -1518,15 +1530,38 @@ class MainWindow(QMainWindow):
         self.case2_hotkey_input = QLineEdit("<alt>+z")
         quick_layout.addRow("热键组合:", self.case2_hotkey_input)
         
-        self.kimi_api_key_input = QLineEdit("sk-v07YQ9sffsU4znH1hbODXsFsz7tkQrm6qpcYJoXLm4cqqaiE")
+        self.kimi_api_key_input = QLineEdit()
         self.kimi_api_key_input.setEchoMode(QLineEdit.Password)
-        quick_layout.addRow("Kimi API Key:", self.kimi_api_key_input)
+        self.kimi_api_key_input.setPlaceholderText("请填入 Kimi API Key")
+        self.kimi_api_key_input.textChanged.connect(lambda _: self._on_api_key_changed())
+        kimi_key_widget = QWidget()
+        kimi_key_hlayout = QHBoxLayout(kimi_key_widget)
+        kimi_key_hlayout.setContentsMargins(0, 0, 0, 0)
+        kimi_key_hlayout.setSpacing(6)
+        kimi_key_hlayout.addWidget(self.kimi_api_key_input, stretch=1)
+        btn_copy_kimi = QPushButton("📋 获取")
+        btn_copy_kimi.setToolTip("复制获取地址到剪贴板")
+        btn_copy_kimi.setMaximumWidth(70)
+        btn_copy_kimi.clicked.connect(lambda: self._copy_api_url("https://platform.moonshot.cn/console/api-keys", "Kimi"))
+        kimi_key_hlayout.addWidget(btn_copy_kimi)
+        quick_layout.addRow("Kimi API Key:", kimi_key_widget)
 
         # 备用模型配置（SiliconFlow）
-        self.backup_api_key_input = QLineEdit("sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln")
+        self.backup_api_key_input = QLineEdit()
         self.backup_api_key_input.setEchoMode(QLineEdit.Password)
-        self.backup_api_key_input.setPlaceholderText("备用模型 API Key")
-        quick_layout.addRow("备用 API Key:", self.backup_api_key_input)
+        self.backup_api_key_input.setPlaceholderText("请填入 SiliconFlow API Key")
+        self.backup_api_key_input.textChanged.connect(lambda _: self._on_api_key_changed())
+        sf_key_widget = QWidget()
+        sf_key_hlayout = QHBoxLayout(sf_key_widget)
+        sf_key_hlayout.setContentsMargins(0, 0, 0, 0)
+        sf_key_hlayout.setSpacing(6)
+        sf_key_hlayout.addWidget(self.backup_api_key_input, stretch=1)
+        btn_copy_sf = QPushButton("📋 获取")
+        btn_copy_sf.setToolTip("复制获取地址到剪贴板")
+        btn_copy_sf.setMaximumWidth(70)
+        btn_copy_sf.clicked.connect(lambda: self._copy_api_url("https://cloud.siliconflow.cn/i/A6FuRXZM", "SiliconFlow"))
+        sf_key_hlayout.addWidget(btn_copy_sf)
+        quick_layout.addRow("SiliconFlow API Key:", sf_key_widget)
 
         self.backup_base_url_input = QLineEdit("https://api.siliconflow.cn/v1")
         self.backup_base_url_input.setPlaceholderText("备用模型 Base URL")
@@ -2477,18 +2512,30 @@ class MainWindow(QMainWindow):
             
             print(f"📝 使用 {result_source} 的最新结果进行代码整理...")
             
+            # 获取 LongCat API Key（用于代码整理）
+            longcat_key = self.api_key_input.text().strip()
+            
+            # 获取 Case3 自定义提示词
+            case3_prompt = None
+            if hasattr(self, 'case3_prompt_input') and self.case3_prompt_input:
+                case3_prompt = self.case3_prompt_input.toPlainText().strip()
+            
             # 创建代码整理Worker - 根据来源传递对应的结果
             if result_source == "Kimi":
                 self.code_organize_worker = CodeOrganizeWorker(
                     kimi_result=latest_result,
                     llm_result=None,  # 不传递旧结果
-                    save_dir="./code_output"
+                    save_dir="./code_output",
+                    custom_prompt=case3_prompt,
+                    longcat_api_key=longcat_key
                 )
             else:  # LLM
                 self.code_organize_worker = CodeOrganizeWorker(
                     kimi_result=None,  # 不传递旧结果
                     llm_result=latest_result,
-                    save_dir="./code_output"
+                    save_dir="./code_output",
+                    custom_prompt=case3_prompt,
+                    longcat_api_key=longcat_key
                 )
             
             # 连接信号
@@ -2945,7 +2992,8 @@ class MainWindow(QMainWindow):
             self.websocket_worker.send_message("[STATUS:OCR分析中]", silent=True)
         
         # 创建并启动 OCR 工作线程
-        self.ocr_worker = OCRWorker(self.current_image_path)
+        siliconflow_key = self.backup_api_key_input.text().strip()
+        self.ocr_worker = OCRWorker(self.current_image_path, siliconflow_api_key=siliconflow_key)
         self.ocr_worker.ocr_completed.connect(self.on_ocr_completed)
         self.ocr_worker.error_occurred.connect(self.on_error)
         self.ocr_worker.start()
@@ -3123,8 +3171,15 @@ class MainWindow(QMainWindow):
 - 如果屏幕上有多个题目，按题号依次作答（1., 2., 3. ...）
 - 每个题目之间用 --- 分割线隔开"""
             
-            # 使用 use_LLM_kimi.py 中的 API Key
-            api_key = "sk-v07YQ9sffsU4znH1hbODXsFsz7tkQrm6qpcYJoXLm4cqqaiE"
+            # 从 UI 获取 Kimi API Key
+            api_key = self.kimi_api_key_input.text().strip()
+            if not api_key:
+                print("⚠️ 请先在 Case2 标签页中填写 Kimi API Key！")
+                self.statusBar().showMessage("⚠️ 请先填写 Kimi API Key！")
+                return
+            
+            # 获取 SiliconFlow API Key（用于备选模型）
+            siliconflow_key = self.backup_api_key_input.text().strip()
             
             print(f"🤖 开始 Kimi 分析...")
             self.statusBar().showMessage("正在调用 Kimi 分析图片...")
@@ -3144,7 +3199,7 @@ class MainWindow(QMainWindow):
                     print(f"⚠️ Kimi 任务中断异常: {e}")
             
             # 创建并启动 Kimi 工作线程
-            self.kimi_worker = KimiWorker(api_key, image_path, prompt)
+            self.kimi_worker = KimiWorker(api_key, image_path, prompt, siliconflow_api_key=siliconflow_key)
             self.kimi_worker.kimi_completed.connect(self.on_kimi_completed)
             self.kimi_worker.error_occurred.connect(self.on_error)
             self.kimi_worker.start()
@@ -3316,11 +3371,93 @@ class MainWindow(QMainWindow):
             print(f"❌ 保存提示词失败: {e}")
             self.statusBar().showMessage(f"❌ 保存失败: {str(e)}")
     
+    def _on_api_key_changed(self):
+        """API Key 变更时自动保存配置"""
+        # 使用防抖定时器，避免频繁写入
+        if not hasattr(self, '_api_key_save_timer'):
+            self._api_key_save_timer = QTimer()
+            self._api_key_save_timer.setSingleShot(True)
+            self._api_key_save_timer.setInterval(1000)  # 1秒防抖
+            self._api_key_save_timer.timeout.connect(self.save_api_keys_config)
+        self._api_key_save_timer.start()
+    
+    def _copy_api_url(self, url, name):
+        """复制 API Key 获取链接到剪贴板"""
+        from PySide6.QtWidgets import QApplication as QtApp
+        clipboard = QtApp.clipboard()
+        clipboard.setText(url)
+        self.statusBar().showMessage(f"✅ {name} API Key 获取地址已复制到剪贴板", 3000)
+        # 给点击的按钮临时反馈
+        btn = self.sender()
+        if btn:
+            original_text = btn.text()
+            btn.setText("✅ 已复制")
+            QTimer.singleShot(2000, lambda: btn.setText(original_text))
+    
+    def save_api_keys_config(self):
+        """保存 API Keys 到配置文件（持久化）"""
+        try:
+            import json
+            
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.getcwd()
+            
+            config_data = {
+                'longcat_api_key': self.api_key_input.text().strip(),
+                'kimi_api_key': self.kimi_api_key_input.text().strip(),
+                'siliconflow_api_key': self.backup_api_key_input.text().strip(),
+            }
+            
+            config_file = os.path.join(base_dir, 'api_keys_config.json')
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"💾 API Keys 配置已保存: {config_file}")
+            
+        except Exception as e:
+            print(f"❌ 保存 API Keys 配置失败: {e}")
+    
+    def load_api_keys_config(self):
+        """从配置文件加载 API Keys（持久化）"""
+        try:
+            import json
+            
+            # 使用 sys.executable 的目录作为基准，兼容打包环境
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = os.getcwd()
+            
+            config_file = os.path.join(base_dir, 'api_keys_config.json')
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                if config_data.get('longcat_api_key'):
+                    self.api_key_input.setText(config_data['longcat_api_key'])
+                if config_data.get('kimi_api_key'):
+                    self.kimi_api_key_input.setText(config_data['kimi_api_key'])
+                if config_data.get('siliconflow_api_key'):
+                    self.backup_api_key_input.setText(config_data['siliconflow_api_key'])
+                
+                print(f"✅ 已加载 API Keys 配置")
+            else:
+                print("ℹ️ 未找到 API Keys 配置文件，请手动填写")
+                
+        except Exception as e:
+            print(f"⚠️ 加载 API Keys 配置失败: {e}")
+    
     def load_saved_config(self):
         """加载保存的配置"""
         try:
             import json
             import os
+            
+            # 加载 API Keys 配置
+            self.load_api_keys_config()
             
             config_file = "prompt_config.json"
             if os.path.exists(config_file):

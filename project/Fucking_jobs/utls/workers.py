@@ -388,8 +388,7 @@ class OCRWorker(QThread):
     ocr_completed = Signal(str, float)  # OCR 完成信号，参数为识别文本和耗时（秒）
     error_occurred = Signal(str)  # 错误信号
     
-    # SiliconFlow API 配置
-    SILICONFLOW_API_KEY = "sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln"
+    # SiliconFlow Base URL（非敏感信息）
     SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
     
     # 类级别的单例 Reader（避免重复加载模型导致内存泄漏）
@@ -404,9 +403,10 @@ class OCRWorker(QThread):
     _backup_success_threshold = 10  # 备选模型连续成功阈值（用于尝试恢复主模型）
     _auto_recovery_enabled = True  # 启用自动恢复机制
 
-    def __init__(self, image_path):
+    def __init__(self, image_path, siliconflow_api_key=None):
         super().__init__()
         self.image_path = image_path
+        self.siliconflow_api_key = siliconflow_api_key or ""
         self._interrupted = False
     
     @classmethod
@@ -497,7 +497,7 @@ class OCRWorker(QThread):
                     
                     # 创建客户端
                     client = OpenAI(
-                        api_key=self.SILICONFLOW_API_KEY,
+                        api_key=self.siliconflow_api_key,
                         base_url=self.SILICONFLOW_BASE_URL,
                         timeout=60
                     )
@@ -811,8 +811,7 @@ class KimiWorker(QThread):
         'Pro/moonshotai/Kimi-K2.6'
     ]
     
-    # SiliconFlow API 配置
-    SILICONFLOW_API_KEY = "sk-lhxzzjsezqnknpsjjgiyuzlbkiesxzyosmrcwzdgmvdknvln"
+    # SiliconFlow Base URL（非敏感信息）
     SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
     
     # 类级别计数器：记录主模型连续失败次数（跨线程实例共享）
@@ -824,11 +823,12 @@ class KimiWorker(QThread):
     _backup_success_threshold = 10  # 备选模型连续成功阈值（用于尝试恢复主模型）
     _auto_recovery_enabled = True  # 启用自动恢复机制
     
-    def __init__(self, api_key, image_path, prompt):
+    def __init__(self, api_key, image_path, prompt, siliconflow_api_key=None):
         super().__init__()
         self.api_key = api_key
         self.image_path = image_path
         self.prompt = prompt
+        self.siliconflow_api_key = siliconflow_api_key or ""
         self._interrupted = False
 
     def run(self):
@@ -887,7 +887,7 @@ class KimiWorker(QThread):
                         base_url = "https://api.moonshot.cn/v1"
                     else:
                         # Qwen 等非 Kimi 模型使用 SiliconFlow
-                        api_key = self.SILICONFLOW_API_KEY
+                        api_key = self.siliconflow_api_key
                         base_url = self.SILICONFLOW_BASE_URL
                     
                     print(f"🤖 {model_display} 请求中...")
@@ -966,7 +966,7 @@ class KimiWorker(QThread):
                     
                     # 创建客户端
                     client = OpenAI(
-                        api_key=self.SILICONFLOW_API_KEY,
+                        api_key=self.siliconflow_api_key,
                         base_url=self.SILICONFLOW_BASE_URL,
                         timeout=240
                     )
@@ -1899,17 +1899,17 @@ class CodeOrganizeWorker(QThread):
     file_saved = Signal(str)  # 文件保存信号，参数为文件路径
     code_to_clipboard = Signal(str)  # 复制到剪切板信号，参数为过滤后的代码
     
-    # LongCat API 配置
-    LONGCAT_API_KEY = "ak_2Fw1hL0xA8H33yj1wn4pW8ag0w84y"
+    # LongCat Base URL 和模型（非敏感信息）
     LONGCAT_BASE_URL = "https://api.longcat.chat/openai/v1/chat/completions"
     LONGCAT_MODEL = "LongCat-Flash-Chat"
     
-    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output", custom_prompt=None):
+    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output", custom_prompt=None, longcat_api_key=None):
         super().__init__()
         self.kimi_result = kimi_result  # KimiWorker的结果（优先使用）
         self.llm_result = llm_result    # LLMWorker的结果（备选）
         self.save_dir = save_dir
         self.custom_prompt = custom_prompt  # 自定义提示词
+        self.longcat_api_key = longcat_api_key or ""
         self._interrupted = False
         self._session = None
         os.makedirs(save_dir, exist_ok=True)
@@ -1996,7 +1996,7 @@ class CodeOrganizeWorker(QThread):
             self._session = requests.Session()
             
             headers = {
-                "Authorization": f"Bearer {self.LONGCAT_API_KEY}",
+                "Authorization": f"Bearer {self.longcat_api_key}",
                 "Content-Type": "application/json"
             }
             
@@ -2191,12 +2191,17 @@ class AutoTypeWorker(QThread):
             time.sleep(5)
             print("开始输入...")
             self.status_update.emit("正在输入代码...")
-            lines = [line for line in lines if line.strip()]
+            # 去除代码中空行
+            # lines = [line for line in lines if line.strip()]
             last_leading_spaces = None
             need_home = False
 
             # 逐行输入
             for line_idx, line in enumerate(lines):
+                if not line.strip():
+                    pyautogui.press('enter')  # 仅敲空行
+                    continue  # 不更新 last_leading_spaces，不干扰 need_home
+
                 # 检查停止信号
                 if self._stop_flag:
                     print("\n用户中断输入！")
