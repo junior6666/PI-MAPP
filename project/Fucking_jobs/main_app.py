@@ -1095,28 +1095,15 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(top_config_layout)
         
-        # LLM 控制组（移除提示词输入框，改用共享提示词）
+        # LLM 控制组（使用 SiliconFlow API，与工作流二共用 Key）
         llm_group = QGroupBox("🤖 LLM 智能分析")
         llm_layout = QFormLayout()
         
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setPlaceholderText("请填入 LongCat API Key")
-        self.api_key_input.textChanged.connect(lambda _: self._on_api_key_changed())
-        api_key_widget = QWidget()
-        api_key_hlayout = QHBoxLayout(api_key_widget)
-        api_key_hlayout.setContentsMargins(0, 0, 0, 0)
-        api_key_hlayout.setSpacing(6)
-        api_key_hlayout.addWidget(self.api_key_input, stretch=1)
-        btn_copy_longcat = QPushButton("📋 获取")
-        btn_copy_longcat.setToolTip("复制获取地址到剪贴板")
-        btn_copy_longcat.setMaximumWidth(70)
-        btn_copy_longcat.clicked.connect(lambda: self._copy_api_url("https://longcat.chat/platform/api_keys", "LongCat"))
-        api_key_hlayout.addWidget(btn_copy_longcat)
-        llm_layout.addRow("LongCat API Key:", api_key_widget)
-        
-        self.model_input = QLineEdit("LongCat-Flash-Chat")
-        llm_layout.addRow("模型名称:", self.model_input)
+        # API Key 说明提示（共用 SiliconFlow Key）
+        key_hint = QLabel("💡 API Key 与工作流二共用，请在 Case2 标签页中填写 SiliconFlow API Key")
+        key_hint.setStyleSheet("color: #4ecca3; font-size: 12px; padding: 8px; background-color: #f0f9ff; border-radius: 4px;")
+        key_hint.setWordWrap(True)
+        llm_layout.addRow("API Key:", key_hint)
         
         # 提示词配置提示
         prompt_hint = QLabel("💡 提示词已在 📝 提示词 标签页中统一配置")
@@ -3026,14 +3013,14 @@ class MainWindow(QMainWindow):
     
     @Slot()
     def start_llm(self):
-        """开始 LLM 分析 - 静默处理错误"""
+        """开始 LLM 分析 - 使用 SiliconFlow API（与工作流二共用 Key）"""
         if not self.ocr_result:
             print("⚠️ 请先进行 OCR 识别！")
             self.statusBar().showMessage("⚠️ 请先进行 OCR 识别！")
             return
         
-        api_key = self.api_key_input.text().strip()
-        model = self.model_input.text().strip()
+        # 使用 SiliconFlow API Key（与工作流二共用）
+        api_key = self.backup_api_key_input.text().strip()
         
         # 【修改】优先使用共享提示词，如果没有则使用主页提示词
         prompt = ""
@@ -3042,9 +3029,9 @@ class MainWindow(QMainWindow):
         elif hasattr(self, 'main_prompt_input') and self.main_prompt_input:
             prompt = self.main_prompt_input.toPlainText().strip()
         
-        if not api_key or not model or not prompt:
-            print("⚠️ 请填写完整的 LLM 配置！")
-            self.statusBar().showMessage("⚠️ 请填写完整的 LLM 配置！")
+        if not api_key or not prompt:
+            print("⚠️ 请填写 SiliconFlow API Key 和提示词！")
+            self.statusBar().showMessage("⚠️ 请填写 SiliconFlow API Key（Case2 标签页）和提示词！")
             return
         # 【关键】如果已有 LLM 任务在运行，先中断
         if self.llm_worker and self.llm_worker.isRunning():
@@ -3067,7 +3054,7 @@ class MainWindow(QMainWindow):
         full_prompt = f"{prompt}\n\n识别到的文字内容：\n{self.ocr_result}"
         
         # 创建并启动 LLM 工作线程
-        self.llm_worker = LLMWorker(api_key, model, full_prompt)
+        self.llm_worker = LLMWorker(api_key, full_prompt)
         self.llm_worker.llm_completed.connect(self.on_llm_completed)
         self.llm_worker.error_occurred.connect(self.on_error)
         self.llm_worker.start()
@@ -3406,7 +3393,6 @@ class MainWindow(QMainWindow):
                 base_dir = os.getcwd()
             
             config_data = {
-                'longcat_api_key': self.api_key_input.text().strip(),
                 'kimi_api_key': self.kimi_api_key_input.text().strip(),
                 'siliconflow_api_key': self.backup_api_key_input.text().strip(),
             }
@@ -3436,8 +3422,6 @@ class MainWindow(QMainWindow):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 
-                if config_data.get('longcat_api_key'):
-                    self.api_key_input.setText(config_data['longcat_api_key'])
                 if config_data.get('kimi_api_key'):
                     self.kimi_api_key_input.setText(config_data['kimi_api_key'])
                 if config_data.get('siliconflow_api_key'):

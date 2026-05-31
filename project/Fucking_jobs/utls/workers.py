@@ -685,68 +685,57 @@ class OCRWorker(QThread):
 
 
 class LLMWorker(QThread):
-    """LLM 工作线程 - 调用大语言模型 API（支持安全中断）"""
+    """LLM 工作线程 - 调用 SiliconFlow API（使用 openai SDK，与工作流二共用 Key）"""
 
     llm_completed = Signal(str, float)  # LLM 完成信号，参数为响应文本和耗时（秒）
     error_occurred = Signal(str)  # 错误信号
 
-    def __init__(self, api_key, model, prompt):
+    # SiliconFlow 配置（与工作流二共用）
+    SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+    SILICONFLOW_MODEL = "deepseek-ai/DeepSeek-V4-Flash"
+
+    def __init__(self, api_key, prompt):
         super().__init__()
         self.api_key = api_key
-        self.model = model
         self.prompt = prompt
         self._interrupted = False
-        self._session = None  # 用于管理 requests session
 
     def run(self):
-        """调用 LLM API"""
-        self._session = None
+        """调用 SiliconFlow LLM API"""
         try:
+            from openai import OpenAI
+
             start_time = time.time()
 
-            # 创建 Session 以便更好地控制连接
-            self._session = requests.Session()
-            
-            url = "https://api.longcat.chat/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-
-            data = {
-                "model": self.model,
-                "messages": [
-                    {"role": "user", "content": self.prompt}
-                ],
-                "max_tokens": 8192,
-                "temperature": 0.7
-            }
+            client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.SILICONFLOW_BASE_URL
+            )
 
             # 检查是否已被中断
             if self._interrupted:
                 return
 
             print(f"🤖 LLM 请求中...")
-            # 发送请求（设置合理的超时）
-            response = self._session.post(
-                url, 
-                headers=headers, 
-                json=data, 
-                timeout=(10, 60)  # (连接超时, 读取超时)
+
+            response = client.chat.completions.create(
+                model=self.SILICONFLOW_MODEL,
+                messages=[
+                    {"role": "user", "content": self.prompt}
+                ],
+                max_tokens=8192,
+                temperature=0.7
             )
-            response.raise_for_status()
 
             # 检查是否被中断
             if self._interrupted:
                 return
 
-            result = response.json()
-
             elapsed_time = time.time() - start_time
 
             # 提取回复内容
-            if 'choices' in result and len(result['choices']) > 0:
-                content = result['choices'][0]['message']['content']
+            if response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
 
                 # 最后检查是否被中断
                 if self._interrupted:
@@ -756,45 +745,17 @@ class LLMWorker(QThread):
                 self.llm_completed.emit(content, elapsed_time)
             else:
                 if not self._interrupted:
-                    self.error_occurred.emit("LLM API 返回格式异常")
+                    self.error_occurred.emit("SiliconFlow API 返回格式异常")
 
-        except requests.exceptions.Timeout:
-            if not self._interrupted:
-                print(f"❌ LLM 超时")
-                self.error_occurred.emit("LLM API 请求超时，请重试")
-        except requests.exceptions.ConnectionError:
-            if not self._interrupted:
-                print(f"❌ LLM 连接失败")
-                self.error_occurred.emit("LLM API 连接失败，请检查网络")
-        except requests.exceptions.RequestException as e:
-            if not self._interrupted:
-                # 忽略因中断导致的异常
-                if "Interrupted function call" not in str(e):
-                    print(f"❌ LLM 请求失败: {str(e)[:50]}")
-                    self.error_occurred.emit(f"LLM API 请求失败: {str(e)}")
         except Exception as e:
             if not self._interrupted:
-                print(f"❌ LLM 错误: {str(e)[:50]}")
+                print(f"❌ LLM 错误: {str(e)[:100]}")
                 self.error_occurred.emit(f"LLM 调用失败: {str(e)}")
-        finally:
-            # 清理 Session
-            if self._session:
-                try:
-                    self._session.close()
-                except:
-                    pass
-                self._session = None
 
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 LLM 任务收到中断信号")
-        # 关闭 Session 以中断正在进行的请求
-        if self._session:
-            try:
-                self._session.close()
-            except:
-                pass
 
 class KimiWorker(QThread):
     """Kimi 工作线程 - 调用 Kimi API 进行图片分析（支持后备模型+智能降级）"""
