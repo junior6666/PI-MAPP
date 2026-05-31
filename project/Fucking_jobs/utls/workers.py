@@ -1891,7 +1891,7 @@ class WindowsServiceManager:
 
 
 class CodeOrganizeWorker(QThread):
-    """代码整理工作线程 - 将API结果整理为面试代码并自动写入"""
+    """代码整理工作线程 - 将API结果整理为面试代码并自动写入（使用 SiliconFlow API）"""
     
     organize_completed = Signal(str, float)  # 整理完成信号，参数为整理后的代码和耗时(秒)
     error_occurred = Signal(str)  # 错误信号
@@ -1899,24 +1899,22 @@ class CodeOrganizeWorker(QThread):
     file_saved = Signal(str)  # 文件保存信号，参数为文件路径
     code_to_clipboard = Signal(str)  # 复制到剪切板信号，参数为过滤后的代码
     
-    # LongCat Base URL 和模型（非敏感信息）
-    LONGCAT_BASE_URL = "https://api.longcat.chat/openai/v1/chat/completions"
-    LONGCAT_MODEL = "LongCat-Flash-Chat"
+    # SiliconFlow 配置（与工作流二共用）
+    SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+    SILICONFLOW_MODEL = "deepseek-ai/DeepSeek-V4-Flash"
     
-    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output", custom_prompt=None, longcat_api_key=None):
+    def __init__(self, kimi_result=None, llm_result=None, save_dir="./code_output", custom_prompt=None, siliconflow_api_key=None):
         super().__init__()
         self.kimi_result = kimi_result  # KimiWorker的结果（优先使用）
         self.llm_result = llm_result    # LLMWorker的结果（备选）
         self.save_dir = save_dir
         self.custom_prompt = custom_prompt  # 自定义提示词
-        self.longcat_api_key = longcat_api_key or ""
+        self.siliconflow_api_key = siliconflow_api_key or ""
         self._interrupted = False
-        self._session = None
         os.makedirs(save_dir, exist_ok=True)
     
     def run(self):
         """执行代码整理流程"""
-        self._session = None
         try:
             start_time = time.time()
             
@@ -1982,23 +1980,17 @@ class CodeOrganizeWorker(QThread):
                 error_detail = traceback.format_exc()
                 print(f"❌ 代码整理失败: {str(e)}\n{error_detail}")
                 self.error_occurred.emit(f"代码整理失败: {str(e)}")
-        finally:
-            if self._session:
-                try:
-                    self._session.close()
-                except:
-                    pass
-                self._session = None
     
     def _organize_code(self, raw_text):
-        """调用LLM API整理代码"""
+        print(len(raw_text),raw_text[:20])
+        """调用 SiliconFlow API 整理代码（使用 openai SDK）"""
         try:
-            self._session = requests.Session()
+            from openai import OpenAI
             
-            headers = {
-                "Authorization": f"Bearer {self.longcat_api_key}",
-                "Content-Type": "application/json"
-            }
+            client = OpenAI(
+                api_key=self.siliconflow_api_key,
+                base_url=self.SILICONFLOW_BASE_URL
+            )
             
             # 使用自定义提示词或默认提示词
             if self.custom_prompt:
@@ -2023,64 +2015,45 @@ class CodeOrganizeWorker(QThread):
 - 只输出一个代码块，格式为：```python\n...代码...\n```
 - 如果原内容包含多个题目，用 --- 分隔每个题目的代码块"""
             
-            data = {
-                "model": self.LONGCAT_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请整理以下代码：\n\n{raw_text}"}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.3  # 降低温度以获得更确定的输出
-            }
-            
             # 检查是否已被中断
             if self._interrupted:
                 return ""
             
-            response = self._session.post(
-                self.LONGCAT_BASE_URL,
-                headers=headers,
-                json=data,
-                timeout=(10, 60)
+            response = client.chat.completions.create(
+                model=self.SILICONFLOW_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"请整理以下代码：\n\n{raw_text}"}
+                ],
+                max_tokens=2000,
+                temperature=0.3
             )
-            response.raise_for_status()
             
             # 检查是否被中断
             if self._interrupted:
                 return ""
             
-            result = response.json()
-            
             # 提取回复内容
-            if 'choices' in result and len(result['choices']) > 0:
-                content = result['choices'][0]['message']['content']
+            if response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
                 
                 # 最后检查是否被中断
                 if self._interrupted:
                     return ""
-                
+                print(f"📝 整理后的代码: {content}")
                 return content
             else:
-                raise Exception("LLM API 返回格式异常")
+                raise Exception("SiliconFlow API 返回格式异常")
                 
-        except requests.exceptions.Timeout:
-            raise Exception("LLM API 请求超时")
-        except requests.exceptions.ConnectionError:
-            raise Exception("LLM API 连接失败")
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"LLM API 请求失败: {str(e)}")
         except Exception as e:
+            if "openai" in str(type(e).__module__).lower():
+                raise Exception(f"SiliconFlow API 请求失败: {str(e)}")
             raise e
     
     def interrupt(self):
         """中断当前任务"""
         self._interrupted = True
         print("🛑 代码整理任务收到中断信号")
-        if self._session:
-            try:
-                self._session.close()
-            except:
-                pass
 
 class AutoTypeWorker(QThread):
     """自动写入工作线程 - 将整理好的代码自动输入到目标窗口"""
