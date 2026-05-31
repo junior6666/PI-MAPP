@@ -2512,8 +2512,8 @@ class MainWindow(QMainWindow):
             
             print(f"📝 使用 {result_source} 的最新结果进行代码整理...")
             
-            # 获取 LongCat API Key（用于代码整理）
-            longcat_key = self.api_key_input.text().strip()
+            # 获取 SiliconFlow API Key（与工作流二共用）
+            siliconflow_key = self.backup_api_key_input.text().strip()
             
             # 获取 Case3 自定义提示词
             case3_prompt = None
@@ -2527,7 +2527,7 @@ class MainWindow(QMainWindow):
                     llm_result=None,  # 不传递旧结果
                     save_dir="./code_output",
                     custom_prompt=case3_prompt,
-                    longcat_api_key=longcat_key
+                    siliconflow_api_key=siliconflow_key
                 )
             else:  # LLM
                 self.code_organize_worker = CodeOrganizeWorker(
@@ -2535,7 +2535,7 @@ class MainWindow(QMainWindow):
                     llm_result=latest_result,
                     save_dir="./code_output",
                     custom_prompt=case3_prompt,
-                    longcat_api_key=longcat_key
+                    siliconflow_api_key=siliconflow_key
                 )
             
             # 连接信号
