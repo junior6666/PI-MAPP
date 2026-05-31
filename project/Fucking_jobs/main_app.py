@@ -646,7 +646,6 @@ class MainWindow(QMainWindow):
         intro_text = QTextEdit()
         intro_text.setReadOnly(True)
         intro_text.setMaximumHeight(350)  # 增加高度
-        intro_text.setMinimumHeight(330)
         intro_content = """
 <h3 style='color: #4ecca3;'>🎯 产品定位</h3>
 <p>这是一款伪装成<b>"系统资源管理器"</b>的AI面试辅助工具，支持快捷键截图、OCR识别、LLM智能分析，并可通过手机实时接收分析结果。</p>
@@ -655,18 +654,11 @@ class MainWindow(QMainWindow):
 <ul>
 <li><b>Case1 (Alt+X)：</b>完整流程 - 截图 → OCR文字识别 → LLM分析 → 推送手机（约20s）</li>
 <li><b>Case2 (Alt+Z)：</b>快速流程 - 截图 → Kimi视觉模型直接分析 → 推送手机（约30s，更准确）</li>
+<li><b>Case3 (Alt+S)：</b>自动写入 只需表演即可</li>
 </ul>
 
 <h3 style='color: #4ecca3;'>📱 手机端连接</h3>
 <p>在下方配置WebSocket服务器后，手机浏览器访问 <code>ws://[PC IP]:端口</code> 即可实时查看分析结果和工作流状态。</p>
-
-<h3 style='color: #4ecca3;'>💡 使用建议</h3>
-<ul>
-<li>面试时推荐使用 <b>Case2 (Alt+Z)</b>，虽然稍慢但识别更准确</li>
-<li>日常练习可使用 <b>Case1 (Alt+X)</b>，速度更快且可查看OCR文本</li>
-<li>可在 <b>📝 提示词</b> 标签页中编辑提示词来定制AI回答风格（Case1和Case2共用）</li>
-<li>所有配置修改后会自动保存，下次启动自动加载</li>
-</ul>
         """
         intro_text.setHtml(intro_content)
         layout.addWidget(intro_text)
