@@ -25,7 +25,9 @@ from utls.workers import (
     AutoStartManager,
     WindowsServiceManager,
     CodeOrganizeWorker,
-    AutoTypeWorker
+    AutoTypeWorker,
+    ShiftSWorker,
+    load_api_keys
 )
 
 
@@ -69,6 +71,7 @@ class MainWindow(QMainWindow):
         self.websocket_worker = None
         self.code_organize_worker = None  # 代码整理Worker
         self.auto_type_worker = None      # 自动写入Worker
+        self.shift_s_worker = None        # Shift+S 语音识别Worker
         
         # 数据存储
         self.current_image_path = None
@@ -86,6 +89,10 @@ class MainWindow(QMainWindow):
         self.screenshot_timestamp = None  # 快捷键触发时间
         self.ocr_elapsed = 0.0
         self.llm_elapsed = 0.0
+        # Shift+S 语音识别结果存储（方案 B）
+        self.audio_result = ""
+        self.audio_result_timestamp = None
+        self.audio_mp3_path = None
         
         # 初始化 UI
         self.init_ui()
@@ -117,6 +124,8 @@ class MainWindow(QMainWindow):
         
         # 延迟启动后备模型快捷键（Alt+3 ~ Alt+7）
         QTimer.singleShot(1600, self.start_backup_model_hotkeys)
+        # 延迟启动 Shift+S 快捷键
+        QTimer.singleShot(1700, self.start_shift_s_hotkey)
         
         # 延迟启动自动写入快捷键（Alt+S）
         QTimer.singleShot(1800, self.start_auto_type_hotkey)
@@ -619,6 +628,10 @@ class MainWindow(QMainWindow):
         # Case3: Alt+S 工作流
         self.case3_tab = self.create_case3_tab()
         self.help_inner_tabs.addTab(self.case3_tab, "⌨️ Case3 (Alt+S)")
+        
+        # Shift+S: 语音识别工作流（方案 B）
+        self.shift_s_tab = self.create_shift_s_tab()
+        self.help_inner_tabs.addTab(self.shift_s_tab, "🎧 Shift+S")
         
         # 提示词管理标签页
         self.prompt_tab = self.create_prompt_tab()
@@ -1365,6 +1378,48 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         
         return widget
+
+    def create_shift_s_tab(self):
+        """创建 Shift+S 语音识别标签页（仅负责配置与显示识别结果）"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        info = QTextEdit()
+        info.setReadOnly(True)
+        info.setMaximumHeight(140)
+        info.setHtml("""
+<h3 style='color: #4ecca3;'>🎧 Shift+S: 语音识别（方案 B）</h3>
+<p>按下 <b>Shift+S</b> 启动录音，再次按下停止录音。识别结果会推送到手机，但不会自动触发整理与写入（除非手动按 Alt+S）。</p>
+""")
+        layout.addWidget(info)
+
+        # 自动写入开关（识别后自动触发 Alt+S）
+        self.shift_auto_trigger_checkbox = QCheckBox("识别后自动触发 Alt+S（默认关闭）")
+        self.shift_auto_trigger_checkbox.setChecked(False)
+        layout.addWidget(self.shift_auto_trigger_checkbox)
+
+        # 识别结果展示
+        result_group = QGroupBox("识别结果")
+        result_layout = QVBoxLayout()
+        self.shift_audio_result_text = QTextEdit()
+        self.shift_audio_result_text.setReadOnly(True)
+        self.shift_audio_result_text.setPlaceholderText("识别的文字将显示在这里...")
+        result_layout.addWidget(self.shift_audio_result_text)
+        result_group.setLayout(result_layout)
+        layout.addWidget(result_group)
+
+        # 按钮：播放/打开音频目录
+        btn_layout = QHBoxLayout()
+        self.btn_open_mp3_dir = QPushButton("🔊 打开音频目录")
+        self.btn_open_mp3_dir.clicked.connect(lambda: os.startfile(os.path.join(os.getcwd(), 'mp3_temp')) if os.path.exists(os.path.join(os.getcwd(), 'mp3_temp')) else print('mp3_temp 不存在'))
+        btn_layout.addWidget(self.btn_open_mp3_dir)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        layout.addStretch()
+        return widget
     
     def update_delay_label(self, value):
         """更新延迟显示标签"""
@@ -1996,6 +2051,99 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             print(f"❌ Kimi模型切换快捷键启动失败: {e}")
+
+    def start_shift_s_hotkey(self):
+        """启动 Shift+S 语音识别快捷键监听"""
+        try:
+            from pynput import keyboard
+
+            self.shift_s_listener = keyboard.GlobalHotKeys({
+                '<shift>+s': self.on_shift_s_triggered
+            })
+            self.shift_s_listener.start()
+            self.statusBar().showMessage("Shift+S 语音识别快捷键已启用")
+            print("✅ Shift+S 快捷键已启用")
+        except Exception as e:
+            print(f"❌ Shift+S 快捷键启动失败: {e}")
+
+    def on_shift_s_triggered(self):
+        """Shift+S 被触发：开始或停止 ShiftSWorker（按一次开始，按一次结束/处理）"""
+        try:
+            # 如果已有正在运行的 ShiftSWorker，触发停止（request_stop）
+            if hasattr(self, 'shift_s_worker') and self.shift_s_worker and self.shift_s_worker.isRunning():
+                print("🛑 Shift+S: 请求停止录音并开始识别...")
+                self.statusBar().showMessage("🛑 停止录音，正在识别...")
+                try:
+                    self.shift_s_worker.request_stop()
+                except Exception as e:
+                    print(f"⚠️ 请求停止 ShiftSWorker 失败: {e}")
+                return
+
+            # 启动新的 ShiftSWorker
+            print("🔴 Shift+S: 启动语音录制...")
+            self.statusBar().showMessage("🔴 录音中 (再次按 Shift+S 停止)")
+
+            # 读取 api keys（运行目录）
+            keys = load_api_keys()
+            siliconflow_key = keys.get('siliconflow_api_key', '')
+
+            self.shift_s_worker = ShiftSWorker(api_key=siliconflow_key)
+            self.shift_s_worker.audio_completed.connect(self.on_shift_s_completed)
+            self.shift_s_worker.error_occurred.connect(self.on_error)
+            self.shift_s_worker.start()
+
+            # 发送状态到手机
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                try:
+                    self.websocket_worker.send_message("[STATUS:录音中]", silent=True)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            print(f"❌ Shift+S 触发处理失败: {e}")
+
+    def on_shift_s_completed(self, answer_text, audio_path, elapsed, question_text):
+        """ShiftSWorker 完成回调：保存识别问题、答案，并把答案发送到手机端（不发送音频文件）。"""
+        try:
+            print(f"🎯 Shift+S 识别+回答完成 ({elapsed:.2f}s). 问题: {question_text[:80]} 答案: {answer_text[:80]}")
+
+            # 保存识别问题与 LLM 答案
+            self.audio_result = question_text
+            self.audio_result_timestamp = time.time()
+            self.audio_mp3_path = audio_path
+            self.audio_answer = answer_text
+            self.audio_answer_timestamp = time.time()
+
+            # 更新 UI：显示问题与答案
+            if hasattr(self, 'shift_audio_result_text') and self.shift_audio_result_text:
+                display_text = f"问题:\n{question_text}\n\n答案:\n{answer_text}"
+                self.shift_audio_result_text.setPlainText(display_text)
+
+            # 发送到手机：只发送问题与答案（不包含音频文件或路径）
+            if self.websocket_worker and self.websocket_worker.is_running and self.websocket_worker.has_clients:
+                try:
+                    import json
+                    payload = {
+                        'type': 'audio_answer',
+                        'question': question_text,
+                        'answer': answer_text,
+                        'elapsed': elapsed,
+                        'timestamp': self.audio_answer_timestamp
+                    }
+                    self.websocket_worker.send_message(json.dumps(payload))
+                    self.websocket_worker.send_message("[STATUS:处理完成]", silent=True)
+
+                except Exception as e:
+                    print(f"⚠️ 发送音频识别答案到手机失败: {e}")
+
+            # 识别后是否自动触发 Alt+S（默认关闭）
+            if getattr(self, 'shift_auto_trigger_checkbox', None) and self.shift_auto_trigger_checkbox.isChecked():
+                print("⚡ 用户已开启：识别后自动触发 Alt+S（当前实现仅提示，不自动执行）")
+
+            self.statusBar().showMessage("✅ 语音识别并回答完成", 3000)
+
+        except Exception as e:
+            print(f"❌ Shift+S 完成回调失败: {e}")
     
     def start_backup_model_hotkeys(self):
         """启动后备模型快捷键（Alt+3 ~ Alt+7）"""
@@ -2459,10 +2607,10 @@ class MainWindow(QMainWindow):
         # 【关键优化】检查是否有正在运行的线程，如果有则先中断
         self._interrupt_running_threads()
         
-        # 检查是否有可用的API结果
-        if not self.kimi_result and not self.llm_result:
-            print("⚠️ 没有可用的API结果，请先执行 Case1 或 Case2 工作流")
-            self.statusBar().showMessage("⚠️ 请先执行截图分析工作流")
+        # 检查是否有可用的API结果（包含 Shift+S audio 识别结果）
+        if not self.kimi_result and not self.llm_result and not getattr(self, 'audio_result', None):
+            print("⚠️ 没有可用的API结果，请先执行 Case1/Case2 工作流或进行 Shift+S 语音识别")
+            self.statusBar().showMessage("⚠️ 请先执行截图/语音分析工作流")
             return
         
         # 【关键】记录开始时间
@@ -2500,29 +2648,37 @@ class MainWindow(QMainWindow):
                 case3_prompt = self.case3_prompt_input.toPlainText().strip()
             
             # 创建代码整理Worker - 根据来源传递对应的结果
+            worker = None
             if result_source == "Kimi":
-                self.code_organize_worker = CodeOrganizeWorker(
+                worker = CodeOrganizeWorker(
                     kimi_result=latest_result,
                     llm_result=None,  # 不传递旧结果
                     save_dir="./code_output",
                     custom_prompt=case3_prompt,
                     siliconflow_api_key=siliconflow_key
                 )
-            else:  # LLM
-                self.code_organize_worker = CodeOrganizeWorker(
-                    kimi_result=None,  # 不传递旧结果
+            elif result_source in ("LLM", "Audio", "AudioAnswer"):
+                # Treat LLM, Audio (transcript) and AudioAnswer (LLM's answer) as textual inputs for整理
+                worker = CodeOrganizeWorker(
+                    kimi_result=None,
                     llm_result=latest_result,
                     save_dir="./code_output",
                     custom_prompt=case3_prompt,
                     siliconflow_api_key=siliconflow_key
                 )
-            
-            # 连接信号
+
+            if worker is None:
+                print(f"❌ 无法为结果来源创建 CodeOrganizeWorker: {result_source}")
+                self.statusBar().showMessage("❌ 无法创建代码整理任务", 3000)
+                return
+
+            # 绑定并启动
+            self.code_organize_worker = worker
             self.code_organize_worker.organize_completed.connect(self.on_code_organize_completed)
             self.code_organize_worker.error_occurred.connect(self.on_error)
             self.code_organize_worker.status_update.connect(self.on_code_status_update)
             self.code_organize_worker.file_saved.connect(self.on_code_file_saved)
-            
+
             # 启动
             self.code_organize_worker.start()
             
@@ -2536,44 +2692,52 @@ class MainWindow(QMainWindow):
         Returns:
             tuple: (result_text, source_name) 或 (None, None)
         """
-        # 如果只有一个结果有值，直接返回
+        # 如果只有一个结果有值，直接返回（包含 audio）
         has_kimi = bool(self.kimi_result and self.kimi_result.strip())
         has_llm = bool(self.llm_result and self.llm_result.strip())
-        
-        if has_kimi and not has_llm:
+        has_audio = bool(self.audio_result and self.audio_result.strip())
+        has_audio_answer = bool(getattr(self, 'audio_answer', None) and getattr(self, 'audio_answer', None).strip())
+
+        # 单一可用
+        if has_kimi and not has_llm and not has_audio:
             print(f"🔍 只有Kimi结果可用")
             return self.kimi_result, "Kimi"
-        elif has_llm and not has_kimi:
+        if has_llm and not has_kimi and not has_audio:
             print(f"🔍 只有LLM结果可用")
             return self.llm_result, "LLM"
-        elif not has_kimi and not has_llm:
+        if has_audio_answer and not has_kimi and not has_llm and not has_audio:
+            print(f"🔍 只有Audio Answer可用")
+            return self.audio_answer, "AudioAnswer"
+        if has_audio and not has_kimi and not has_llm and not has_audio_answer:
+            print(f"🔍 只有Audio结果可用")
+            return self.audio_result, "Audio"
+
+        # 如果都没有
+        if not has_kimi and not has_llm and not has_audio:
             print(f"🔍 没有可用的API结果")
             return None, None
-        
-        # 两个都有值，比较时间戳
-        if self.kimi_result_timestamp and self.llm_result_timestamp:
-            kimi_time = self.kimi_result_timestamp
-            llm_time = self.llm_result_timestamp
-            time_diff = abs(kimi_time - llm_time)
-            
-            print(f"🔍 Kimi时间戳: {kimi_time:.2f}, LLM时间戳: {llm_time:.2f}, 时间差: {time_diff:.2f}s")
-            
-            if kimi_time >= llm_time:
-                print(f"🔍 选择Kimi结果（更新 {time_diff:.2f}s）")
-                return self.kimi_result, "Kimi"
-            else:
-                print(f"🔍 选择LLM结果（更新 {time_diff:.2f}s）")
-                return self.llm_result, "LLM"
-        elif self.kimi_result_timestamp:
-            print(f"🔍 只有Kimi有时间戳，选择Kimi")
-            return self.kimi_result, "Kimi"
-        elif self.llm_result_timestamp:
-            print(f"🔍 只有LLM有时间戳，选择LLM")
-            return self.llm_result, "LLM"
-        else:
-            # 都没有时间戳，默认优先Kimi（保持向后兼容）
-            print(f"⚠️ 都没有时间戳，默认选择Kimi")
-            return self.kimi_result, "Kimi"
+
+        # 多源情况下，比较时间戳（选择最新的）
+        candidates = []  # list of (timestamp, source, text)
+        if has_kimi:
+            t = self.kimi_result_timestamp or 0
+            candidates.append((t, 'Kimi', self.kimi_result))
+        if has_llm:
+            t = self.llm_result_timestamp or 0
+            candidates.append((t, 'LLM', self.llm_result))
+        if has_audio_answer:
+            t = getattr(self, 'audio_answer_timestamp', 0) or 0
+            candidates.append((t, 'AudioAnswer', self.audio_answer))
+        if has_audio:
+            t = self.audio_result_timestamp or 0
+            candidates.append((t, 'Audio', self.audio_result))
+
+        # 选择最大的时间戳
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        chosen = candidates[0]
+        ts, source, text = chosen
+        print(f"🔍 选择最新结果: {source} (ts={ts})")
+        return text, source
     
     @Slot(str)
     def on_code_status_update(self, status):

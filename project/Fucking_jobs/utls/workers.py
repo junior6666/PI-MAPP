@@ -26,6 +26,13 @@ from PySide6.QtWidgets import QApplication as QtApp
 from PySide6.QtCore import QThread, Signal
 import warnings
 warnings.filterwarnings('ignore', message=".*pin_memory.*")
+import sounddevice as sd
+import numpy as np
+import wave
+import tempfile
+from pydub import AudioSegment
+from datetime import datetime
+import traceback
 
 class ScreenshotWorker(QThread):
     """截图工作线程 - 监听热键并截图"""
@@ -1436,6 +1443,191 @@ class WebSocketServerWorker(QThread):
                 pass
         
         self.wait(3000)  # 等待线程结束
+
+
+def load_api_keys():
+    """从运行目录读取 api_keys_config.json，返回字典包含 siliconflow_api_key 和 kimi_api_key
+    不在日志中打印 key 值。"""
+    try:
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd()
+        cfg_path = os.path.join(base_dir, 'api_keys_config.json')
+        if not os.path.exists(cfg_path):
+            return {'siliconflow_api_key': '', 'kimi_api_key': ''}
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return {
+            'siliconflow_api_key': data.get('siliconflow_api_key', '') or '',
+            'kimi_api_key': data.get('kimi_api_key', '') or ''
+        }
+    except Exception:
+        # 不抛出异常，返回空值以便调用方处理
+        return {'siliconflow_api_key': '', 'kimi_api_key': ''}
+
+
+class ShiftSWorker(QThread):
+    """Shift+S 语音识别工作线程：录音 -> 保存 mp3 到 ./mp3_temp -> 调用语音识别 API
+
+    该Worker不会执行后续的整理与写入工作，只把识别结果通过信号返回给主线程。
+    """
+    # (answer_text, mp3_path, elapsed_seconds, question_text)
+    audio_completed = Signal(str, str, float, str)
+    error_occurred = Signal(str)
+
+    BASE_URL = "https://api.siliconflow.cn/v1"
+
+    def __init__(self, api_key: str = ''):
+        super().__init__()
+        self.api_key = api_key or ''
+        self._recording = False
+        self._frames = []
+        self._stop_requested = False
+        self.sample_rate = 44100
+        self.channels = 1
+
+    def run(self):
+        start_time = time.time()
+        try:
+            # 开始录音，直到主线程请求停止（通过 request_stop）
+            self._frames = []
+            self._stop_requested = False
+            self._recording = True
+
+            def callback(indata, frames, time_info, status):
+                if status:
+                    print(f"[ShiftS] audio status: {status}")
+                if self._recording:
+                    # 保持 int16 类型
+                    self._frames.append(indata.copy())
+
+            with sd.InputStream(samplerate=self.sample_rate, channels=self.channels, dtype='int16', callback=callback):
+                # 等待停止请求
+                while not self._stop_requested:
+                    self.msleep(100)
+
+            # 录音结束，保存为 mp3
+            mp3_path = self._save_audio(self._frames, sample_rate=self.sample_rate, channels=self.channels)
+
+            # 调用语音识别 API
+            text = self._speech_to_text(mp3_path)
+
+            elapsed = time.time() - start_time
+            if text is None:
+                self.error_occurred.emit("语音识别失败")
+            else:
+                # 识别到文本后调用 LLM 获取答案（不在主线程发送音频）
+                try:
+                    answer = self._ask_question(text)
+                except Exception as e:
+                    answer = None
+                    print(f"[ShiftS] 调用LLM失败: {e}")
+
+                # 发出完成信号：将 LLM 的答案作为主要返回值，同时保留原始识别问题
+                self.audio_completed.emit(answer or "", mp3_path, elapsed, text)
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"[ShiftS] 错误: {e}\n{tb}")
+            self.error_occurred.emit(str(e))
+        finally:
+            self._recording = False
+            self._stop_requested = False
+
+    def request_stop(self):
+        """请求停止录音并进入处理阶段"""
+        self._stop_requested = True
+
+    def _save_audio(self, audio_frames, sample_rate=44100, channels=1):
+        try:
+            if not audio_frames:
+                raise RuntimeError("没有录到音频数据")
+
+            audio = np.concatenate(audio_frames, axis=0)
+
+            # 临时 WAV
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                wav_path = f.name
+
+            with wave.open(wav_path, 'wb') as wf:
+                wf.setnchannels(channels)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(audio.tobytes())
+
+            # 导出 mp3 到 mp3_temp
+            mp3_dir = os.path.join(os.getcwd(), 'mp3_temp')
+            os.makedirs(mp3_dir, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            mp3_path = os.path.join(mp3_dir, f'audio_{timestamp}.mp3')
+
+            seg = AudioSegment.from_wav(wav_path)
+            seg.export(mp3_path, format='mp3', bitrate='128k')
+            try:
+                os.unlink(wav_path)
+            except:
+                pass
+
+            print(f"[ShiftS] 音频已保存: {mp3_path} ({len(seg)/1000:.1f}s)")
+            return mp3_path
+        except Exception as e:
+            raise
+
+    def _speech_to_text(self, audio_path):
+        try:
+            if not os.path.exists(audio_path):
+                print(f"[ShiftS] 音频文件不存在: {audio_path}")
+                return None
+
+            url = f"{self.BASE_URL}/audio/transcriptions"
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+
+            with open(audio_path, 'rb') as f:
+                files = {
+                    'file': (os.path.basename(audio_path), f),
+                    'model': (None, 'FunAudioLLM/SenseVoiceSmall')
+                }
+                resp = requests.post(url, headers=headers, files=files, timeout=60)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get('text', '')
+            else:
+                print(f"[ShiftS] 识别失败: {resp.status_code} {resp.text}")
+                return None
+        except Exception as e:
+            print(f"[ShiftS] 语音识别异常: {e}")
+            return None
+
+    def _ask_question(self, question_text: str) -> str:
+        """调用 LLM（SiliconFlow/OpenAI SDK）对识别到的问题进行回答，返回答案文本。
+
+        使用 self.api_key（从运行目录读取的 SiliconFlow key）和 BASE_URL。
+        """
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=self.api_key, base_url=self.BASE_URL, timeout=120)
+
+            system_prompt = "你是一个专业的AI助手，请用简洁清晰的语言回答用户的问题。"
+
+            response = client.chat.completions.create(
+                model="Pro/zai-org/GLM-4.7",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question_text}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+
+            if response and getattr(response, 'choices', None) and len(response.choices) > 0:
+                return response.choices[0].message.content
+            else:
+                print("[ShiftS] LLM 返回格式异常")
+                return ""
+
+        except Exception as e:
+            print(f"[ShiftS] LLM 调用异常: {e}")
+            return ""
 
 
 class AutoStartManager:

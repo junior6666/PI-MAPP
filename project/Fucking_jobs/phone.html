@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="/imgs/logo/github_logo.png" type="image/png">
     <title>PC 消息接收器</title>
     <!-- 引入 marked.js 用于 Markdown 解析 -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
@@ -654,7 +655,7 @@
                 padding: 7px 12px;
                 font-size: 12px;
             }
-            
+
             /* 移动端隐藏顶部教程按钮 */
             .header-controls button:not(.desktop-only-btn) {
                 display: none !important;
@@ -681,7 +682,7 @@
             .drawer {
                 display: none;
             }
-            
+
             /* 平板端也隐藏顶部教程按钮 */
             .header-controls button:not(.desktop-only-btn) {
                 display: none !important;
@@ -980,15 +981,15 @@
         <input type="text" id="ipInput" placeholder="如 192.168.1.100">
         <label>端口号：</label>
         <input type="number" id="portInput" placeholder="如 8765">
-        
+
         <hr style="border: none; border-top: 1px solid #2a2a4a; margin: 15px 0;">
-        
+
         <label>最大历史记录条数：</label>
         <input type="number" id="historyLimitInput" placeholder="默认 100" min="10" max="200">
         <small style="color: #888; font-size: 11px; display: block; margin-top: 4px;">范围：10-200 条，修改后需重新加载页面生效</small>
-        
+
         <div class="modal-buttons">
-            <button onclick="loadConfig()">读取配置</button>
+            <button onclick="saveConfig()">💾 保存配置</button>
             <button class="primary" onclick="saveAndConnect()">💾 保存并连接</button>
         </div>
         <div class="modal-buttons" style="justify-content:center; margin-top:10px;">
@@ -1005,6 +1006,8 @@
     let workflowStartTime = null;  // 工作流开始时间
     let statusTimerInterval = null;  // 状态计时器ID
     let currentStatusStartTime = null;  // 当前状态开始时间
+    let currentLongStatus = null; // 当前长任务状态文本（用于覆盖层与计时器更新）
+    let currentLongIcon = null;   // 当前长任务图标
     let autoReconnectEnabled = true;  // 自动重连开关
     let reconnectTimer = null;  // 重连定时器
     let reconnectAttempts = 0;  // 重连尝试次数
@@ -1015,15 +1018,27 @@
     let pendingImages = [];  // 待上传图片队列
     let isManualClose = false;  // 标记是否为手动关闭连接
 
-    // 页面加载时自动读配置和加载历史记录
+    // 语音识别面板状态与计时器
+    let speechState = 'idle'; // 'idle' | 'recording' | 'processing'
+    let speechStartTime = null;
+    let speechTimerInterval = null;
+
+    // 页面加载时自动读配置、加载历史记录，并在有已保存配置时自动连接
     window.onload = function () {
         loadConfig();
         loadHistory();
-        
+
         // 注册网络状态监听器
         setupNetworkListener();
+
+        // 如果有已保存的有效配置，自动连接
+        const savedIP = localStorage.getItem('pc_ip');
+        const savedPort = localStorage.getItem('pc_port');
+        if (savedIP && savedPort) {
+            connect();
+        }
     };
-    
+
     // 页面卸载时清理资源
     window.onbeforeunload = function () {
         // 停止所有定时器
@@ -1032,7 +1047,7 @@
             reconnectTimer = null;
         }
         stopStatusTimer();
-        
+
         // 关闭 WebSocket 连接
         if (ws) {
             ws.close();
@@ -1048,19 +1063,19 @@
     function setupNetworkListener() {
         // 监听网络恢复
         window.addEventListener('online', () => {
-            console.log('🌐 网络已恢复');
+            // console log removed
             // 如果当前未连接且自动重连启用，尝试重新连接
             if (!ws || ws.readyState === WebSocket.CLOSED) {
                 if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                    console.log('网络恢复，尝试重新连接...');
+                    // console log removed
                     connect();
                 }
             }
         });
-        
+
         // 监听网络断开
         window.addEventListener('offline', () => {
-            console.log('🚫 网络已断开');
+            // console log removed
             // 更新状态显示
             updateStatus(false);
             showMessage('⚠️ 网络已断开，等待恢复...', 'error');
@@ -1104,7 +1119,7 @@
         const savedIP = localStorage.getItem('pc_ip');
         const savedPort = localStorage.getItem('pc_port');
         const savedHistoryLimit = localStorage.getItem('history_limit');
-        
+
         if (savedIP) {
             document.getElementById('ipInput').value = savedIP;
         }
@@ -1129,22 +1144,7 @@
         }
         localStorage.setItem('pc_ip', ip);
         localStorage.setItem('pc_port', port);
-        alert('配置已保存，下次打开自动加载');
-    }
 
-    // 保存配置并立即连接
-    function saveAndConnect() {
-        const ip = document.getElementById('ipInput').value.trim();
-        const port = document.getElementById('portInput').value.trim();
-        if (!ip || !port) {
-            alert('请填写 IP 和端口');
-            return;
-        }
-        
-        // 保存配置
-        localStorage.setItem('pc_ip', ip);
-        localStorage.setItem('pc_port', port);
-        
         // 保存历史记录限制
         const historyLimit = document.getElementById('historyLimitInput').value.trim();
         if (historyLimit) {
@@ -1157,13 +1157,43 @@
                 return;
             }
         }
-        
+
+        alert('配置已保存，下次打开自动加载');
+        closeConfig();
+    }
+
+    // 保存配置并立即连接
+    function saveAndConnect() {
+        const ip = document.getElementById('ipInput').value.trim();
+        const port = document.getElementById('portInput').value.trim();
+        if (!ip || !port) {
+            alert('请填写 IP 和端口');
+            return;
+        }
+
+        // 保存配置
+        localStorage.setItem('pc_ip', ip);
+        localStorage.setItem('pc_port', port);
+
+        // 保存历史记录限制
+        const historyLimit = document.getElementById('historyLimitInput').value.trim();
+        if (historyLimit) {
+            const limit = parseInt(historyLimit);
+            if (limit >= 10 && limit <= 200) {
+                localStorage.setItem('history_limit', limit);
+                maxHistoryItems = limit;
+            } else {
+                alert('历史记录条数必须在 10-200 之间');
+                return;
+            }
+        }
+
         // 关闭配置弹窗
         closeConfig();
-        
+
         // 重置重连计数
         reconnectAttempts = 0;
-        
+
         // 立即连接
         connect();
     }
@@ -1171,27 +1201,37 @@
     function connectLocal() {
         // 检查是否已连接
         if (isConnected()) {
-            console.log('⚠️ 已经处于连接状态，无需重复连接');
+            // console log removed
             showMessage('⚠️ 已连接到服务器，如需重新连接请先断开', 'info');
             return;
         }
-        
-        // 自动填充本地地址
+
+        // 临时设置本地地址进行连接（不覆盖已保存的 localStorage 配置）
+        const savedIP = document.getElementById('ipInput').value.trim();
+        const savedPort = document.getElementById('portInput').value.trim();
+
+        // 使用本地地址连接
         document.getElementById('ipInput').value = '127.0.0.1';
         document.getElementById('portInput').value = '8765';
-        // 直接连接
         connect();
+
+        // 连接后恢复之前保存的地址（保持输入框显示已保存的配置）
+        if (savedIP && savedPort) {
+            document.getElementById('ipInput').value = savedIP;
+            document.getElementById('portInput').value = savedPort;
+        }
+
         closeDrawerAfterAction();
     }
 
     function connect() {
         // 检查是否已连接
         if (isConnected()) {
-            console.log('⚠️ 已经处于连接状态，无需重复连接');
+            // console log removed
             showMessage('⚠️ 已连接到服务器，如需重新连接请先断开', 'info');
             return;
         }
-        
+
         const ip = document.getElementById('ipInput').value.trim();
         const port = document.getElementById('portInput').value.trim();
         if (!ip || !port) {
@@ -1206,26 +1246,26 @@
             ws.close();
             isManualClose = false;  // 重置标志
         }
-        
+
         // 清除之前的重连定时器
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
-        
+
         // 重置重连状态（手动连接时启用自动重连）
         autoReconnectEnabled = true;
         reconnectAttempts = 0;
 
         const url = `ws://${ip}:${port}`;
-        console.log('尝试连接到:', url);
+        // console log removed
         document.getElementById('messages').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔄</div><div>正在连接...</div></div>';
 
         try {
             ws = new WebSocket(url);
 
             ws.onopen = () => {
-                console.log('WebSocket 连接成功');
+                // console log removed
                 // 连接成功，重置重连计数和开关
                 reconnectAttempts = 0;
                 autoReconnectEnabled = true;
@@ -1234,25 +1274,50 @@
             };
 
             ws.onmessage = (event) => {
-                console.log('收到消息:', event.data);
+                // console log removed
 
                 // 尝试解析JSON消息（图片上传、图片切换等）
                 let isJsonMessage = false;
                 try {
                     const jsonData = JSON.parse(event.data);
-                    
+
                     // 处理图片上传响应
                     if (jsonData.type === 'upload_response') {
                         isJsonMessage = true;
-                        console.log('📤 图片上传响应:', jsonData);
+                        // console log removed
                         handleUploadResponse(jsonData);
                         return;
                     }
-                    
+
                     // 处理图片切换消息
                     if (jsonData.type === 'image_switch') {
                         isJsonMessage = true;
                         handleImageSwitch(jsonData);
+                        return;
+                    }
+
+                    // 处理 Shift+S 返回的音频识别问答（以 Markdown 在主区域显示：仅问题与答案）
+                    if (jsonData.type === 'audio_answer') {
+                        isJsonMessage = true;
+                        try {
+                            const question = jsonData.question || '';
+                            const answer = jsonData.answer || '';
+
+                            // 构建 Markdown 内容：仅包含问题和答案
+                            const md = `### 问题\n\n${question}\n\n---\n\n### 答案\n\n${answer}`;
+
+                            // 在大面板也展示纯文本的问答（便于手机快速查看），并停止语音计时器
+                            try {
+                                showSpeechPanel(`问题:\n${question}\n\n答案:\n${answer}`, {autoFocus:true, stopTimer:true});
+                            } catch (e) { /* ignore */ }
+
+                            // 将 Markdown 渲染到主消息区（并标记为来自 WebSocket 以保存历史）
+                            isFromWebSocket = true;
+                            displayMessage(md);
+                            isFromWebSocket = false;
+                        } catch (e) {
+                            console.error('处理 audio_answer 消息失败:', e);
+                        }
                         return;
                     }
                 } catch (e) {
@@ -1262,9 +1327,31 @@
                 // 解析消息，提取状态信息
                 const messageData = parseWorkflowMessage(event.data);
 
+                // 先对可能出现的编码/转义问题进行容错处理（特别是移动端语音识别结果）
+                if (messageData.content) {
+                    messageData.content = normalizeTextEncoding(messageData.content);
+                }
+
                 // 更新PC状态（始终更新，包含耗时信息）
                 if (messageData.status) {
                     updatePCStatus(messageData.status, messageData.elapsed);
+                }
+
+                // 语音识别专用：当收到识别过程中或识别结果时，弹出大面板以便手机端查看（仅显示状态，移除复制）
+                if (messageData.status && /录音|语音|ASR/.test(messageData.status)) {
+                    // 识别进行中：显示提示并启动语音计时器（若还未启动）
+                    if (/识别中|处理中/.test(messageData.status)) {
+                        speechState = 'recording';
+                        if (!speechTimerInterval) {
+                            speechStartTime = Date.now();
+                            startSpeechTimer();
+                        }
+                        showSpeechPanel(messageData.content || '识别中...', {autoFocus: false, transient: true, startTimer:false});
+                    } else {
+                        // 识别结果或已完成：停止计时并在大面板与主区域显示结果（主区域使用 Markdown 渲染）
+                        speechState = 'idle';
+                        showSpeechPanel(messageData.content || '', {autoFocus: true, transient: false, stopTimer: true});
+                    }
                 }
 
                 // 仅当有实际内容时才显示消息（纯状态标记不显示在主消息区）
@@ -1276,16 +1363,16 @@
             };
 
             ws.onclose = (event) => {
-                console.log('连接关闭:', event.code, event.reason);
+                // console log removed
                 updateStatus(false);
-                
+
                 // 如果是手动关闭，不进行重连
                 if (isManualClose) {
-                    console.log('手动关闭连接，不触发重连');
+                    // console log removed
                     isManualClose = false;  // 重置标志
                     return;
                 }
-                
+
                 // 尝试自动重连（如果不是手动断开且未达到最大次数）
                 if (autoReconnectEnabled && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     showMessage('❌ 连接已断开，正在准备重连...', 'error');
@@ -1313,7 +1400,7 @@
     // 更新PC端工作状态
     function updatePCStatus(status, elapsed = null) {
         const pcStatusEl = document.getElementById('pc-status');
-        
+
         // 确保状态元素可见
         pcStatusEl.style.display = 'inline-block';
 
@@ -1333,6 +1420,16 @@
                 icon: '🔍',
                 bg: 'rgba(33, 150, 243, 0.1)',
                 color: '#2196f3'
+            },
+            '录音识别中': {
+                icon: '🎤',
+                bg: 'rgba(255, 87, 34, 0.08)',
+                color: '#ff7043'
+            },
+            '录音识别结果': {
+                icon: '🎤',
+                bg: 'rgba(255, 87, 34, 0.04)',
+                color: '#ff7043'
             },
             'LLM分析中': {
                 icon: '🤖',
@@ -1379,24 +1476,49 @@
         const config = statusConfig[status] || statusConfig['待命'];
 
         // 如果需要计时的状态，启动计时器
-        if (status === 'OCR分析中' || status === 'LLM分析中' || 
-            status === '整体代码中' || status === '自动写入中') {
-            // 如果计时器未运行或状态改变，重新启动计时器
+        if (status === 'OCR分析中' || status === 'LLM分析中' ||
+            status === '整体代码中' || status === '整理代码中' || status === '自动写入中' ||
+            status === '录音识别中') {
+            // 记录当前长任务状态和图标
+            currentLongStatus = status;
+            currentLongIcon = config.icon;
+
+            // 如果计时器未运行或时间被重置，重新启动计时器
             if (!statusTimerInterval || currentStatusStartTime === null) {
                 currentStatusStartTime = Date.now();
-                startStatusTimer(status, config.icon);
+                startStatusTimer();
+            } else {
+                // 计时器已经在运行，更新显示内容（保持计时）
+                // 立即同步更新显示和覆盖层标签
+                updateTimerDisplay(currentLongStatus, currentLongIcon);
+                showBusyOverlay(currentLongStatus, currentLongIcon);
             }
         } else {
-            // 其他状态，停止计时器
-            stopStatusTimer();
-            currentStatusStartTime = null;
-            
+            // 其他状态：仅在收到明确的结束/错误/待命时停止计时器
+            const stopStatuses = new Set(['已完成', '写入完成', '错误', '待命']);
+
             // 构建显示文本（使用传入的elapsed或无耗时）
             let displayText = `${config.icon} ${status}`;
             if (elapsed !== null && elapsed > 0) {
                 displayText += ` (${elapsed.toFixed(2)}s)`;
             }
-            pcStatusEl.textContent = displayText;
+
+            if (stopStatuses.has(status)) {
+                stopStatusTimer();
+                currentStatusStartTime = null;
+                pcStatusEl.textContent = displayText;
+            } else {
+                // 短暂/中间状态（例如图片切换、已触发截图等）
+                // 如果当前正处于长任务中，保持计时器与覆盖层显示，不被短状态覆盖
+                if (statusTimerInterval && currentLongStatus) {
+                    // 保持 overlay/计时器显示为当前长任务
+                    updateTimerDisplay(currentLongStatus, currentLongIcon);
+                    showBusyOverlay(currentLongStatus, currentLongIcon);
+                } else {
+                    // 没有长任务时，正常显示短状态
+                    pcStatusEl.textContent = displayText;
+                }
+            }
         }
 
         // 更新样式
@@ -1405,21 +1527,25 @@
     }
 
     // 启动状态计时器
-    function startStatusTimer(status, icon) {
+    function startStatusTimer() {
         const pcStatusEl = document.getElementById('pc-status');
-        
+
         // 清除之前的计时器
         if (statusTimerInterval) {
             clearInterval(statusTimerInterval);
         }
-        
-        // 立即更新一次
-        updateTimerDisplay(status, icon);
-        
-        // 每秒更新一次
+
+        // 立即更新一次并显示醒目的全局等待覆盖层
+        updateTimerDisplay(currentLongStatus, currentLongIcon);
+        showBusyOverlay(currentLongStatus, currentLongIcon);
+
+        // 每秒更新一次（使用全局 currentLongStatus/currentLongIcon，便于在运行时切换状态）
         statusTimerInterval = setInterval(() => {
-            updateTimerDisplay(status, icon);
+            updateTimerDisplay(currentLongStatus, currentLongIcon);
+            // 同步更新覆盖层的计时显示
+            updateBusyOverlayTimer();
         }, 1000);
+
     }
 
     // 更新计时器显示
@@ -1428,6 +1554,12 @@
         if (currentStatusStartTime) {
             const elapsed = (Date.now() - currentStatusStartTime) / 1000;
             pcStatusEl.textContent = `${icon} ${status} (${elapsed.toFixed(0)}s)`;
+            // 同步更新覆盖层的主标签（如果存在）
+            const label = document.getElementById('globalBusyLabel');
+            if (label) {
+                label.textContent = `${icon || ''} ${status || ''}`;
+            }
+            updateBusyOverlayTimer();
         }
     }
 
@@ -1437,6 +1569,302 @@
             clearInterval(statusTimerInterval);
             statusTimerInterval = null;
         }
+        // 同步隐藏醒目等待覆盖层
+        hideBusyOverlay();
+        // 清理长任务标记
+        currentLongStatus = null;
+        currentLongIcon = null;
+    }
+
+    // ========== 全局醒目等待覆盖层（用于长时间运行的OCR/LLM/整理代码等） ==========
+    function ensureBusyOverlay() {
+        let overlay = document.getElementById('globalBusyOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'globalBusyOverlay';
+            overlay.style.cssText = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.6);
+                z-index: 99999;
+                align-items: center;
+                justify-content: center;
+                pointer-events: auto; /* 允许接收点击，用于点击背景关闭覆盖层 */
+            `;
+
+            const box = document.createElement('div');
+            box.id = 'globalBusyBox';
+            box.style.cssText = `
+                pointer-events: auto;
+                background: rgba(22,33,62,0.98);
+                color: #fff;
+                padding: 28px 36px;
+                border-radius: 14px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+                text-align: center;
+                max-width: 90%;
+            `;
+
+            const label = document.createElement('div');
+            label.id = 'globalBusyLabel';
+            label.style.cssText = `
+                font-size: 34px;
+                font-weight: 700;
+                line-height: 1.1;
+                margin-bottom: 8px;
+                color: #ffd166;
+                text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+            `;
+            box.appendChild(label);
+
+            const timer = document.createElement('div');
+            timer.id = 'globalBusyTimer';
+            timer.style.cssText = `
+                font-size: 18px;
+                color: #e0e0e0;
+                opacity: 0.95;
+            `;
+            box.appendChild(timer);
+
+            overlay.appendChild(box);
+            // 点击背景（overlay 本身而非内部 box）隐藏覆盖层
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    hideBusyOverlay();
+                }
+            });
+
+            // 防止点击 box 时冒泡到 overlay（避免误触发隐藏）
+            box.addEventListener('click', function(e) { e.stopPropagation(); });
+
+            // 当用户点击页面上的小状态显示（pc-status）也隐藏覆盖层（便于在小视图操作时关闭）
+            const pcStatusEl = document.getElementById('pc-status');
+            if (pcStatusEl && !pcStatusEl.dataset._globalBusyClickAttached) {
+                pcStatusEl.addEventListener('click', function() { hideBusyOverlay(); });
+                pcStatusEl.dataset._globalBusyClickAttached = '1';
+            }
+            document.body.appendChild(overlay);
+        }
+        return overlay;
+    }
+
+    // 显示覆盖层
+    function showBusyOverlay(status, icon) {
+        const overlay = ensureBusyOverlay();
+        const label = document.getElementById('globalBusyLabel');
+        const timer = document.getElementById('globalBusyTimer');
+
+        label.textContent = `${icon || ''} ${status || '处理中...'} `;
+        timer.textContent = `0s`;
+
+        overlay.style.display = 'flex';
+        // 小动画：缩放进入
+        const box = document.getElementById('globalBusyBox');
+        if (box) {
+            box.style.transform = 'scale(0.96)';
+            box.style.transition = 'transform 180ms ease-out';
+            setTimeout(() => { box.style.transform = 'scale(1)'; }, 20);
+        }
+    }
+
+    // 更新覆盖层计时文本（基于 currentStatusStartTime）
+    function updateBusyOverlayTimer() {
+        const timer = document.getElementById('globalBusyTimer');
+        const label = document.getElementById('globalBusyLabel');
+        if (!timer || !label) return;
+
+        if (currentStatusStartTime) {
+            const elapsed = Math.floor((Date.now() - currentStatusStartTime) / 1000);
+            timer.textContent = `${elapsed}s`;
+        } else {
+            timer.textContent = '';
+        }
+    }
+
+    // 隐藏覆盖层
+    function hideBusyOverlay() {
+        const overlay = document.getElementById('globalBusyOverlay');
+        if (overlay) {
+            // 缩放退出动画
+            const box = document.getElementById('globalBusyBox');
+            if (box) {
+                box.style.transform = 'scale(0.96)';
+                setTimeout(() => { overlay.style.display = 'none'; }, 160);
+            } else {
+                overlay.style.display = 'none';
+            }
+        }
+    }
+
+    // ========== 语音识别大面板（用于手机端避免乱码/仅显示状态，移除复制功能） ==========
+    function ensureSpeechPanel() {
+        let panel = document.getElementById('globalSpeechPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'globalSpeechPanel';
+            panel.style.cssText = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.6);
+                z-index: 99998;
+                align-items: center;
+                justify-content: center;
+                padding: 16px;
+            `;
+
+            const box = document.createElement('div');
+            box.id = 'globalSpeechBox';
+            box.style.cssText = `
+                width: 100%;
+                max-width: 800px;
+                background: rgba(22,33,62,0.98);
+                color: #fff;
+                padding: 18px 20px;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+                text-align: left;
+                pointer-events: auto;
+            `;
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;';
+            const title = document.createElement('div');
+            title.id = 'globalSpeechTitle';
+            title.style.cssText = 'font-size:18px; font-weight:700; color:#ffd166;';
+            title.textContent = '🎤 语音识别';
+            header.appendChild(title);
+
+            // 计时显示（与全局覆盖层样式一致）
+            const rightGroup = document.createElement('div');
+            rightGroup.style.cssText = 'display:flex; gap:8px; align-items:center;';
+
+            const timer = document.createElement('div');
+            timer.id = 'globalSpeechTimer';
+            timer.style.cssText = 'font-size:14px; color:#e0e0e0; opacity:0.95;';
+            timer.textContent = '';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕';
+            closeBtn.style.cssText = 'background:rgba(15,52,96,0.9); color:white; padding:6px 10px; border-radius:6px;';
+            closeBtn.onclick = hideSpeechPanel;
+
+            rightGroup.appendChild(timer);
+            rightGroup.appendChild(closeBtn);
+            header.appendChild(rightGroup);
+
+            const content = document.createElement('div');
+            content.id = 'globalSpeechContent';
+            content.style.cssText = 'font-size:18px; color:#e0e0e0; white-space:pre-wrap; word-break:break-word; line-height:1.6; max-height:60vh; overflow:auto; padding-top:6px;';
+
+            box.appendChild(header);
+            box.appendChild(content);
+            panel.appendChild(box);
+
+            // 点击背景关闭（仅当点击在 overlay 上）
+            panel.addEventListener('click', function(e){ if (e.target === panel) hideSpeechPanel(); });
+
+            document.body.appendChild(panel);
+        }
+        return panel;
+    }
+
+    function showSpeechPanel(text, opts = {autoFocus:true, transient:false, startTimer:false, stopTimer:false}) {
+        const panel = ensureSpeechPanel();
+        const content = document.getElementById('globalSpeechContent');
+        const title = document.getElementById('globalSpeechTitle');
+        const timer = document.getElementById('globalSpeechTimer');
+        if (content) content.textContent = text || '';
+        if (title) title.textContent = '🎤 语音识别';
+        if (timer && opts.stopTimer) timer.textContent = '';
+        panel.style.display = 'flex';
+
+        // 小动画
+        const box = document.getElementById('globalSpeechBox');
+        if (box) { box.style.transform = 'scale(0.98)'; box.style.transition = 'transform 160ms ease-out'; setTimeout(()=>box.style.transform='scale(1)',20); }
+
+        if (opts.startTimer) {
+            speechStartTime = Date.now();
+            startSpeechTimer();
+        }
+
+        if (opts.stopTimer) {
+            stopSpeechTimer();
+        }
+    }
+
+    function hideSpeechPanel() {
+        const panel = document.getElementById('globalSpeechPanel');
+        if (panel) panel.style.display = 'none';
+    }
+
+    // 语音计时器相关
+    function startSpeechTimer() {
+        if (speechTimerInterval) return; // 已在计时
+        const timerEl = document.getElementById('globalSpeechTimer');
+        if (!speechStartTime) speechStartTime = Date.now();
+        if (timerEl) timerEl.textContent = '0s';
+        speechTimerInterval = setInterval(updateSpeechTimerDisplay, 1000);
+    }
+
+    function updateSpeechTimerDisplay() {
+        const timerEl = document.getElementById('globalSpeechTimer');
+        if (!timerEl || !speechStartTime) return;
+        const elapsed = Math.floor((Date.now() - speechStartTime) / 1000);
+        timerEl.textContent = `${elapsed}s`;
+    }
+
+    function stopSpeechTimer() {
+        if (speechTimerInterval) {
+            clearInterval(speechTimerInterval);
+            speechTimerInterval = null;
+        }
+        speechStartTime = null;
+        const timerEl = document.getElementById('globalSpeechTimer');
+        if (timerEl) timerEl.textContent = '';
+    }
+
+    // 尝试修正常见的编码/转义问题，优先处理 \uXXXX 等 Unicode 转义，以及 latin1->utf8 的常见混淆
+    function normalizeTextEncoding(text) {
+        if (!text || typeof text !== 'string') return text;
+
+        let t = text;
+
+        // 如果包含 JSON 风格的 Unicode 转义（例如：\u4e2d\u56fd），解码为实际字符
+        try {
+            if (/\\u[0-9a-fA-F]{4}/.test(t)) {
+                t = t.replace(/\\u([0-9a-fA-F]{4})/g, function(_, g){ return String.fromCharCode(parseInt(g,16)); });
+            }
+            // 处理 \xHH 转义
+            if (/\\x[0-9a-fA-F]{2}/.test(t)) {
+                t = t.replace(/\\x([0-9a-fA-F]{2})/g, function(_, g){ return String.fromCharCode(parseInt(g,16)); });
+            }
+        } catch (e) {
+            // 忽略错误，继续尝试其他策略
+        }
+
+        // 修复 windows-1252/latin1 被当作 utf-8 导致的乱码：尝试 decodeURIComponent(escape(...)) 方案
+        try {
+            const maybe = decodeURIComponent(escape(t));
+            // 如果转换后看起来像中文或可读字符且长度合适，则使用
+            if (/[\u4e00-\u9fff]/.test(maybe) || maybe.length > t.length) {
+                t = maybe;
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        // 去除不可见控制字符（除换行、制表符）
+        t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/g, '');
+
+        return t;
     }
 
     // 解析工作流消息，提取状态和内容
@@ -1471,31 +1899,31 @@
     function handleUploadResponse(data) {
         const messagesEl = document.getElementById('messages');
         const { success, message, filename, original_filename, folder, size, index, total, counter } = data;
-        
-        console.log(`📤 处理上传响应: ${filename} (${index}/${total})`);
-        
+
+        // console log removed
+
         // 格式化文件大小
         const formatSize = (bytes) => {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
             return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
         };
-        
+
         // 更新PC状态
         updatePCStatus(success ? '待命' : '错误');
-        
+
         // 构建显示内容
         const statusIcon = success ? '✅' : '❌';
         const statusColor = success ? '#4ecca3' : '#f44336';
         const statusBg = success ? 'rgba(78, 204, 163, 0.1)' : 'rgba(244, 67, 54, 0.1)';
-        
+
         const html = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 15px; gap: 12px;">
                 <!-- 状态标题 -->
                 <div style="color: ${statusColor}; font-size: 18px; font-weight: 600; text-align: center; animation: bounce 0.5s ease-out;">
                     ${statusIcon} ${message || (success ? '上传成功' : '上传失败')}
                 </div>
-                
+
                 <!-- 进度指示器 -->
                 ${total > 1 ? `
                 <div style="width: 90%; max-width: 400px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 16px;">
@@ -1508,7 +1936,7 @@
                     </div>
                 </div>
                 ` : ''}
-                
+
                 <!-- 文件信息卡片 -->
                 <div style="width: 90%; max-width: 400px; background: ${statusBg}; border: 1px solid ${statusColor}33; border-radius: 8px; padding: 12px 16px;">
                     <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -1540,7 +1968,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 提示信息 -->
                 ${success ? `
                 <div style="color: #8892b0; font-size: 11px; text-align: center; padding: 8px; background: rgba(78, 204, 163, 0.05); border-radius: 6px; border: 1px solid rgba(78, 204, 163, 0.1);">
@@ -1549,10 +1977,10 @@
                 ` : ''}
             </div>
         `;
-        
+
         messagesEl.innerHTML = html;
         messagesEl.scrollTop = 0;
-        
+
         // 不保存到历史记录（避免大量上传记录）
     }
 
@@ -1560,12 +1988,12 @@
     function handleImageSwitch(data) {
         const messagesEl = document.getElementById('messages');
         const { status, filename, index, total, data: imageData } = data;
-        
-        console.log(`🖼️ 收到图片切换: ${filename} (${index}/${total})`);
-        
+
+        // console log removed
+
         // 更新PC状态
         updatePCStatus(status || '待命');
-        
+
         // 显示图片和信息 - 优化垂直居中、水平对齐和文件路径显示
         const html = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 10px; gap: 10px;">
@@ -1587,13 +2015,13 @@
                 </div>
             </div>
         `;
-        
+
         messagesEl.innerHTML = html;
         messagesEl.scrollTop = 0;
-        
+
         // 初始化双指缩放功能
         initImageZoom();
-        
+
         // 不保存到历史记录（避免大量图片数据）
     }
 
@@ -1601,20 +2029,20 @@
     function initImageZoom() {
         const container = document.getElementById('imageContainer');
         const img = document.getElementById('zoomImage');
-        
+
         if (!container || !img) return;
-        
+
         let scale = 1;
         let lastScale = 1;
         let initialDistance = 0;
-        
+
         // 计算两指距离
         const getDistance = (touch1, touch2) => {
             const dx = touch1.clientX - touch2.clientX;
             const dy = touch1.clientY - touch2.clientY;
             return Math.sqrt(dx * dx + dy * dy);
         };
-        
+
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
@@ -1622,20 +2050,20 @@
                 lastScale = scale;
             }
         }, { passive: false });
-        
+
         container.addEventListener('touchmove', (e) => {
             if (e.touches.length === 2) {
                 e.preventDefault();
                 const currentDistance = getDistance(e.touches[0], e.touches[1]);
                 scale = lastScale * (currentDistance / initialDistance);
-                
+
                 // 限制缩放范围 0.5-5倍
                 scale = Math.min(Math.max(scale, 0.5), 5);
-                
+
                 img.style.transform = `scale(${scale})`;
             }
         }, { passive: false });
-        
+
         container.addEventListener('touchend', (e) => {
             if (e.touches.length < 2) {
                 lastScale = scale;
@@ -1646,7 +2074,7 @@
     function updateStatus(connected) {
         const statusEl = document.getElementById('status');
         const pcStatusEl = document.getElementById('pc-status');
-        
+
         // 获取所有连接相关按钮
         const connectLocalBtns = [
             document.getElementById('connectLocalBtn'),
@@ -1660,14 +2088,14 @@
             document.getElementById('disconnectBtn'),
             document.getElementById('mobileDisconnectBtn')
         ];
-        
+
         if (connected) {
             // 连接成功：显示绿点
             statusEl.classList.add('connected');
             statusEl.title = '已连接';
             // 连接成功时显示待命状态
             updatePCStatus('待命');
-            
+
             // 禁用连接按钮，启用断开按钮
             connectLocalBtns.forEach(btn => {
                 if (btn) {
@@ -1698,7 +2126,7 @@
             statusEl.title = '未连接';
             // 连接断开时隐藏PC状态
             pcStatusEl.style.display = 'none';
-            
+
             // 启用连接按钮，禁用断开按钮
             connectLocalBtns.forEach(btn => {
                 if (btn) {
@@ -1846,30 +2274,30 @@
     function disconnect() {
         // 设置手动关闭标志
         isManualClose = true;
-        
+
         // 禁用自动重连
         autoReconnectEnabled = false;
-        
+
         // 清除重连定时器
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
-        
+
         // 重置重连计数
         reconnectAttempts = 0;
-        
+
         // 停止状态计时器
         stopStatusTimer();
         currentStatusStartTime = null;
-        
+
         if (ws) {
             ws.close();
         }
-        
+
         // 重置手动关闭标志
         isManualClose = false;
-        
+
         closeDrawerAfterAction();
     }
 
@@ -1877,17 +2305,17 @@
     function attemptReconnect() {
         reconnectAttempts++;
         const messagesEl = document.getElementById('messages');
-        
+
         // 计算下次重连时间
         const baseInterval = RECONNECT_INTERVAL;
         const exponentialDelay = Math.min(baseInterval * Math.pow(2, reconnectAttempts - 1), 30000);
         const jitter = exponentialDelay * 0.2 * (Math.random() * 2 - 1);
         const delay = Math.max(exponentialDelay + jitter, baseInterval);
         const nextRetrySeconds = Math.ceil(delay / 1000);
-        
-        console.log(`尝试第 ${reconnectAttempts} 次重连...`);
-        console.log(`下次重连延迟: ${delay.toFixed(0)}ms (${nextRetrySeconds}s)`);
-        
+
+        // console log removed
+        // console log removed
+
         // 显示重连状态
         messagesEl.innerHTML = `
             <div class="empty-state">
@@ -1896,11 +2324,11 @@
                 <div style="font-size: 11px; color: #888; margin-top: 8px;">预计 ${nextRetrySeconds} 秒后重试</div>
             </div>
         `;
-        
+
         reconnectTimer = setTimeout(() => {
             const ip = document.getElementById('ipInput').value.trim();
             const port = document.getElementById('portInput').value.trim();
-            
+
             if (ip && port && autoReconnectEnabled) {
                 connect();
             }
@@ -1921,7 +2349,7 @@
             const exists = history.some(item => item.contentHash === contentHash);
 
             if (exists) {
-                console.log('该消息已存在于历史记录中，跳过添加');
+                // console log removed
                 return;
             }
 
@@ -1947,7 +2375,7 @@
 
             // 刷新显示
             loadHistory();
-            console.log('消息已保存到历史记录');
+            // console log removed
         } catch (error) {
             console.error('保存历史记录失败:', error);
         }
@@ -1977,7 +2405,7 @@
                 const emptyHtml = '<div class="empty-history">暂无历史记录</div>';
                 if (historyListMobile) historyListMobile.innerHTML = emptyHtml;
                 if (historyListDesktop) historyListDesktop.innerHTML = emptyHtml;
-                
+
                 // 隐藏所有清空按钮
                 const clearButtons = document.querySelectorAll('.clear-history-btn');
                 clearButtons.forEach(btn => {
@@ -2074,10 +2502,10 @@
     function toggleTutorial() {
         const tutorialPanel = document.getElementById('tutorialPanel');
         const expandBtn = document.getElementById('expandTutorialBtn');
-        
+
         // 检查是否为移动端
         const isMobile = window.innerWidth < 768;
-        
+
         if (isMobile) {
             // 移动端：使用弹窗显示教程
             showMobileTutorial();
@@ -2105,7 +2533,7 @@
     function showMobileTutorial() {
         // 创建或获取教程弹窗
         let modal = document.getElementById('mobileTutorialModal');
-        
+
         if (!modal) {
             // 创建弹窗HTML
             modal = document.createElement('div');
@@ -2123,14 +2551,14 @@
                 justify-content: center;
                 padding: 15px;
             `;
-            
+
             // 点击背景关闭
             modal.onclick = function(e) {
                 if (e.target === modal) {
                     closeMobileTutorial();
                 }
             };
-            
+
             modal.innerHTML = `
                 <div style="
                     background: #16213e;
@@ -2154,7 +2582,7 @@
                             cursor: pointer;
                         ">✕ 关闭</button>
                     </div>
-                    
+
                     <div style="margin-bottom: 15px;">
                         <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">🚀 一键分析</h4>
                         <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
@@ -2166,18 +2594,18 @@
                             OCR识别 → 文字分析 → 推送
                         </div>
                     </div>
-                    
+
                     <div style="margin-bottom: 15px;">
                         <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">🎯 切换模型</h4>
                         <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
-                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+1</code> OCR模型 | 
+                            <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+1</code> OCR模型 |
                             <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+2</code> 主模型
                         </div>
                         <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
                             <code style="background: rgba(255, 121, 198, 0.15); padding: 1px 4px; border-radius: 2px; font-family: monospace; color: #ff79c6; font-size: 11px;">Alt+3~7</code> 快速换大模型 🧠
                         </div>
                     </div>
-                    
+
                     <div style="margin-bottom: 15px;">
                         <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">📱 手机连接</h4>
                         <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
@@ -2188,7 +2616,7 @@
                             🎨 Markdown • 📋 代码复制
                         </div>
                     </div>
-                    
+
                     <div>
                         <h4 style="color: #4ecca3; font-size: 13px; margin: 10px 0 5px 0; padding-left: 8px; border-left: 2px solid #4ecca3;">💡 小贴士</h4>
                         <div style="background: rgba(15, 52, 96, 0.3); padding: 8px; margin: 5px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
@@ -2198,10 +2626,10 @@
                     </div>
                 </div>
             `;
-            
+
             document.body.appendChild(modal);
         }
-        
+
         // 显示弹窗
         modal.style.display = 'flex';
     }
@@ -2223,18 +2651,18 @@
         input.type = 'file';
         input.accept = 'image/*';
         input.multiple = true;
-        
+
         // 添加 capture 属性以更好地支持移动端
         // 注意：某些移动浏览器可能需要这个提示
         input.setAttribute('capture', '');
         input.removeAttribute('capture'); // 立即移除以避免强制相机模式
-        
+
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
-            
-            console.log(`📸 选择了 ${files.length} 张图片`);
-            
+
+            // console log removed
+
             // 添加到待上传队列
             files.forEach(file => {
                 pendingImages.push({
@@ -2243,16 +2671,16 @@
                     id: Date.now() + Math.random()
                 });
             });
-            
+
             // 生成预览并显示弹窗
             generatePreviewsAndShow();
         };
-        
+
         // 处理取消选择的情况
         input.oncancel = function() {
-            console.log('用户取消了选择');
+            // console log removed
         };
-        
+
         input.click();
     }
 
@@ -2260,13 +2688,13 @@
     function generatePreviewsAndShow() {
         let loadedCount = 0;
         const totalCount = pendingImages.length;
-        
+
         pendingImages.forEach((img, index) => {
             const reader = new FileReader();
             reader.onload = function(e) {
                 img.preview = e.target.result;
                 loadedCount++;
-                
+
                 // 所有预览加载完成后显示弹窗
                 if (loadedCount === totalCount) {
                     showUploadPreviewModal();
@@ -2283,7 +2711,7 @@
         if (modal) {
             modal.remove();
         }
-        
+
         // 创建弹窗
         modal = document.createElement('div');
         modal.id = 'uploadPreviewModal';
@@ -2298,7 +2726,7 @@
             z-index: 3000;
             flex-direction: column;
         `;
-        
+
         // 弹窗内容
         modal.innerHTML = `
             <!-- 顶部标题栏 -->
@@ -2325,7 +2753,7 @@
                     transition: all 0.2s;
                 ">✕ 取消</button>
             </div>
-            
+
             <!-- 图片预览列表 -->
             <div id="previewList" style="
                 flex: 1;
@@ -2337,7 +2765,7 @@
             ">
                 ${generatePreviewHTML()}
             </div>
-            
+
             <!-- 提示文字 -->
             <div style="
                 background: rgba(78, 204, 163, 0.1);
@@ -2349,7 +2777,7 @@
             ">
                 💡 点击/双击放大 | 拖拽调整顺序 | ESC关闭
             </div>
-            
+
             <!-- 底部操作栏 -->
             <div style="
                 background: #16213e;
@@ -2395,9 +2823,9 @@
                 ">✅ 上传 (${pendingImages.length}张)</button>
             </div>
         `;
-        
+
         document.body.appendChild(modal);
-        
+
         // 初始化拖拽功能
         setTimeout(() => {
             initDragAndDrop();
@@ -2409,9 +2837,9 @@
         if (pendingImages.length === 0) {
             return '<div style="text-align: center; color: #888; padding: 40px;">暂无图片</div>';
         }
-        
-        console.log('🎨 generatePreviewHTML 被调用，当前数组顺序:', pendingImages.map((img, idx) => `${idx}: ${img.file.name}`).join(', '));
-        
+
+        // console log removed
+
         return pendingImages.map((img, index) => `
             <div class="preview-item" data-index="${index}" style="
                 background: #1a1a2e;
@@ -2438,7 +2866,7 @@
                         background: #0f0f23;
                         pointer-events: none;
                     ">
-                    
+
                     <!-- 编号标签（左上角浮动） -->
                     <div style="
                         position: absolute;
@@ -2454,7 +2882,7 @@
                         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
                         pointer-events: none;
                     ">${index + 1}</div>
-                    
+
                     <!-- 删除按钮（右上角浮动） -->
                     <button onclick="event.stopPropagation(); removeImage(${index})" style="
                         position: absolute;
@@ -2476,7 +2904,7 @@
                         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
                     ">✕</button>
                 </div>
-                
+
                 <!-- 文件名 -->
                 <div style="
                     padding: 8px 10px;
@@ -2521,20 +2949,20 @@
         input.type = 'file';
         input.accept = 'image/*';
         input.multiple = true;
-        
+
         // 添加提示信息
         const currentCount = pendingImages.length;
-        console.log(`当前已有 ${currentCount} 张图片，继续添加...`);
-        
+        // console log removed
+
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
             if (files.length === 0) {
-                console.log('未选择新图片');
+                    // console log removed
                 return;
             }
-            
-            console.log(`➕ 新增 ${files.length} 张图片`);
-            
+
+            // console log removed
+
             // 添加到队列
             files.forEach(file => {
                 pendingImages.push({
@@ -2543,15 +2971,15 @@
                     id: Date.now() + Math.random()
                 });
             });
-            
+
             // 重新生成预览
             generatePreviewsAndShow();
         };
-        
+
         input.oncancel = function() {
-            console.log('用户取消了添加');
+            // console log removed
         };
-        
+
         input.click();
     }
 
@@ -2563,7 +2991,7 @@
             // 重新绑定拖拽事件（会自动更新 data-index）
             initDragAndDrop();
         }
-        
+
         // 更新标题和按钮文字
         const modal = document.getElementById('uploadPreviewModal');
         if (modal) {
@@ -2576,8 +3004,8 @@
                 confirmBtn.textContent = `✅ 上传 (${pendingImages.length}张)`;
             }
         }
-        
-        console.log('🔄 预览列表已刷新，当前顺序:', pendingImages.map(img => img.file.name));
+
+        // console log removed
     }
 
     // 初始化拖拽排序功能
@@ -2589,7 +3017,7 @@
         items.forEach((item, index) => {
             // 确保 data-index 与当前数组索引一致
             item.setAttribute('data-index', index);
-            
+
             // 桌面端拖拽事件
             item.addEventListener('dragstart', function(e) {
                 draggedItem = this;
@@ -2636,7 +3064,7 @@
                 const currentX = e.touches[0].clientX;
                 const diffY = Math.abs(touchCurrentY - touchStartY);
                 const diffX = Math.abs(currentX - touchStartX);
-                
+
                 // 垂直移动超过15px且垂直移动大于水平移动才认为是拖拽
                 if (diffY > 15 && diffY > diffX) {
                     isDragging = true;
@@ -2657,27 +3085,27 @@
                 const rect = this.getBoundingClientRect();
                 const centerY = rect.top + rect.height / 2;
                 const moveDistance = touchCurrentY - touchStartY;
-                
+
                 // 找到最近的元素进行交换
                 const allItems = Array.from(document.querySelectorAll('.preview-item'));
                 let targetIndex = parseInt(this.dataset.index);
-                
+
                 allItems.forEach((otherItem, idx) => {
                     if (idx === targetIndex) return;
                     const otherRect = otherItem.getBoundingClientRect();
                     const otherCenterY = otherRect.top + otherRect.height / 2;
-                    
+
                     // 判断是否移动到该元素的位置
                     if ((moveDistance > 0 && otherCenterY > centerY && otherCenterY <= centerY + moveDistance) ||
                         (moveDistance < 0 && otherCenterY < centerY && otherCenterY >= centerY + moveDistance)) {
                         targetIndex = idx;
                     }
                 });
-                
+
                 if (targetIndex !== parseInt(this.dataset.index)) {
                     swapImages(parseInt(this.dataset.index), targetIndex);
                 }
-                
+
                 isDragging = false;
                 hasMoved = false;
             });
@@ -2686,21 +3114,21 @@
 
     // 交换两张图片的位置
     function swapImages(index1, index2) {
-        if (index1 < 0 || index1 >= pendingImages.length || 
+        if (index1 < 0 || index1 >= pendingImages.length ||
             index2 < 0 || index2 >= pendingImages.length) {
             return;
         }
-        
-        console.log(`🔄 交换图片位置: ${index1} <-> ${index2}`);
-        console.log('   交换前顺序:', pendingImages.map(img => img.file.name));
-        
+
+        // console log removed
+        // console log removed
+
         // 交换数组中的位置
         const temp = pendingImages[index1];
         pendingImages[index1] = pendingImages[index2];
         pendingImages[index2] = temp;
-        
-        console.log('   交换后顺序:', pendingImages.map(img => img.file.name));
-        
+
+        // console log removed
+
         // 刷新预览列表
         refreshPreviewList();
     }
@@ -2708,15 +3136,15 @@
     // 显示图片放大预览
     function showImagePreview(index) {
         if (index < 0 || index >= pendingImages.length) return;
-        
+
         const img = pendingImages[index];
-        
+
         // 创建放大预览弹窗
         let previewModal = document.getElementById('imagePreviewModal');
         if (previewModal) {
             previewModal.remove();
         }
-        
+
         previewModal = document.createElement('div');
         previewModal.id = 'imagePreviewModal';
         previewModal.style.cssText = `
@@ -2733,7 +3161,7 @@
             justify-content: center;
             touch-action: none;
         `;
-        
+
         previewModal.innerHTML = `
             <!-- 关闭按钮 -->
             <button onclick="closeImagePreview()" style="
@@ -2754,7 +3182,7 @@
                 justify-content: center;
                 transition: all 0.2s;
             ">✕</button>
-            
+
             <!-- 图片信息 -->
             <div style="
                 position: absolute;
@@ -2771,7 +3199,7 @@
                 <div>编号: ${index + 1} / ${pendingImages.length}</div>
                 <div style="font-size: 11px; color: #b0b0d0; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${img.file.name}</div>
             </div>
-            
+
             <!-- 大图容器（支持缩放和滑动） -->
             <div id="previewImageContainer" style="
                 position: relative;
@@ -2789,7 +3217,7 @@
                     font-size: 14px;
                     z-index: 5;
                 ">加载中...</div>
-                
+
                 <!-- 大图 -->
                 <img id="previewImage" src="${img.preview}" style="
                     max-width: 90%;
@@ -2804,7 +3232,7 @@
                 " onload="this.style.opacity=1; document.getElementById('previewLoading').style.display='none';"
                    onerror="this.parentElement.innerHTML='<div style=\'color: #f44336; font-size: 16px;\'>❌ 图片加载失败</div>'">
             </div>
-            
+
             <!-- 导航按钮 -->
             <div style="
                 position: absolute;
@@ -2848,7 +3276,7 @@
                     ">下一张 →</button>
                 ` : ''}
             </div>
-            
+
             <!-- 操作提示（底部小字） -->
             <div style="
                 position: absolute;
@@ -2863,16 +3291,16 @@
                 双指缩放 | 左右滑动切换 | ESC关闭
             </div>
         `;
-        
+
         // 点击背景关闭
         previewModal.onclick = function(e) {
             if (e.target === previewModal) {
                 closeImagePreview();
             }
         };
-        
+
         document.body.appendChild(previewModal);
-        
+
         // 初始化手势支持（缩放和滑动）
         setTimeout(() => {
             initImageGestures(index);
@@ -2891,9 +3319,9 @@
     function initImageGestures(currentIndex) {
         const container = document.getElementById('previewImageContainer');
         const img = document.getElementById('previewImage');
-        
+
         if (!container || !img) return;
-        
+
         let scale = 1;
         let lastScale = 1;
         let startX = 0;
@@ -2904,7 +3332,7 @@
         let isPinching = false;
         let initialDistance = 0;
         let touchStartTime = 0;
-        
+
         // 双指缩放
         container.addEventListener('touchstart', function(e) {
             if (e.touches.length === 2) {
@@ -2918,7 +3346,7 @@
                 startY = e.touches[0].clientY - currentY;
             }
         }, { passive: false });
-        
+
         container.addEventListener('touchmove', function(e) {
             if (isPinching && e.touches.length === 2) {
                 e.preventDefault();
@@ -2933,25 +3361,25 @@
                 applyTransform(img, scale, currentX, currentY);
             }
         }, { passive: false });
-        
+
         container.addEventListener('touchend', function(e) {
             if (isPinching) {
                 isPinching = false;
                 if (scale < 1) scale = 1;
                 lastScale = scale;
             }
-            
+
             if (isDragging) {
                 isDragging = false;
             }
-            
+
             // 检测单击（非拖动）- 关闭预览
             const touchDuration = Date.now() - touchStartTime;
             if (touchDuration < 200 && !isDragging && !isPinching && scale <= 1) {
                 closeImagePreview();
             }
         });
-        
+
         // 鼠标滚轮缩放（桌面端）
         container.addEventListener('wheel', function(e) {
             e.preventDefault();
@@ -2959,7 +3387,7 @@
             scale = Math.min(Math.max(scale * delta, 0.5), 4);
             applyTransform(img, scale, currentX, currentY);
         }, { passive: false });
-        
+
         // 鼠标拖动（桌面端）
         let mouseDown = false;
         container.addEventListener('mousedown', function(e) {
@@ -2970,7 +3398,7 @@
                 img.style.cursor = 'grabbing';
             }
         });
-        
+
         container.addEventListener('mousemove', function(e) {
             if (mouseDown && scale > 1) {
                 currentX = e.clientX - startX;
@@ -2978,32 +3406,32 @@
                 applyTransform(img, scale, currentX, currentY);
             }
         });
-        
+
         container.addEventListener('mouseup', function() {
             mouseDown = false;
             img.style.cursor = 'grab';
         });
-        
+
         container.addEventListener('mouseleave', function() {
             mouseDown = false;
             img.style.cursor = 'grab';
         });
-        
+
         // 左右滑动切换图片（仅在未缩放时）
         let swipeStartX = 0;
         let swipeThreshold = 50;
-        
+
         container.addEventListener('touchstart', function(e) {
             if (e.touches.length === 1 && scale <= 1) {
                 swipeStartX = e.touches[0].clientX;
             }
         }, { passive: true });
-        
+
         container.addEventListener('touchend', function(e) {
             if (scale <= 1) {
                 const swipeEndX = e.changedTouches[0].clientX;
                 const swipeDistance = swipeEndX - swipeStartX;
-                
+
                 if (Math.abs(swipeDistance) > swipeThreshold) {
                     if (swipeDistance > 0 && currentIndex > 0) {
                         // 向右滑动 - 上一张
@@ -3016,19 +3444,19 @@
             }
         });
     }
-    
+
     // 计算两指之间的距离
     function getTouchDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
         return Math.sqrt(dx * dx + dy * dy);
     }
-    
+
     // 应用变换（缩放和平移）
     function applyTransform(img, scale, x, y) {
         img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
     }
-    
+
     // 导航到指定图片
     function navigateImage(index) {
         closeImagePreview();
@@ -3042,7 +3470,7 @@
         if (confirm('确定要删除这张图片吗？')) {
             removeImage(index);
             closeImagePreview();
-            
+
             // 如果还有图片，显示下一个
             if (pendingImages.length > 0) {
                 const nextIndex = Math.min(index, pendingImages.length - 1);
@@ -3055,41 +3483,41 @@
 
     // 确认上传
     function confirmUpload() {
-        console.log('========== 开始上传流程 ==========');
-        console.log('📋 pendingImages 数组长度:', pendingImages.length);
-        console.log('📋 pendingImages 当前顺序:', pendingImages.map((img, idx) => `${idx}: ${img.file.name}`).join('\n   '));
-        
+        // console log removed
+        // console log removed
+        // console log removed
+
         if (pendingImages.length === 0) {
             alert('⚠️ 请先添加图片');
             return;
         }
-        
+
         // 检查WebSocket连接状态（在真正上传时才检查）
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             alert('❌ 请先连接到PC端');
             return;
         }
-        
+
         // 关闭预览弹窗
         const modal = document.getElementById('uploadPreviewModal');
         if (modal) {
             modal.remove();
         }
-        
+
         // 批量上传图片（按照当前 pendingImages 数组的顺序）
         showMessage(`📤 正在上传 ${pendingImages.length} 张图片...`, 'info');
-        
-        console.log('🚀 开始遍历发送图片...');
-        
+
+        // console log removed
+
         // 使用 for 循环确保按顺序处理
         for (let i = 0; i < pendingImages.length; i++) {
             const img = pendingImages[i];
-            console.log(`📤 准备发送第 ${i + 1} 张: ${img.file.name} (数组索引: ${i})`);
+            // console log removed
             sendImageToPC(img.file, i + 1, pendingImages.length);
         }
-        
-        console.log('========== 上传流程结束 ==========');
-        
+
+        // console log removed
+
         // 清空队列
         pendingImages = [];
     }
@@ -3097,10 +3525,10 @@
     // 发送单张图片到PC
     function sendImageToPC(file, index, total) {
         const reader = new FileReader();
-        
+
         reader.onload = function(e) {
             const base64Data = e.target.result;
-            
+
             // 构建消息对象
             const message = {
                 type: 'image_upload',
@@ -3110,12 +3538,12 @@
                 counter: imageCounter++,
                 data: base64Data
             };
-            
+
             // 通过WebSocket发送
             try {
                 ws.send(JSON.stringify(message));
-                console.log(`📤 正在发送图片 ${index}/${total}: ${file.name} (序号: ${index})`);
-                
+                // console log removed
+
                 // 显示发送进度提示
                 if (index === total) {
                     setTimeout(() => {
@@ -3127,12 +3555,12 @@
                 alert(`❌ 发送图片失败: ${error.message}`);
             }
         };
-        
+
         reader.onerror = function() {
             console.error('读取文件失败');
             alert('❌ 读取文件失败');
         };
-        
+
         reader.readAsDataURL(file);
     }
 
@@ -3142,7 +3570,7 @@
         if (window.innerWidth >= 1024) {
             const tutorialVisible = localStorage.getItem('tutorial_visible');
             const expandBtn = document.getElementById('expandTutorialBtn');
-            
+
             if (tutorialVisible === 'false') {
                 const tutorialPanel = document.getElementById('tutorialPanel');
                 if (tutorialPanel) {
@@ -3153,11 +3581,11 @@
                 }
             }
         }
-        
+
         // 绑定键盘快捷键
         document.addEventListener('keydown', handleKeyboardShortcuts);
     });
-    
+
     // 处理键盘快捷键
     function handleKeyboardShortcuts(e) {
         // ESC 关闭所有弹窗
@@ -3166,7 +3594,7 @@
             const uploadPreview = document.getElementById('uploadPreviewModal');
             const mobileTutorial = document.getElementById('mobileTutorialModal');
             const configModal = document.getElementById('configModal');
-            
+
             if (imagePreview) {
                 closeImagePreview();
             } else if (uploadPreview) {
@@ -3177,7 +3605,41 @@
                 closeConfig();
             }
         }
-        
+
+        // Shift+S 用于控制录音：第一次按下开始录音并显示开始状态，第二次按下停止录音并进入处理状态
+        if ((e.key === 'S' || e.key === 's') && e.shiftKey) {
+            e.preventDefault();
+            if (!isConnected()) {
+                showMessage('❌ 未连接到PC端，无法控制录音', 'error');
+                return;
+            }
+
+            try {
+                if (speechState === 'idle') {
+                    // 开始录音
+                    speechState = 'recording';
+                    speechStartTime = Date.now();
+                    startSpeechTimer();
+                    showSpeechPanel('开始录音', {autoFocus: false, startTimer:false});
+                    // 向PC端发送开始录音指令（服务端需配合处理）
+                    ws.send(JSON.stringify({ type: 'speech_control', action: 'start' }));
+                } else if (speechState === 'recording') {
+                    // 停止录音并通知服务端处理
+                    speechState = 'processing';
+                    showSpeechPanel('处理录音中', {autoFocus: false});
+                    ws.send(JSON.stringify({ type: 'speech_control', action: 'stop_and_process' }));
+                } else {
+                    // 正在处理时提示用户等待
+                    showMessage('语音正在处理，请稍候...', 'info');
+                }
+            } catch (err) {
+                console.error('发送录音控制消息失败', err);
+                showMessage('❌ 发送录音控制失败，请检查连接', 'error');
+            }
+
+            return;
+        }
+
         // 方向键切换图片（仅在图片预览时）
         const imagePreview = document.getElementById('imagePreviewModal');
         if (imagePreview) {
