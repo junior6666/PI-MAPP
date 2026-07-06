@@ -7,7 +7,17 @@ def type_java_code(code_path):
     模拟人工逐字符输入 Java 代码到 LeetCode 编辑器
 
     参数:
-        code_path: 代码文件路径 (如 'code.txt')
+        code_path: 代码文件路径 (如 'java_code.txt')
+
+    核心处理逻辑:
+    1. 花括号: 代码结构中的 '}' 不输入（IDE 自动补全），但需移动光标
+    2. 缩进: 信任 IDE 自动缩进，只在缩进回退时修正
+    3. 字符/字符串字面量: 其中的 '{' '(' '[' 原样输入，但需删除 IDE 自动补全的对应右括号
+    4. 数组初始化: {} 必须在同一行内完成
+
+    限制说明:
+    - 不支持嵌套数组初始化跨多行
+    - 代码中不应包含注释
     """
 
     # 读取代码文件
@@ -24,103 +34,143 @@ def type_java_code(code_path):
     # 配置
     pyautogui.PAUSE = 0.01
 
-    prev_indent = 0  # 上一行的缩进
+    prev_indent = 0
 
     for i, line in enumerate(lines):
         current_indent = len(line) - len(line.lstrip())
         content = line.lstrip()
 
         if i == 0:
-            # 第一行直接输入
-            _type_content(content)
+            _type_content_with_states(content)
         else:
-            # 判断下一行是否是纯 '}'
-            next_is_close_brace = False
-            if i + 1 < len(lines) and lines[i + 1].strip() == '}':
-                next_is_close_brace = True
-
-            # 判断当前行内容
             if content == '}':
-                # 纯 '}' 行：不输入任何内容
-                # 上一行输入完后光标在行尾，按 Down 到 } 行
                 pyautogui.press('down')
-                # 光标在 } 后面（Down 在短行时跳到行尾）
+                prev_indent = current_indent
+                continue
+
+            elif content.startswith('}') and content != '}':
+                pyautogui.press('down')
+                after_brace = content[1:]
+                _type_content_with_states(after_brace)
                 prev_indent = current_indent
                 continue
 
             else:
-                # 普通代码行或 else { 等
                 pyautogui.press('return')
-                time.sleep(0.05)  # 等待 IDE 自动缩进
+                time.sleep(0.05)
 
-                # 缩进策略 B：只在回退时修正
                 if current_indent < prev_indent:
-                    # 缩进回退，需要修正
-                    pyautogui.press('home')  # 跳到行首
+                    pyautogui.press('home')
                     pyautogui.typewrite(' ' * current_indent, interval=0.01)
 
-                # 输入代码内容（处理 {} 同一行的情况）
-                _type_content_with_braces(content)
+                _type_content_with_states(content)
 
         prev_indent = current_indent
 
-    print("代码输入完成！")
+    print("Java 代码输入完成！")
 
 
-def _type_content(text):
-    """普通内容输入（无特殊括号处理）"""
-    pyautogui.typewrite(text, interval=0.01)
-
-
-def _type_content_with_braces(text):
+def _delete_auto_close_bracket():
     """
-    输入内容，处理 {} 在同一行的情况
-
-    遇到 '{' 时：
-    - IDE 自动补全 '}'
-    - 继续输入 {} 中间的内容
-    - 按 Right 跳过 IDE 自动补全的 '}'
-    - 继续输入 } 后面的内容
+    删除 IDE 自动补全的多余右括号
+    操作: Right (右移到括号后) + Backspace (删除前面的括号)
     """
+    pyautogui.press('right')
+    pyautogui.press('backspace')
+
+
+def _type_content_with_states(text):
+    """
+    输入内容，支持状态机处理字符/字符串字面量中的花括号
+
+    状态:
+        NORMAL: 正常代码，'{' 触发 IDE 补全 '}'，'}' 跳过
+        IN_CHAR: 字符字面量 '...' 中，'{' '(' '[' 原样输入但删除 IDE 自动补全
+        IN_CHAR_ESCAPE: 字符转义中，下一个字符原样输入
+        IN_STRING: 字符串字面量 "..." 中，'{' '(' '[' 原样输入但删除 IDE 自动补全
+        IN_STRING_ESCAPE: 字符串转义中，下一个字符原样输入
+    """
+    state = 'NORMAL'
     i = 0
+
     while i < len(text):
         char = text[i]
 
-        if char == '{':
-            # 输入 {，IDE 自动补全 }
-            pyautogui.typewrite('{', interval=0.01)
-
-            # 找同一行内匹配的 }
-            brace_depth = 1
-            j = i + 1
-            while j < len(text) and brace_depth > 0:
-                if text[j] == '{':
-                    brace_depth += 1
-                elif text[j] == '}':
-                    brace_depth -= 1
-                j += 1
-
-            if brace_depth == 0:
-                # 找到匹配的 }，在同一行内
-                # 输入 {} 中间的内容
-                middle = text[i + 1:j - 1]
-                if middle:
-                    pyautogui.typewrite(middle, interval=0.01)
-
-                # 按 Right 跳过 IDE 自动补全的 }
-                pyautogui.press('right')
-
-                # 继续处理 } 后面的内容
-                i = j
+        # ========== NORMAL ==========
+        if state == 'NORMAL':
+            if char == "'":
+                pyautogui.typewrite(char, interval=0.01)
+                state = 'IN_CHAR'
+                i += 1
                 continue
 
-        elif char == '}':
-            # 跨行场景的 }，不应该出现在这里
-            # 跳过（由 IDE 自动补全）
-            pass
+            elif char == '"':
+                pyautogui.typewrite(char, interval=0.01)
+                state = 'IN_STRING'
+                i += 1
+                continue
 
-        else:
+            elif char == '{':
+                pyautogui.typewrite('{', interval=0.01)
+
+                brace_depth = 1
+                j = i + 1
+                while j < len(text) and brace_depth > 0:
+                    if text[j] == '{':
+                        brace_depth += 1
+                    elif text[j] == '}':
+                        brace_depth -= 1
+                    j += 1
+
+                if brace_depth == 0:
+                    middle = text[i + 1:j - 1]
+                    if middle:
+                        _type_content_with_states(middle)
+                    pyautogui.press('right')
+                    i = j
+                    continue
+
+            elif char == '}':
+                pass
+
+            else:
+                pyautogui.typewrite(char, interval=0.01)
+
+        # ========== IN_CHAR ==========
+        elif state == 'IN_CHAR':
             pyautogui.typewrite(char, interval=0.01)
+
+            if char == '\\':
+                state = 'IN_CHAR_ESCAPE'
+
+            elif char == "'":
+                state = 'NORMAL'
+
+            elif char in '({[':
+                _delete_auto_close_bracket()
+
+        # ========== IN_CHAR_ESCAPE ==========
+        elif state == 'IN_CHAR_ESCAPE':
+            pyautogui.typewrite(char, interval=0.01)
+            state = 'IN_CHAR'
+
+        # ========== IN_STRING ==========
+        elif state == 'IN_STRING':
+            pyautogui.typewrite(char, interval=0.01)
+
+            if char == '\\':
+                state = 'IN_STRING_ESCAPE'
+
+            elif char == '"':
+                state = 'NORMAL'
+
+            elif char in '({[':
+                _delete_auto_close_bracket()
+
+        # ========== IN_STRING_ESCAPE ==========
+        elif state == 'IN_STRING_ESCAPE':
+            pyautogui.typewrite(char, interval=0.01)
+            state = 'IN_STRING'
 
         i += 1
 
