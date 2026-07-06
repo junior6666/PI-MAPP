@@ -21,6 +21,7 @@ import subprocess
 import signal
 import logging
 import sys
+import shutil
 import winreg
 from PySide6.QtWidgets import QApplication as QtApp
 from PySide6.QtCore import QThread, Signal
@@ -1559,15 +1560,111 @@ class ShiftSWorker(QThread):
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             mp3_path = os.path.join(mp3_dir, f'audio_{timestamp}.mp3')
 
-            seg = AudioSegment.from_wav(wav_path)
-            seg.export(mp3_path, format='mp3', bitrate='128k')
-            try:
-                os.unlink(wav_path)
-            except:
-                pass
+            # 优先使用系统或捆绑的 ffmpeg 来转换 wav -> mp3，避免在无控制台的 windowed exe 中弹出黑色控制台窗口
+            def _find_ffmpeg_exe():
+                # 优先使用 PATH 中的 ffmpeg
+                ff = shutil.which('ffmpeg')
+                if ff:
+                    return ff
 
-            print(f"[ShiftS] 音频已保存: {mp3_path} ({len(seg)/1000:.1f}s)")
-            return mp3_path
+                # 如果是打包环境，尝试在 exe 同目录或 _MEIPASS 中查找 ffmpeg.exe
+                try:
+                    if getattr(sys, 'frozen', False):
+                        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                        candidate = os.path.join(base_dir, 'ffmpeg.exe')
+                        if os.path.exists(candidate):
+                            return candidate
+                        # 也尝试 exe 同目录
+                        candidate2 = os.path.join(os.path.dirname(sys.executable), 'ffmpeg.exe')
+                        if os.path.exists(candidate2):
+                            return candidate2
+                except Exception:
+                    pass
+
+                return None
+
+            ffmpeg_exe = _find_ffmpeg_exe()
+
+            if ffmpeg_exe:
+                # 构建 ffmpeg 命令
+                cmd = [
+                    ffmpeg_exe,
+                    '-y',
+                    '-i', wav_path,
+                    '-vn',
+                    '-ab', '128k',
+                    mp3_path
+                ]
+
+                creationflags = 0
+                startupinfo = None
+                if sys.platform == 'win32':
+                    creationflags = subprocess.CREATE_NO_WINDOW
+                    startupinfo = subprocess.STARTUPINFO()
+                    try:
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    except Exception:
+                        pass
+
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=creationflags,
+                    startupinfo=startupinfo
+                )
+
+                # 清理临时 wav
+                try:
+                    os.unlink(wav_path)
+                except:
+                    pass
+
+                if proc.returncode != 0:
+                    # 如果失败，打印 stderr 并尝试回退到 pydub (可能也会失败)
+                    err = proc.stderr.decode(errors='ignore') if proc.stderr else ''
+                    print(f"[ShiftS] ffmpeg 转换失败 (code={proc.returncode}): {err}")
+                    # 尝试使用 pydub 作为回退（这可能会再次尝试调用 ffmpeg）
+                    try:
+                        seg = AudioSegment.from_wav(wav_path)
+                        seg.export(mp3_path, format='mp3', bitrate='128k')
+                        try:
+                            os.unlink(wav_path)
+                        except:
+                            pass
+                        print(f"[ShiftS] 音频已保存 (pydub 回退): {mp3_path} ({len(seg)/1000:.1f}s)")
+                        return mp3_path
+                    except Exception as e:
+                        raise RuntimeError(f"无法转换为 mp3，ffmpeg 错误: {err}，pydub 回退失败: {e}")
+
+                # 成功
+                # 尝试获取时长信息（尽量不再加载整个文件）
+                try:
+                    seg = AudioSegment.from_file(mp3_path)
+                    duration_s = len(seg) / 1000.0
+                except Exception:
+                    duration_s = None
+
+                print(f"[ShiftS] 音频已保存: {mp3_path} ({duration_s:.1f}s)" if duration_s else f"[ShiftS] 音频已保存: {mp3_path}")
+                return mp3_path
+            else:
+                # 没有找到 ffmpeg，可回退到 pydub 的导出方法（开发环境通常 PATH 中有 ffmpeg）
+                try:
+                    seg = AudioSegment.from_wav(wav_path)
+                    seg.export(mp3_path, format='mp3', bitrate='128k')
+                    try:
+                        os.unlink(wav_path)
+                    except:
+                        pass
+                    print(f"[ShiftS] 音频已保存 (pydub): {mp3_path} ({len(seg)/1000:.1f}s)")
+                    return mp3_path
+                except Exception as e:
+                    # 清理 wav 并抛出
+                    try:
+                        os.unlink(wav_path)
+                    except:
+                        pass
+                    raise RuntimeError(f"未找到 ffmpeg，且 pydub 导出失败: {e}")
         except Exception as e:
             raise
 
